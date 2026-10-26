@@ -43,10 +43,10 @@ sub Main()
     failed = failed + ExpectGreeting("R2", "Rivera", "", false, now, "Welcome to Eaglewood")
     failed = failed + ExpectGreeting("José", "García", "2026-10-28T11:00:00-07:00", true, now, "Welcome, José García")
     failed = failed + ExpectGreeting("Mary Jane", "van Horn", "", false, now, "Welcome, Mary Jane van Horn")
-    failed = failed + ExpectGreeting("Alex", "Lee", "nope", true, now, "Welcome to Eaglewood")
+    failed = failed + ExpectGreeting("Alex", "Lee", "nope", true, now, "Welcome, Alex Lee")
     failed = failed + ExpectGreeting("Alex", "Lee", "2001-01-01T00:00:00Z", true, now, "Welcome to Eaglewood")
-    failed = failed + ExpectGreeting("Alex", "Lee", "2038-01-01T00:00:00Z", true, now, "Welcome to Eaglewood")
-    failed = failed + ExpectGreeting("Alex", "Lee", "2026-02-29T00:00:00Z", true, now, "Welcome to Eaglewood")
+    failed = failed + ExpectGreeting("Alex", "Lee", "2038-01-01T00:00:00Z", true, now, "Welcome, Alex Lee")
+    failed = failed + ExpectGreeting("Alex", "Lee", "2026-02-29T00:00:00Z", true, now, "Welcome, Alex Lee")
 
     if CheckoutSeconds("2028-02-29T00:00:00Z") = invalid
         print "FAIL leap day rejected"
@@ -142,8 +142,8 @@ sub Main()
         print "FAIL missing checkout"
         failed = failed + 1
     end if
-    if StayIsCurrent("tomorrow", true, instant) <> false
-        print "FAIL unreadable checkout"
+    if StayIsCurrent("tomorrow", true, instant) <> true
+        print "FAIL unreadable checkout should show the name"
         failed = failed + 1
     end if
     if CheckoutDecision("", false, instant) <> "missing"
@@ -167,24 +167,56 @@ sub Main()
         print "FAIL live body checkout"
         failed = failed + 1
     end if
-    if CheckoutSeconds("2026-10-27") <> CheckoutSeconds("2026-10-28T07:00:00Z")
+    if DaysFromCivil(1970, 1, 1) <> 0
+        print "FAIL civil epoch"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2000-01-01T00:00:00Z") <> 946684800
+        print "FAIL year 2000 epoch"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2026-10-26T22:02:58Z") <> 1793052178
+        print "FAIL device clock instant"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2026-10-27") <> 1793170800
         print "FAIL live checkout instant"
         failed = failed + 1
     end if
-    blakeNow = CheckoutSeconds("2026-10-26T21:49:00Z")
-    if blakeNow = invalid
-        print "FAIL live clock"
+    if CheckoutSeconds("2026-10-27") <> CheckoutSeconds("2026-10-28T07:00:00Z")
+        print "FAIL live checkout does not match the next Pacific midnight"
         failed = failed + 1
-    else
-        liveText = GreetingFromGuestAt(live.firstName, live.lastName, live.checkout, true, blakeNow)
-        if liveText <> "Welcome, Test Guest"
-            print "FAIL live body greeting"
-            failed = failed + 1
-        end if
-        if CheckoutDecision(live.checkout, true, blakeNow) <> "current"
-            print "FAIL live body decision"
-            failed = failed + 1
-        end if
+    end if
+    ' The TV's clock when build 5 logged the unreadable date.
+    deviceNow = 1793052178
+    liveText = GreetingFromGuestAt(live.firstName, live.lastName, live.checkout, true, deviceNow)
+    if liveText <> "Welcome, Test Guest"
+        print "FAIL live body at the device clock"
+        failed = failed + 1
+    end if
+    if CheckoutDecision(live.checkout, true, deviceNow) <> "current"
+        print "FAIL live body decision at the device clock"
+        failed = failed + 1
+    end if
+    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793170800) <> "Welcome to Eaglewood"
+        print "FAIL hide at Pacific midnight"
+        failed = failed + 1
+    end if
+    if CheckoutDecision("2026-10-27", true, 1793170800) <> "past"
+        print "FAIL midnight decision"
+        failed = failed + 1
+    end if
+    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793174400) <> "Welcome to Eaglewood"
+        print "FAIL hide after Pacific midnight"
+        failed = failed + 1
+    end if
+    if GreetingFromGuestAt("Test", "Guest", "not-a-date", true, deviceNow) <> "Welcome, Test Guest"
+        print "FAIL malformed checkout should show the name"
+        failed = failed + 1
+    end if
+    if CheckoutDecision("not-a-date", true, deviceNow) <> "unreadable"
+        print "FAIL malformed checkout decision"
+        failed = failed + 1
     end if
     if StayIsCurrent("2026-10-27", true, CheckoutSeconds("2026-10-27T22:00:00Z")) <> true
         print "FAIL live checkout afternoon"

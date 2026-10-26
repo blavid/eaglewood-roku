@@ -42,20 +42,27 @@ sub Main()
         print "FAIL packaged pacific end"
         failed = failed + 1
     end if
-    clock = CheckoutSeconds("2026-10-26T21:49:00Z")
-    if clock = invalid
-        print "FAIL packaged clock"
+    if CheckoutSeconds("2026-10-27") <> 1793170800
+        print "FAIL packaged checkout instant"
         failed = failed + 1
-    else
-        text = GreetingFromGuestAt(fields.firstName, fields.lastName, fields.checkout, true, clock)
-        if text <> "Welcome, Test Guest"
-            print "FAIL packaged greeting"
-            failed = failed + 1
-        end if
-        if CheckoutDecision(fields.checkout, true, clock) <> "current"
-            print "FAIL packaged decision"
-            failed = failed + 1
-        end if
+    end if
+    deviceNow = 1793052178
+    text = GreetingFromGuestAt(fields.firstName, fields.lastName, fields.checkout, true, deviceNow)
+    if text <> "Welcome, Test Guest"
+        print "FAIL packaged greeting"
+        failed = failed + 1
+    end if
+    if CheckoutDecision(fields.checkout, true, deviceNow) <> "current"
+        print "FAIL packaged decision"
+        failed = failed + 1
+    end if
+    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793174400) <> "Welcome to Eaglewood"
+        print "FAIL packaged after midnight"
+        failed = failed + 1
+    end if
+    if GreetingFromGuestAt("Test", "Guest", "not-a-date", true, deviceNow) <> "Welcome, Test Guest"
+        print "FAIL packaged malformed checkout"
+        failed = failed + 1
     end if
     afternoon = CheckoutSeconds("2026-10-27T22:00:00Z")
     if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, afternoon) <> "Welcome, Test Guest"

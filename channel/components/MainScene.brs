@@ -3,6 +3,7 @@ sub init()
     m.backing = m.top.findNode("greetingBacking")
     m.guestTask = invalid
     m.fetchGeneration = 0
+    m.measureFonts = {}
     m.top.backgroundColor = "0x100E0CFF"
     m.top.setFocus(true)
     m.top.observeField("relaunchCount", "onRelaunch")
@@ -129,7 +130,7 @@ function GreetingLayout(text as string) as object
     index = 0
     while index < sizes.Count()
         size = sizes[index]
-        fitted = WrapGreeting(text, GreetingLabelWidth(), SystemBoldFont(size), FallbackCharWidth(size))
+        fitted = WrapGreeting(text, GreetingLabelWidth(), MeasureFont(size), FallbackCharWidth(size))
         if fitted.Count() >= 1 and fitted.Count() <= 2
             chosen = size
             lineCount = fitted.Count()
@@ -143,14 +144,24 @@ function GreetingLayout(text as string) as object
     return bar
 end function
 
-function SystemBoldFont(size as integer) as object
-    registry = CreateObject("roFontRegistry")
-    if registry = invalid then return invalid
-    return registry.GetDefaultFont(size, true, false)
+' The font registry object cannot be created on this render thread.
+' The label still draws font:LargeBoldSystemFont. This node is only for
+' measuring the wrap. font:SystemFontFile is the system font file URI.
+function MeasureFont(size as integer) as object
+    if m.measureFonts = invalid then m.measureFonts = {}
+    key = size.ToStr()
+    existing = m.measureFonts.Lookup(key)
+    if existing <> invalid then return existing
+    font = CreateObject("roSGNode", "Font")
+    if font = invalid then return invalid
+    font.uri = "font:SystemFontFile"
+    font.size = size
+    m.measureFonts[key] = font
+    return font
 end function
 
 function LineHeightForSize(size as integer) as integer
-    font = SystemBoldFont(size)
+    font = MeasureFont(size)
     if font <> invalid
         height = font.GetOneLineHeight()
         if height <> invalid and height > 0 then return height

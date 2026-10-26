@@ -105,8 +105,10 @@ end function
 
 ' missing: no checkout was provided, so a valid name stays up.
 ' current: now is strictly before the checkout instant.
-' past: now is at or after that instant.
-' unreadable: a checkout was provided and could not be parsed.
+' past: the checkout parsed and now is at or after that instant. This is the
+' only decision that hides a valid name.
+' unreadable: a checkout was provided and could not be parsed. The name stays
+' up; the worker already withholds a guest whose Pacific day has passed.
 function CheckoutDecision(checkout as object, checkoutPresent as boolean, clockSeconds as integer) as string
     if checkoutPresent = false then return "missing"
     if checkout = invalid then return "unreadable"
@@ -119,59 +121,55 @@ function CheckoutDecision(checkout as object, checkoutPresent as boolean, clockS
 end function
 
 function StayIsCurrent(checkout as object, checkoutPresent as boolean, clockSeconds as integer) as boolean
-    decision = CheckoutDecision(checkout, checkoutPresent, clockSeconds)
-    if decision = "current" or decision = "missing" then return true
-    return false
+    if CheckoutDecision(checkout, checkoutPresent, clockSeconds) = "past" then return false
+    return true
 end function
 
+' Dates are sliced with Mid (1-based, as on the device) and Val. A date-only
+' value never goes to roDateTime. Seconds are days-from-civil plus the offset,
+' so a full timestamp is not handed to a lenient parser either.
 function CheckoutSeconds(raw as object)
     if raw = invalid then return invalid
     if type(raw) <> "String" and type(raw) <> "roString" then return invalid
     text = raw.Trim()
     if Len(text) < 10 or Len(text) > 40 then return invalid
-    yearText = Left(text, 4)
-    if not IsDigits(yearText) then return invalid
-    if CharAt(text, 5) <> "-" then return invalid
-    monthText = Slice(text, 6, 2)
-    if not IsDigits(monthText) then return invalid
-    if CharAt(text, 8) <> "-" then return invalid
-    dayText = Slice(text, 9, 2)
-    if not IsDigits(dayText) then return invalid
-    year = yearText.ToInt()
-    month = monthText.ToInt()
-    day = dayText.ToInt()
-    ' roDateTime.AsSeconds() is a 32-bit integer, so a later year can wrap
-    ' and look like the past. Reject those instead of greeting the wrong stay.
+    yearText = Mid(text, 1, 4)
+    monthText = Mid(text, 6, 2)
+    dayText = Mid(text, 9, 2)
+    if Mid(text, 5, 1) <> "-" or Mid(text, 8, 1) <> "-" then return invalid
+    if not IsDigits(yearText) or not IsDigits(monthText) or not IsDigits(dayText) then return invalid
+    year = Int(Val(yearText))
+    month = Int(Val(monthText))
+    day = Int(Val(dayText))
+    ' The Unix clock used here is 32-bit. A later year can wrap and look like
+    ' the past, so reject it instead of greeting the wrong stay.
     if year < 2000 or year > 2037 then return invalid
     if month < 1 or month > 12 then return invalid
     if day < 1 or day > DaysInMonth(year, month) then return invalid
     ' YYYY-MM-DD is a Pacific calendar day. A timestamp is an exact instant.
     if Len(text) = 10 then return PacificDateEndSeconds(year, month, day)
 
-    rest = Right(text, Len(text) - 10)
-    sep = Left(rest, 1)
+    sep = Mid(text, 11, 1)
     if sep <> "T" and sep <> "t" and sep <> " " then return invalid
-    if Len(rest) < 9 then return invalid
-    timeText = Slice(rest, 2, 8)
+    if Len(text) < 19 then return invalid
+    timeText = Mid(text, 12, 8)
     if not IsClock(timeText) then return invalid
     tail = ""
-    if Len(rest) > 9 then tail = Right(rest, Len(rest) - 9)
+    if Len(text) > 19 then tail = Mid(text, 20, Len(text) - 19)
     tail = DropFraction(tail)
     if tail = invalid then return invalid
-    offsetText = tail
 
     zoneSeconds = 0
-    if offsetText <> ""
-        parsedZone = ZoneOffsetSeconds(offsetText)
+    if tail <> ""
+        parsedZone = ZoneOffsetSeconds(tail)
         if parsedZone = invalid then return invalid
         zoneSeconds = parsedZone
     end if
 
-    iso = yearText + "-" + monthText + "-" + dayText + "T" + timeText
-    hour = Left(timeText, 2).ToInt()
-    minute = Slice(timeText, 4, 2).ToInt()
-    second = Right(timeText, 2).ToInt()
-    utcSeconds = ParsedWallSeconds(iso, year, month, day, hour, minute, second)
+    hour = Int(Val(Mid(timeText, 1, 2)))
+    minute = Int(Val(Mid(timeText, 4, 2)))
+    second = Int(Val(Mid(timeText, 7, 2)))
+    utcSeconds = CivilSeconds(year, month, day, hour, minute, second)
     if utcSeconds = invalid then return invalid
     return utcSeconds - zoneSeconds
 end function
@@ -193,9 +191,28 @@ function PacificDateEndSeconds(year as integer, month as integer, day as integer
             nextYear = year + 1
         end if
     end if
-    hourText = Pad2(utcHour)
-    iso = Pad4(nextYear) + "-" + Pad2(nextMonth) + "-" + Pad2(nextDay) + "T" + hourText + ":00:00"
-    return ParsedWallSeconds(iso, nextYear, nextMonth, nextDay, utcHour, 0, 0)
+    return CivilSeconds(nextYear, nextMonth, nextDay, utcHour, 0, 0)
+end function
+
+' Days since 1970-01-01. Howard Hinnant's civil_from_days inverse.
+function DaysFromCivil(year as integer, month as integer, day as integer)
+    y = year
+    if month <= 2 then y = year - 1
+    era = y \ 400
+    yoe = y - (era * 400)
+    mp = month + 9
+    if month > 2 then mp = month - 3
+    doy = ((153 * mp) + 2) \ 5 + day - 1
+    doe = yoe * 365 + (yoe \ 4) - (yoe \ 100) + doy
+    return era * 146097 + doe - 719468
+end function
+
+function CivilSeconds(year as integer, month as integer, day as integer, hour as integer, minute as integer, second as integer)
+    days = DaysFromCivil(year, month, day)
+    seconds = days * 86400 + hour * 3600 + minute * 60 + second
+    ' A wrapped 32-bit product is negative and must not look like a real instant.
+    if seconds < 946684800 then return invalid
+    return seconds
 end function
 
 function PacificDaylightAtEnd(year as integer, month as integer, day as integer) as boolean
@@ -221,19 +238,6 @@ function WeekdayOf(year as integer, month as integer, day as integer) as integer
     return total mod 7
 end function
 
-function Pad2(value as integer) as string
-    if value < 10 then return "0" + value.ToStr()
-    return value.ToStr()
-end function
-
-function Pad4(value as integer) as string
-    text = value.ToStr()
-    while Len(text) < 4
-        text = "0" + text
-    end while
-    return text
-end function
-
 function DropFraction(tail as string)
     if tail = "" then return ""
     if Left(tail, 1) <> "." then return tail
@@ -247,25 +251,6 @@ function DropFraction(tail as string)
     if index = 2 then return invalid
     if index > Len(tail) then return ""
     return Right(tail, Len(tail) - (index - 1))
-end function
-
-function ParsedWallSeconds(iso as string, year as integer, month as integer, day as integer, hour as integer, minute as integer, second as integer)
-    clock = CreateObject("roDateTime")
-    if clock = invalid then return invalid
-    parsed = clock.FromISO8601String(iso)
-    kind = type(parsed)
-    if kind = "Boolean"
-        if parsed = false then return invalid
-    else if kind <> "Invalid"
-        return invalid
-    end if
-    if clock.GetYear() <> year then return invalid
-    if clock.GetMonth() <> month then return invalid
-    if clock.GetDayOfMonth() <> day then return invalid
-    if clock.GetHours() <> hour then return invalid
-    if clock.GetMinutes() <> minute then return invalid
-    if clock.GetSeconds() <> second then return invalid
-    return clock.AsSeconds()
 end function
 
 function ZoneOffsetSeconds(text as string)

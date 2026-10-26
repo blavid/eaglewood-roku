@@ -16,7 +16,39 @@ from greeting import FONT_SIZES, build_greeting, sanitize_name_part, wrap_by_wid
 MANIFEST = ROOT / "channel" / "manifest"
 IMAGES = ROOT / "channel" / "images"
 SCENE_BRS = ROOT / "channel" / "components" / "MainScene.brs"
+SCENE_XML = ROOT / "channel" / "components" / "MainScene.xml"
 RULES_BRS = ROOT / "channel" / "components" / "GuestRules.brs"
+# These files run on the render thread. GuestRules.brs is included by the scene.
+RENDER_THREAD_FILES = (SCENE_BRS, SCENE_XML, RULES_BRS)
+# roDateTime and roDeviceInfo are usable there. roSGNode is how the scene is built.
+RENDER_THREAD_CREATE = {"roSGNode", "roDeviceInfo", "roDateTime"}
+# Creating these logs "MAIN|TASK-only component failed on RENDER thread".
+RENDER_THREAD_FORBIDDEN = (
+    "roFontRegistry",
+    "roUrlTransfer",
+    "roVideoPlayer",
+    "roAudioPlayer",
+    "roAudioResource",
+    "roDatagramSocket",
+    "roStreamSocket",
+    "roHttpAgent",
+    "roDataCache",
+    "roImageMetadata",
+    "roAudioMetadata",
+    "roVideoMetadata",
+    "roCaptionRenderer",
+    "roScreen",
+    "roCompositor",
+    "roRegion",
+    "roBitmap",
+    "roTextToSpeech",
+    "roAppManager",
+    "roChannelStore",
+    "roEVPCipher",
+    "roEVPDigest",
+    "roHMAC",
+    "roRSA",
+)
 TASK_BRS = ROOT / "channel" / "components" / "GuestTask.brs"
 CONFIG_BRS = ROOT / "channel" / "components" / "GuestConfig.brs"
 ZIP_PATH = ROOT / "dist" / "eaglewood.zip"
@@ -27,7 +59,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "5",
+    "build_version": "6",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -168,8 +200,31 @@ def check_greeting_rules() -> None:
         fail(f"wrap on space returned {wrapped!r}")
 
 
+def check_render_thread() -> None:
+    create_pattern = re.compile(r'CreateObject\(\s*"([^"]+)"')
+    for path in RENDER_THREAD_FILES:
+        text = path.read_text(encoding="utf-8")
+        for name in RENDER_THREAD_FORBIDDEN:
+            if name in text:
+                fail(f"{path.name} references {name}, which cannot be created on the render thread")
+        for match in create_pattern.finditer(text):
+            kind = match.group(1)
+            if kind not in RENDER_THREAD_CREATE:
+                fail(f"{path.name} creates {kind} on the render thread")
+    rules = RULES_BRS.read_text(encoding="utf-8")
+    if "FromISO8601String" in rules:
+        fail("checkout instants must be computed without handing a string to roDateTime")
+    if "function DaysFromCivil(" not in rules or "Val(" not in rules or "Mid(" not in rules:
+        fail("YYYY-MM-DD must be parsed with Mid and Val and converted with days-from-civil")
+    scene = SCENE_BRS.read_text(encoding="utf-8")
+    if 'CreateObject("roSGNode", "Font")' not in scene or 'font.uri = "font:SystemFontFile"' not in scene:
+        fail("wrap measurement must use a Font node with font:SystemFontFile")
+    if 'm.greeting.font = "font:LargeBoldSystemFont"' not in scene:
+        fail("the label must still draw font:LargeBoldSystemFont")
+
+
 def check_greeting_draws() -> None:
-    xml = (ROOT / "channel" / "components" / "MainScene.xml").read_text(encoding="utf-8")
+    xml = SCENE_XML.read_text(encoding="utf-8")
     source = SCENE_BRS.read_text(encoding="utf-8")
     if 'uri="font:' in xml:
         fail("a Font uri cannot load a system font; the label draws no glyphs")
@@ -306,6 +361,7 @@ def main() -> None:
     check_manifest(parse_manifest())
     check_images()
     check_greeting_rules()
+    check_render_thread()
     check_greeting_draws()
     check_guest_fetch()
     check_secret_file_is_untracked()
