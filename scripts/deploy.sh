@@ -17,7 +17,7 @@ if [[ ! "$ROKU_IP" =~ ^[A-Za-z0-9._:-]+$ ]]; then
     exit 2
 fi
 
-"$ROOT/scripts/package.sh"
+"$ROOT/scripts/package.sh" "$@"
 ZIP="$ROOT/dist/eaglewood.zip"
 
 umask 077

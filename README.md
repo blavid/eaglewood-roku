@@ -2,9 +2,29 @@
 
 A sideloaded Roku SceneGraph welcome screen for the Eaglewood vacation rental in Sunriver, Oregon. It is one screen: a 1920×1080 photograph of Mt. Bachelor and a greeting.
 
-The greeting is **Welcome to Eaglewood** unless a first name is set in the channel. To show **Welcome, Alex**, edit `GuestFirstName()` in `channel/components/MainScene.brs` and sideload again. Leave it as `return ""` for the default. The value is the first word only, at most 20 characters, and only letters, hyphens, and straight apostrophes. Anything else, including an empty string, falls back to **Welcome to Eaglewood**. Do not put a phone number, a door PIN, or a card number in that function.
+On launch, and again when ECP relaunches the app, the screen shows **Welcome to Eaglewood** immediately. A background task then requests the current guest. When that request succeeds and the stay is still current, the greeting becomes **Welcome, \<firstName\> \<lastName\>**. A missing or invalid last name is left off, so the line is **Welcome, \<firstName\>**. An invalid first name keeps **Welcome to Eaglewood** even if the last name is fine. The launch does not wait on the network (`network_not_required=1`).
 
-There is no network fetch in v1. A later version can greet the current guest from a small public `guest.json` (`{"firstName":"..."}`) written by the Pipedream flow that already receives the name from Host Tools. Pipedream would commit that file with the GitHub contents API (token stored in Pipedream) or write it to something like Cloudflare KV. The app would fetch it on each launch, including an ECP relaunch, with a cache-busting query and a short timeout, and fall back when the name is missing or checkout has passed. The file would be public, so it stays a first name only. That wiring is not built.
+The debug port prints `Eaglewood: greeting = ...` and one UI-resolution line. That greeting line is the only place a name is logged. The request address, the response body, checkout, and any other fields are not printed.
+
+## Guest document
+
+The live request is:
+
+`GET https://sunrivertownhome.com/tv/<GUEST_PATH_KEY>/guest.json`
+
+`<GUEST_PATH_KEY>` is a secret path segment. This repository is public, so the key is never committed and the scripts never print it. The channel source keeps the base address `https://sunrivertownhome.com/tv/` as one constant, in `GuestServiceOrigin()`. At package time, `scripts/package.sh` (which `scripts/deploy.sh` and the PowerShell scripts call) writes `channel/components/secrets.brs` into the zip only. That file is gitignored. It returns the key to the task node, which is the scope that performs the request. An empty key means the request is skipped and the fallback greeting stays up.
+
+The body is JSON:
+
+```json
+{"firstName": "Ada", "lastName": "Lovelace", "checkout": "2026-10-28T11:00:00-07:00"}
+```
+
+`checkout` should be a full timestamp with a numeric offset or `Z`. A Pacific 11:00 checkout is `2026-10-28T11:00:00-07:00`, not a date alone. A date by itself (`2026-10-28`) is treated as the end of that UTC day, `23:59:59Z`. A timestamp with no zone is treated as UTC, which is how `roDateTime` reads it. The name is shown only while now is strictly before checkout. A missing checkout still shows a valid name. A checkout that cannot be read, including a year outside 2000–2037, falls back. The comparison uses Unix seconds, and years after 2037 do not fit that clock, so they are rejected instead of wrapping into the past.
+
+Each name part is trimmed. Curly apostrophes and dashes are normalized. The part is kept only when every character is a letter (including Latin-1 and Latin Extended-A, except × and ÷), hyphen, apostrophe, space, or period, and at least one character is a letter. Internal spaces collapse to one. Each part is capped at 32 characters. `{}`, a timeout, a non-200 response, or any other failure leaves **Welcome to Eaglewood**.
+
+Long greetings wrap on spaces and hyphens, up to two lines, inside the 1760px label. The type size steps from 64 to 52, 42, and 34 until the line fits. The dark bar stays at least 160px tall, grows with the text, and stays anchored to the bottom of that band.
 
 ## Photograph
 
@@ -24,7 +44,7 @@ Checked on the Flickr photo page (schema.org `license` is the Public Domain Mark
 
 The channel is FHD (`ui_resolutions=fhd`, `rsg_version=1.3`). The photograph is full screen. The greeting uses `font:LargeBoldSystemFont` on the Label itself, in white, on a dark translucent bar. Back on this screen exits the app. Home always exits; the app cannot intercept it. There is no web view, no video, and no launch of other apps.
 
-Launch does not wait on the network (`network_not_required=1`). `splash_min_time=0` so the splash (the same photograph) gives way as soon as the scene is up.
+`splash_min_time=0` so the splash (the same photograph) gives way as soon as the scene is up.
 
 ## Developer mode
 
@@ -36,49 +56,73 @@ The house TV address used by the scripts is `192.168.86.101`.
 
 ## Deploy
 
-From the repo root, on a machine that can reach the TV:
+`GUEST_PATH_KEY` is the secret path segment from above. Export it in the shell. Do not write it into a file in this repo.
 
 ```bash
 export ROKUPASS='the-password-set-on-the-tv'
+export GUEST_PATH_KEY
 export ROKU_IP=192.168.86.101   # optional; this is the default
 ./scripts/deploy.sh
 ```
 
-`scripts/package.sh` zips `channel/` with `manifest` at the root of the archive (Roku rejects a zip that wraps the channel in a folder). `scripts/deploy.sh` uploads that zip to `http://$ROKU_IP/plugin_install` as user `rokudev` with HTTP digest. The password is written to a mode-0600 curl config file and is not passed on the curl command line. The script prints **Install Success** or the device's failure text, and exits non-zero on failure. HTTP 401 means the password or developer mode is wrong.
+Without `GUEST_PATH_KEY`, packaging exits nonzero and says the key is not set. Two explicit exceptions skip the key:
 
-PowerShell, same environment variables:
+```bash
+./scripts/deploy.sh --no-guest
+./scripts/deploy.sh --stub "http://<lan-ip>:8765/guest.json"
+```
+
+`--no-guest` packages an empty key, so the device never requests a guest document and the fallback greeting remains. `--stub` packages a development URL and does not embed `GUEST_PATH_KEY`, even if that variable is set. The stub server speaks HTTP on port 8765 and ignores the cache-busting query:
+
+```bash
+python3 scripts/stub-guest.py
+```
+
+Use the machine's LAN address in `--stub`, not `127.0.0.1`, so the TV can reach it. The sample body is a fictional guest, Alex Rivera, with a checkout in 2037.
+
+`scripts/package.sh` zips a staged copy of `channel/` with `manifest` at the root of the archive (Roku rejects a zip that wraps the channel in a folder). The generated `components/secrets.brs` is added in that copy. A `secrets.brs` left in the working tree is not what gets packaged, and git ignores it. `scripts/deploy.sh` uploads the zip to `http://$ROKU_IP/plugin_install` as user `rokudev` with HTTP digest. The password is written to a mode-0600 curl config file and is not passed on the curl command line. The script prints **Install Success** or the device's failure text, and exits non-zero on failure. HTTP 401 means the password or developer mode is wrong.
+
+PowerShell, same flags and environment variables:
 
 ```powershell
 $env:ROKUPASS = 'the-password-set-on-the-tv'
+# Set $env:GUEST_PATH_KEY in this session only. Do not save it.
 .\scripts\deploy.ps1
+.\scripts\deploy.ps1 --no-guest
+.\scripts\deploy.ps1 --stub "http://<lan-ip>:8765/guest.json"
 ```
 
-`scripts/package.ps1` builds the zip on its own if you only want the archive.
+Do not leave the key in a PowerShell profile or a committed script. `scripts/package.ps1` builds the zip on its own if you only want the archive.
+
+`scripts/check_tracked_guest_key.py` runs from packaging and from `scripts/validate.py`. It uses `git grep` and fails if a tracked file contains a concrete `sunrivertownhome.com/tv/<segment>/guest.json` URL, a key-like string returned from channel code, or a tracked `secrets.brs`. The documentation form with angle brackets is not a match. The check prints file names, not the matching line.
 
 ## Check-in launch
 
-Hubitat turns the TV on and starts the app over ECP. The commands, Fast TV start, Control by mobile apps, and a note on Guest Mode are in [docs/ECP.md](docs/ECP.md).
+Hubitat turns the TV on and starts the app over ECP. The commands, Fast TV start, Control by mobile apps, and a note on Guest Mode are in [docs/ECP.md](docs/ECP.md). A relaunch while the app is open fetches the guest document again.
 
 ## If this is published later
 
-Sideloading does not go through certification. A public listing would. The manifest already sets `rsg_version=1.3`, FHD and HD icons (540×405 and 290×218), and FHD, HD, and SD splash images. The app subscribes to `roAppMemoryMonitor` warnings. In the Developer Dashboard, set the package's minimum firmware to 15.1.0 or greater. That minimum is a dashboard field, not a manifest key. The title does not contain "Roku". Bump the version for every package. Content that should change per guest does not belong in the package; see the `guest.json` note above. This repo has not been submitted, and the Design & UX guidelines and the pre-certification checklist were not used as a review pass.
+Sideloading does not go through certification. A public listing would. The manifest already sets `rsg_version=1.3`, FHD and HD icons (540×405 and 290×218), and FHD, HD, and SD splash images. The app subscribes to `roAppMemoryMonitor` warnings. In the Developer Dashboard, set the package's minimum firmware to 15.1.0 or greater. That minimum is a dashboard field, not a manifest key. The title does not contain "Roku". Bump the version for every package. The path key is injected at package time and is not part of the git history. Guest names are not in the package. This repo has not been submitted, and the Design & UX guidelines and the pre-certification checklist were not used as a review pass.
 
 ## Checks without a Roku
 
 ```bash
-python3 scripts/validate.py          # manifest, image sizes, greeting rules
-./scripts/package.sh                 # zip layout and the 4 MB cap
+python3 scripts/validate.py          # manifest, image sizes, greeting rules, key check
+./scripts/package.sh --no-guest      # zip layout and the 4 MB cap
+./scripts/test_guest_package.sh      # key required, injected only into the zip, stub, grep
 ./scripts/test_deploy.sh             # installer success/failure, password not in curl's argv
 npm install
 npm run lint                         # bslint and the brighterscript compiler
-python3 scripts/render_preview.py    # 1920×1080 previews
-./scripts/test_brs_greeting.sh       # greeting function on the brs interpreter
+python3 scripts/render_preview.py    # 1920×1080 previews, including a long name
+./scripts/test_brs_greeting.sh       # names, checkout instants, and wrap on the brs interpreter
 ```
 
-`brs` 0.45 runs the BrightScript greeting function. It does not implement SceneGraph (`roSGScreen` is absent), and the `brs-engine` package is not published on npm, so there is no headless render of the channel. The pictures below are layout previews drawn from the same JPEG, scrim, and `MainScene.xml` coordinates. The typeface is Inter Bold standing in for the Roku system font. They are not photographs of the TV.
+`brs` 0.45 runs the BrightScript greeting and checkout functions. It does not implement SceneGraph (`roSGScreen` is absent), and the `brs-engine` package is not published on npm, so there is no headless render of the channel. The pictures below are layout previews drawn from the same JPEG, scrim, and greeting rules. The typeface is Inter Bold standing in for the Roku system font. They are not photographs of the TV.
 
 ![Welcome screen preview, fallback greeting. Not a device capture.](docs/screenshots/welcome-fallback-preview.jpg)
 
-![Welcome screen preview with a sample first name. Not a device capture. The shipped channel leaves the name empty.](docs/screenshots/welcome-named-preview.jpg)
+![Welcome screen preview with a sample first and last name. Not a device capture.](docs/screenshots/welcome-named-preview.jpg)
 
-Still needs the house TV: sideload, the real system font, Back and Home, digest install, `PowerOn` with Fast TV start, `POST /launch/dev`, `query/active-app`, relaunch while the app is open, and Guest Mode closing the app.
+![Welcome screen preview with a long name wrapped onto the dark bar. Not a device capture.](docs/screenshots/welcome-long-name-preview.jpg)
+
+Still needs the house TV: sideload, the real system font, the live path key, Back and Home, digest install, `PowerOn` with Fast TV start, `POST /launch/dev`, `query/active-app`, relaunch while the app is open, and Guest Mode closing the app.

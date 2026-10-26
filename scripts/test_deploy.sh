@@ -41,7 +41,7 @@ run_case() {
     export ROKUPASS="$password"
     export ROKU_IP="127.0.0.1"
     set +e
-    "$ROOT/scripts/deploy.sh" >"$TMP/out" 2>&1
+    "$ROOT/scripts/deploy.sh" --no-guest >"$TMP/out" 2>&1
     local status=$?
     set -e
     if [[ "$status" -ne "$expect" ]]; then

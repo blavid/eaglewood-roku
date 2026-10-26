@@ -4,3 +4,5 @@ out/
 .DS_Store
 __pycache__/
 *.log
+channel/components/secrets.brs
+channel/source/secrets.brs

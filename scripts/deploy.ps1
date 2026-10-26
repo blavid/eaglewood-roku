@@ -17,7 +17,7 @@ if ($env:ROKUPASS.ToCharArray() | Where-Object { [int]$_ -lt 32 }) {
     exit 2
 }
 
-& (Join-Path $PSScriptRoot "package.ps1")
+& (Join-Path $PSScriptRoot "package.ps1") @args
 $zip = Join-Path $root "dist\eaglewood.zip"
 
 function ConvertTo-CurlQuoted([string]$value) {

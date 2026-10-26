@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Draw 1920x1080 layout previews from the packaged assets and MainScene.xml.
+"""Draw 1920x1080 layout previews from the packaged assets and greeting rules.
 
 These are not Roku captures. The typeface is Inter Bold standing in for
-font:LargeBoldSystemFont. Positions, colors, and the scrim file come from
-the channel.
+font:LargeBoldSystemFont. The dark bar uses the same width, bottom edge,
+padding, and size ladder as the channel.
 """
 
 from __future__ import annotations
@@ -17,14 +17,26 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-from greeting import build_greeting  # noqa: E402
+from greeting import (  # noqa: E402
+    BAR_BOTTOM,
+    BAR_PAD,
+    FONT_SIZES,
+    LABEL_WIDTH,
+    bar_box,
+    build_greeting,
+    wrap_measured,
+)
 
 SCENE = ROOT / "channel" / "components" / "MainScene.xml"
+RULES = ROOT / "channel" / "components" / "GuestRules.brs"
 IMAGES = ROOT / "channel" / "images"
 OUT = ROOT / "docs" / "screenshots"
 ARTIFACTS = Path("/opt/cursor/artifacts/screenshots")
 FONT = "/usr/share/fonts/truetype/macos/Inter-Bold.ttf"
 BADGE_FONT = "/usr/share/fonts/truetype/macos/Inter-SemiBold.ttf"
+
+LONG_FIRST = "Alexandria Bartholomew Constantine"
+LONG_LAST = "Worthington Montgomery-Smythe"
 
 
 def parse_tag(xml: str, tag: str, node_id: str) -> dict[str, str]:
@@ -34,51 +46,74 @@ def parse_tag(xml: str, tag: str, node_id: str) -> dict[str, str]:
     return dict(re.findall(r'(\w+)="([^"]*)"', match.group(1)))
 
 
-def font_size() -> int:
-    source = (ROOT / "channel" / "components" / "MainScene.brs").read_text(encoding="utf-8")
-    match = re.search(r"m\.greeting\.font\.size\s*=\s*(\d+)", source)
-    if match is None:
-        raise SystemExit("greeting font size is not set in MainScene.brs")
-    return int(match.group(1))
-
-
-def box(translation: str, width: str, height: str) -> tuple[int, int, int, int]:
-    pair = translation.strip("[]").split(",")
-    return int(pair[0]), int(pair[1]), int(width), int(height)
-
-
 def color(value: str) -> tuple[int, int, int, int]:
     hex_digits = value.removeprefix("0x")
     if len(hex_digits) != 8:
         raise SystemExit(f"expected RRGGBBAA color, got {value}")
-    red = int(hex_digits[0:2], 16)
-    green = int(hex_digits[2:4], 16)
-    blue = int(hex_digits[4:6], 16)
-    alpha = int(hex_digits[6:8], 16)
-    return red, green, blue, alpha
+    return tuple(int(hex_digits[index : index + 2], 16) for index in range(0, 8, 2))  # type: ignore[return-value]
 
 
-def render(greeting: str, badge: str) -> Image.Image:
+def font_sizes() -> tuple[int, ...]:
+    source = RULES.read_text(encoding="utf-8")
+    match = re.search(r"return \[([0-9, ]+)\]", source)
+    if match is None:
+        raise SystemExit("greeting font sizes are not set in GuestRules.brs")
+    sizes = tuple(int(part) for part in match.group(1).split(",") if part.strip())
+    if sizes != FONT_SIZES:
+        raise SystemExit(f"font ladder {sizes} does not match scripts/greeting.py")
+    return sizes
+
+
+def line_height(font: ImageFont.FreeTypeFont, size: int) -> int:
+    ascent, descent = font.getmetrics()
+    return ascent + descent + max(2, size // 8)
+
+
+def fit(text: str, sizes: tuple[int, ...]) -> tuple[int, list[str], int, int]:
+    chosen = sizes[-1]
+    lines = [text]
+    chosen_height = line_height(ImageFont.truetype(FONT, chosen), chosen)
+    for size in sizes:
+        font = ImageFont.truetype(FONT, size)
+        fitted = wrap_measured(text, LABEL_WIDTH, font.getlength)
+        if 1 <= len(fitted) <= 2 and "overflow" not in fitted:
+            chosen = size
+            lines = fitted
+            chosen_height = line_height(font, size)
+            break
+    top, height = bar_box(min(2, len(lines)), chosen_height)
+    return chosen, lines[:2], top, height
+
+
+def render(greeting: str, badge: str, sizes: tuple[int, ...]) -> Image.Image:
     xml = SCENE.read_text(encoding="utf-8")
     backing = parse_tag(xml, "Rectangle", "greetingBacking")
     greeting_attrs = parse_tag(xml, "Label", "greeting")
-    bx, by, bw, bh = box(backing["translation"], backing["width"], backing["height"])
-    gx, gy, gw, gh = box(greeting_attrs["translation"], greeting_attrs["width"], greeting_attrs["height"])
-    font = ImageFont.truetype(FONT, font_size())
+    size, lines, top, height = fit(greeting, sizes)
+    font = ImageFont.truetype(FONT, size)
+    step = line_height(font, size)
+    block = step * len(lines)
 
     background = Image.open(IMAGES / "background.jpg").convert("RGBA")
     scrim = Image.open(IMAGES / "scrim.png").convert("RGBA").resize(background.size, Image.Resampling.BILINEAR)
     image = Image.alpha_composite(background, scrim)
     draw = ImageDraw.Draw(image)
-    draw.rectangle((bx, by, bx + bw, by + bh), fill=color(backing["color"]))
-    draw.text(
-        (gx + gw / 2, gy + gh / 2),
-        greeting,
-        font=font,
-        fill=color(greeting_attrs["color"]),
-        anchor="mm",
-    )
-    draw_badge(image, badge)
+    draw.rectangle((0, top, 1920, top + height), fill=color(backing["color"]))
+    text_top = top + (height - block) / 2
+    fill = color(greeting_attrs["color"])
+    for index, line in enumerate(lines):
+        bbox = font.getbbox(line)
+        text_w = bbox[2] - bbox[0]
+        x = 80 + (LABEL_WIDTH - text_w) / 2 - bbox[0]
+        y = text_top + index * step
+        draw.text((x, y), line, font=font, fill=fill)
+    draw_badge(image, f"{badge} · {size}px · {len(lines)} line{'s' if len(lines) != 1 else ''}")
+    if top + height != BAR_BOTTOM:
+        raise SystemExit("greeting bar is not anchored to y=960")
+    if height < 160:
+        raise SystemExit("greeting bar is shorter than 160px")
+    if text_top < top or text_top + block > top + height + 1:
+        raise SystemExit("greeting text does not sit inside the bar")
     return image.convert("RGB")
 
 
@@ -106,10 +141,24 @@ def save(image: Image.Image, name: str) -> None:
 
 
 def main() -> None:
-    save(render(build_greeting(""), "fallback greeting"), "welcome-fallback-preview.jpg")
+    sizes = font_sizes()
+    fallback = build_greeting("", "")
+    named = build_greeting("Mary-Jane", "O'Brien")
+    long_name = build_greeting(LONG_FIRST, LONG_LAST)
+    long_size, long_lines, long_top, long_height = fit(long_name, sizes)
+    if len(long_lines) < 2 and long_size == sizes[0]:
+        raise SystemExit("long name did not wrap or shrink")
+    if long_height <= 160 and len(long_lines) > 1:
+        raise SystemExit("two-line greeting did not grow the bar")
+    save(render(fallback, "fallback greeting", sizes), "welcome-fallback-preview.jpg")
+    save(render(named, 'named greeting "Mary-Jane O\'Brien"', sizes), "welcome-named-preview.jpg")
     save(
-        render(build_greeting("Mary-Jane"), 'named greeting "Mary-Jane"'),
-        "welcome-named-preview.jpg",
+        render(long_name, "long name", sizes),
+        "welcome-long-name-preview.jpg",
+    )
+    print(
+        f"long name layout size={long_size} lines={len(long_lines)} "
+        f"top={long_top} height={long_height} pad={BAR_PAD}"
     )
 
 

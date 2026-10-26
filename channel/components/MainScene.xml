@@ -5,6 +5,7 @@
         <field id="relaunchCount" type="integer" alwaysNotify="true" value="0" />
     </interface>
 
+    <script type="text/brightscript" uri="pkg:/components/GuestRules.brs" />
     <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
 
     <children>
@@ -35,6 +36,8 @@
             translation="[80, 800]"
             width="1760"
             height="160"
+            wrap="true"
+            maxLines="2"
             horizAlign="center"
             vertAlign="center"
             text="Welcome to Eaglewood"
