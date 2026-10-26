@@ -1,5 +1,8 @@
 sub Main(args as object)
     AcceptLaunchArgs(args)
+    ' The task also loads this bundle. Doing it once on the main thread
+    ' keeps the first guest request from failing certificate setup.
+    PrepareGuestCertificates()
 
     screen = CreateObject("roSGScreen")
     m.port = CreateObject("roMessagePort")
@@ -37,6 +40,13 @@ sub Main(args as object)
             NoteMemoryWarning(msg)
         end if
     end while
+end sub
+
+sub PrepareGuestCertificates()
+    transfer = CreateObject("roUrlTransfer")
+    if transfer = invalid then return
+    transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    transfer.InitClientCertificates()
 end sub
 
 sub AcceptLaunchArgs(args as object)

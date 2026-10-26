@@ -31,13 +31,17 @@ function GreetingMinTop() as integer
 end function
 
 function BlankGuestResult(generation as integer) as object
+    label = "0"
+    if generation <> invalid then label = generation.ToStr()
     return {
         generation: generation,
+        generationText: label,
         ok: "no",
         firstName: "",
         lastName: "",
         checkout: "",
-        checkoutPresent: "no"
+        checkoutPresent: "no",
+        reason: "no"
     }
 end function
 
@@ -99,14 +103,24 @@ function NowSeconds() as integer
     return clock.AsSeconds()
 end function
 
-function StayIsCurrent(checkout as object, checkoutPresent as boolean, clockSeconds as integer) as boolean
-    if checkoutPresent = false then return true
-    if checkout = invalid then return false
-    if type(checkout) <> "String" and type(checkout) <> "roString" then return false
-    if checkout = "" then return true
+' missing: no checkout was provided, so a valid name stays up.
+' current: now is strictly before the checkout instant.
+' past: now is at or after that instant.
+' unreadable: a checkout was provided and could not be parsed.
+function CheckoutDecision(checkout as object, checkoutPresent as boolean, clockSeconds as integer) as string
+    if checkoutPresent = false then return "missing"
+    if checkout = invalid then return "unreadable"
+    if type(checkout) <> "String" and type(checkout) <> "roString" then return "unreadable"
+    if checkout = "" then return "missing"
     instant = CheckoutSeconds(checkout)
-    if instant = invalid then return false
-    if clockSeconds < instant then return true
+    if instant = invalid then return "unreadable"
+    if clockSeconds < instant then return "current"
+    return "past"
+end function
+
+function StayIsCurrent(checkout as object, checkoutPresent as boolean, clockSeconds as integer) as boolean
+    decision = CheckoutDecision(checkout, checkoutPresent, clockSeconds)
+    if decision = "current" or decision = "missing" then return true
     return false
 end function
 

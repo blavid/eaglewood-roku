@@ -12,6 +12,7 @@ sub init()
 end sub
 
 sub onRelaunch()
+    print "Eaglewood: relaunch"
     ShowGreeting(FallbackGreeting())
     startGuestFetch()
 end sub
@@ -23,27 +24,76 @@ sub startGuestFetch()
         m.guestTask = invalid
     end if
     m.fetchGeneration = m.fetchGeneration + 1
+    print "Eaglewood: task created generation="; m.fetchGeneration
     task = CreateObject("roSGNode", "GuestTask")
-    if task = invalid then return
+    if task = invalid
+        print "Eaglewood: skip reason=task-create-failed"
+        return
+    end if
     task.functionName = "fetchGuest"
     task.generation = m.fetchGeneration
     task.observeField("result", "onGuestFetch")
     m.guestTask = task
     task.control = "RUN"
+    print "Eaglewood: task started generation="; m.fetchGeneration
 end sub
 
 sub onGuestFetch()
     task = m.guestTask
-    if task = invalid then return
+    if task = invalid
+        print "Eaglewood: skip reason=no-task"
+        return
+    end if
     result = task.result
-    if result = invalid then return
-    if result.generation <> m.fetchGeneration then return
-    if result.ok <> "yes" then return
+    if result = invalid
+        print "Eaglewood: skip reason=no-result"
+        return
+    end if
+    if not GenerationMatches(result)
+        print "Eaglewood: skip reason=generation"
+        return
+    end if
+    seen = result.generationText
+    if seen = invalid or seen = "" or seen = "0"
+        print "Eaglewood: generation missing; applying current result"
+    end if
+    reason = "no"
+    if result.reason <> invalid and result.reason <> "" then reason = result.reason
+    ok = "no"
+    if result.ok <> invalid then ok = result.ok
+    print "Eaglewood: fetch result ok="; ok; " reason="; reason
+    if ok <> "yes"
+        print "Eaglewood: skip reason="; reason
+        ShowGreeting(FallbackGreeting())
+        return
+    end if
     present = false
     if result.checkoutPresent = "yes" then present = true
+    decision = CheckoutDecision(result.checkout, present, NowSeconds())
+    print "Eaglewood: checkout decision="; decision
     text = GreetingFromGuest(result.firstName, result.lastName, result.checkout, present)
     ShowGreeting(text)
 end sub
+
+' The observer is only attached to the current task. A result whose generation
+' is still 0 was published before that field was visible; apply it.
+function GenerationMatches(result as object) as boolean
+    want = m.fetchGeneration.ToStr()
+    text = result.generationText
+    number = result.generation
+    if text <> invalid
+        if text = want then return true
+    end if
+    if number <> invalid
+        if number.ToStr() = want then return true
+    end if
+    blank = false
+    if text = invalid or text = "" or text = "0" then blank = true
+    if blank
+        if number = invalid or number = 0 then return true
+    end if
+    return false
+end function
 
 sub ShowGreeting(text as string)
     if text = invalid or text = "" then text = FallbackGreeting()

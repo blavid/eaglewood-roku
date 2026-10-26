@@ -4,7 +4,7 @@ A sideloaded Roku SceneGraph welcome screen for the Eaglewood vacation rental in
 
 On launch, and again when ECP relaunches the app, the screen shows **Welcome to Eaglewood** immediately. A background task then requests the current guest. When that request succeeds and the stay is still current, the greeting becomes **Welcome, \<firstName\> \<lastName\>**. A missing or invalid last name is left off, so the line is **Welcome, \<firstName\>**. An invalid first name keeps **Welcome to Eaglewood** even if the last name is fine. The launch does not wait on the network (`network_not_required=1`).
 
-The debug port prints `Eaglewood: greeting = ...` and one UI-resolution line. That greeting line is the only place a name is logged. The request address, the response body, checkout, and any other fields are not printed.
+The debug port (telnet port 8085) prints `Eaglewood:` lines for the greeting, the UI resolution, and each step of the guest request: the task was created and started, whether a path key was loaded and its length, the request URL with that key replaced by `***`, the response code, a failure reason, a short body snippet, the parse result, the checkout decision (`missing`, `current`, `past`, or `unreadable`), and why a request was skipped. The path key itself is never printed. A failure reason that contains the request address is masked the same way.
 
 ## Guest document
 
@@ -94,7 +94,7 @@ $env:ROKUPASS = 'the-password-set-on-the-tv'
 
 Do not leave the key in a PowerShell profile or a committed script. `scripts/package.ps1` builds the zip on its own if you only want the archive.
 
-`scripts/check_tracked_guest_key.py` runs from packaging and from `scripts/validate.py`. It uses `git grep` and fails if a tracked file contains a concrete `sunrivertownhome.com/tv/<segment>/guest.json` URL, a key-like string returned from channel code, or a tracked `secrets.brs`. The documentation form with angle brackets is not a match. The check prints file names, not the matching line.
+`scripts/check_tracked_guest_key.py` runs from packaging and from `scripts/validate.py`. It uses `git grep` and fails if a tracked file contains a concrete `sunrivertownhome.com/tv/<segment>/guest.json` URL, a key-like string returned from channel code, or a tracked `secrets.brs`. A short word of only letters is not treated as a key. The documentation form with angle brackets is not a match. The check prints file names, not the matching line.
 
 ## Check-in launch
 

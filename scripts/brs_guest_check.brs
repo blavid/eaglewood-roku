@@ -146,6 +146,58 @@ sub Main()
         print "FAIL unreadable checkout"
         failed = failed + 1
     end if
+    if CheckoutDecision("", false, instant) <> "missing"
+        print "FAIL missing checkout decision"
+        failed = failed + 1
+    end if
+    if CheckoutDecision("tomorrow", true, instant) <> "unreadable"
+        print "FAIL unreadable checkout decision"
+        failed = failed + 1
+    end if
+
+    ' Blake's live guest.json body. 2026-10-27 is a Pacific daylight day, so
+    ' the stay ends at 2026-10-28T07:00:00Z. The evening of 2026-10-26 is current.
+    liveBody = "{""firstName"":""Test"",""lastName"":""Guest"",""checkout"":""2026-10-27""}"
+    live = GuestFields(ParseJson(liveBody), 5)
+    if live.ok <> "yes" or live.firstName <> "Test" or live.lastName <> "Guest"
+        print "FAIL live body names"
+        failed = failed + 1
+    end if
+    if live.checkout <> "2026-10-27" or live.checkoutPresent <> "yes"
+        print "FAIL live body checkout"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2026-10-27") <> CheckoutSeconds("2026-10-28T07:00:00Z")
+        print "FAIL live checkout instant"
+        failed = failed + 1
+    end if
+    blakeNow = CheckoutSeconds("2026-10-26T21:49:00Z")
+    if blakeNow = invalid
+        print "FAIL live clock"
+        failed = failed + 1
+    else
+        liveText = GreetingFromGuestAt(live.firstName, live.lastName, live.checkout, true, blakeNow)
+        if liveText <> "Welcome, Test Guest"
+            print "FAIL live body greeting"
+            failed = failed + 1
+        end if
+        if CheckoutDecision(live.checkout, true, blakeNow) <> "current"
+            print "FAIL live body decision"
+            failed = failed + 1
+        end if
+    end if
+    if StayIsCurrent("2026-10-27", true, CheckoutSeconds("2026-10-27T22:00:00Z")) <> true
+        print "FAIL live checkout afternoon"
+        failed = failed + 1
+    end if
+    if StayIsCurrent("2026-10-27", true, CheckoutSeconds("2026-10-28T06:30:00Z")) <> true
+        print "FAIL live checkout late evening"
+        failed = failed + 1
+    end if
+    if StayIsCurrent("2026-10-27", true, CheckoutSeconds("2026-10-28T07:00:00Z")) <> false
+        print "FAIL live checkout at pacific midnight"
+        failed = failed + 1
+    end if
 
     parsed = ParseJson("{""firstName"":""Mary"",""lastName"":""O'Brien"",""checkout"":"""",""phone"":""5550000000"",""note"":""secret""}")
     fields = GuestFields(parsed, 7)

@@ -27,7 +27,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "4",
+    "build_version": "5",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -70,6 +70,27 @@ GREETING_CASES = [
 def fail(message: str) -> None:
     print(f"FAIL {message}")
     raise SystemExit(1)
+
+
+def print_lines(path: Path) -> list[str]:
+    lines = []
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("print "):
+            lines.append(stripped)
+    return lines
+
+
+def check_debug_prints(path: Path, required: list[str]) -> None:
+    lines = print_lines(path)
+    for line in lines:
+        if not line.startswith('print "Eaglewood:'):
+            fail(f"debug print must start with Eaglewood: {path.name}: {line}")
+        if "GuestPathKey()" in line:
+            fail(f"debug print must not read the path key in {path.name}")
+    for needle in required:
+        if not any(needle in line for line in lines):
+            fail(f"{path.name} is missing a debug print containing {needle!r}")
 
 
 def parse_manifest() -> dict[str, str]:
@@ -166,10 +187,18 @@ def check_greeting_draws() -> None:
         fail("debug port must print the greeting")
     if "sub init()" not in source or source.find("ShowGreeting(FallbackGreeting())") > source.find("end sub"):
         fail("init() must show the fallback greeting before the first end sub")
-    prints = [line.strip() for line in source.splitlines() if "print " in line]
-    allowed = {'print "Eaglewood: greeting = "; text', 'print "Eaglewood: ui = "; ui.name; " "; ui.width; "x"; ui.height'}
-    if set(prints) != allowed:
-        fail(f"unexpected print statements: {prints}")
+    check_debug_prints(
+        SCENE_BRS,
+        [
+            "Eaglewood: greeting = ",
+            "Eaglewood: ui = ",
+            "Eaglewood: task created",
+            "Eaglewood: task started",
+            "Eaglewood: relaunch",
+            "skip reason=",
+            "generation missing",
+        ],
+    )
 
 
 def check_guest_fetch() -> None:
@@ -184,8 +213,30 @@ def check_guest_fetch() -> None:
         fail("guest fetch timeout must be 3 seconds")
     if "AsyncGetToString" not in task or "AsyncCancel" not in task:
         fail("guest fetch must use one async request and cancel it on timeout")
-    if "print " in task or "print " in config or "print " in rules:
-        fail("guest fetch and name rules must not print")
+    if "EnableEncodings(true)" not in task or "RetainBodyOnError(true)" not in task:
+        fail("guest fetch must decode gzip and keep an error body for the log")
+    if "ReadGeneration()" not in task:
+        fail("guest fetch must re-read generation before publishing the result")
+    main = (ROOT / "channel" / "source" / "main.brs").read_text(encoding="utf-8")
+    if "PrepareGuestCertificates()" not in main or 'SetCertificatesFile("common:/certs/ca-bundle.crt")' not in main:
+        fail("main thread must initialize the HTTPS certificate bundle")
+    check_debug_prints(
+        TASK_BRS,
+        [
+            "key loaded",
+            "url = ",
+            "request sent",
+            "response code=",
+            "failure reason=",
+            "snippet=",
+            "parse ok=",
+            "checkout decision=",
+            "skip reason=",
+            "RedactSecret(",
+        ],
+    )
+    if print_lines(CONFIG_BRS) or print_lines(RULES_BRS):
+        fail("guest config and name rules must not print")
     if task.count(ORIGIN) or rules.count(ORIGIN):
         fail("the guest origin belongs only in GuestConfig.brs")
     if config.count(ORIGIN) != 1:

@@ -7,6 +7,7 @@ Matching lines are not printed.
 
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -15,8 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 
 # A real /tv/<segment>/guest.json. The placeholder uses <GUEST_PATH_KEY>.
 URL_PATTERN = r"sunrivertownhome\.com/tv/[A-Za-z0-9._~-]+/guest\.json"
-# A GuestPathKey-sized literal. Ordinary sentences do not match this shape.
+# A returned token with the shape of a path key. A short word of only letters
+# (for example a checkout decision) is not a key. The matching line is not printed.
 LITERAL_PATTERN = r'return "[A-Za-z0-9._~-]{8,}"'
+LITERAL_TOKEN = re.compile(r'return "([A-Za-z0-9._~-]{8,})"')
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -46,6 +49,34 @@ def require_clean(pattern: str, description: str, *paths: str) -> None:
         fail(detail)
 
 
+def token_is_key_like(token: str) -> bool:
+    if re.fullmatch(r"[A-Za-z]+", token) and len(token) < 16:
+        return False
+    return True
+
+
+def require_no_key_literal() -> None:
+    result = git("grep", "-E", "-I", "-n", LITERAL_PATTERN, "--", "channel")
+    if result.returncode == 1:
+        return
+    if result.returncode != 0:
+        detail = result.stderr.strip() or f"git grep exited {result.returncode}"
+        fail(detail)
+    files: list[str] = []
+    for line in result.stdout.splitlines():
+        match = LITERAL_TOKEN.search(line)
+        if match is None or not token_is_key_like(match.group(1)):
+            continue
+        path = line.split(":", 1)[0]
+        if path not in files:
+            files.append(path)
+    if files:
+        fail(
+            "A tracked channel file returns a key-like literal. Keep that value out of git.",
+            "\n".join(files),
+        )
+
+
 def main() -> None:
     tracked = git("ls-files", "--", "channel/components/secrets.brs", "channel/source/secrets.brs")
     if tracked.returncode != 0:
@@ -58,11 +89,7 @@ def main() -> None:
         "A tracked file contains a guest path key. Remove it. The key is supplied at package time.",
         ".",
     )
-    require_clean(
-        LITERAL_PATTERN,
-        "A tracked channel file returns a key-like literal. Keep that value out of git.",
-        "channel",
-    )
+    require_no_key_literal()
     print("tracked guest-key check ok")
 
 
