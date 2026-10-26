@@ -22,7 +22,7 @@ Checked on the Flickr photo page (schema.org `license` is the Public Domain Mark
 
 ## Layout
 
-The channel is FHD (`ui_resolutions=fhd`, `rsg_version=1.3`). The photograph is full screen. A short gradient sits behind the greeting so the type stays readable over the trees, and a second copy of the line is offset as a shadow. Back on this screen exits the app. Home always exits; the app cannot intercept it. There is no web view, no video, and no launch of other apps.
+The channel is FHD (`ui_resolutions=fhd`, `rsg_version=1.3`). The photograph is full screen. The greeting uses `font:LargeBoldSystemFont` on the Label itself, in white, on a dark translucent bar. Back on this screen exits the app. Home always exits; the app cannot intercept it. There is no web view, no video, and no launch of other apps.
 
 Launch does not wait on the network (`network_not_required=1`). `splash_min_time=0` so the splash (the same photograph) gives way as soon as the scene is up.
 

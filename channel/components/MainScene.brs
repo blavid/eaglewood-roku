@@ -1,10 +1,10 @@
 sub init()
     m.greeting = m.top.findNode("greeting")
-    m.greetingShadow = m.top.findNode("greetingShadow")
     m.top.backgroundColor = "0x100E0CFF"
     m.top.setFocus(true)
     m.top.observeField("relaunchCount", "onRelaunch")
     applyGreeting()
+    printUiResolution()
 end sub
 
 sub onRelaunch()
@@ -13,8 +13,30 @@ end sub
 
 sub applyGreeting()
     text = BuildGreeting()
-    m.greeting.text = text
-    m.greetingShadow.text = text
+    if m.greeting <> invalid
+        ' String assignment selects the built-in face. Size is set on that
+        ' Font node afterward. A child Font uri cannot load a system font.
+        m.greeting.font = "font:LargeBoldSystemFont"
+        if m.greeting.font <> invalid
+            m.greeting.font.size = 64
+        end if
+        m.greeting.color = "0xFFFFFFFF"
+        m.greeting.width = 1760
+        m.greeting.height = 160
+        m.greeting.translation = [80, 800]
+        m.greeting.horizAlign = "center"
+        m.greeting.vertAlign = "center"
+        m.greeting.text = text
+    end if
+    print "Eaglewood: greeting = "; text
+end sub
+
+sub printUiResolution()
+    deviceInfo = CreateObject("roDeviceInfo")
+    if deviceInfo = invalid then return
+    ui = deviceInfo.GetUIResolution()
+    if ui = invalid then return
+    print "Eaglewood: ui = "; ui.name; " "; ui.width; "x"; ui.height
 end sub
 
 ' Back is not consumed. On this screen that exits the app, which is what

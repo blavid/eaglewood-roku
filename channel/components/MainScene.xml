@@ -22,28 +22,23 @@
             height="1080"
             uri="pkg:/images/scrim.png"
             loadDisplayMode="scaleToFill" />
-        <!-- Shadow sits 2px right and 4px down from the greeting. -->
-        <Label
-            id="greetingShadow"
-            translation="[82, 774]"
-            width="1760"
-            height="120"
-            horizAlign="center"
-            vertAlign="center"
-            text="Welcome to Eaglewood"
-            color="0x000000AA">
-            <Font role="font" uri="font:LargeBoldSystemFont" size="92" />
-        </Label>
+        <!-- A Font uri only loads a TTF in the package. font:LargeBoldSystemFont
+             belongs on the Label font attribute, set again in init(). -->
+        <Rectangle
+            id="greetingBacking"
+            translation="[0, 800]"
+            width="1920"
+            height="160"
+            color="0x000000B3" />
         <Label
             id="greeting"
-            translation="[80, 770]"
+            translation="[80, 800]"
             width="1760"
-            height="120"
+            height="160"
             horizAlign="center"
             vertAlign="center"
             text="Welcome to Eaglewood"
-            color="0xF7F4EFFF">
-            <Font role="font" uri="font:LargeBoldSystemFont" size="92" />
-        </Label>
+            color="0xFFFFFFFF"
+            font="font:LargeBoldSystemFont" />
     </children>
 </component>

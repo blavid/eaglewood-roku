@@ -24,7 +24,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "1",
+    "build_version": "2",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -131,6 +131,25 @@ def check_greeting_rules() -> None:
         fail("first-token trim failed")
 
 
+def check_greeting_draws() -> None:
+    xml = (ROOT / "channel" / "components" / "MainScene.xml").read_text(encoding="utf-8")
+    source = SCENE_BRS.read_text(encoding="utf-8")
+    if 'uri="font:' in xml:
+        fail("a Font uri cannot load a system font; the label draws no glyphs")
+    if 'font="font:LargeBoldSystemFont"' not in xml:
+        fail("greeting Label must set font:LargeBoldSystemFont")
+    if xml.find('id="background"') > xml.find('id="greeting"'):
+        fail("greeting Label must come after the background Poster")
+    if "m.greeting.font = \"font:LargeBoldSystemFont\"" not in source:
+        fail("init must select the system font in BrightScript")
+    if "m.greeting.text = text" not in source:
+        fail("greeting text must be assigned on the label")
+    if "Eaglewood: greeting = " not in source:
+        fail("debug port must print the greeting")
+    if "sub init()" not in source or source.find("applyGreeting()") > source.find("end sub"):
+        fail("init() must apply the greeting before the first end sub")
+
+
 def check_no_secrets() -> None:
     banned = re.compile(r"\b(?:\d{3}[-. ]\d{3}[-. ]\d{4}|\d{16}|WIFI_PASSWORD|DOOR_CODE|HOST_CONTACT)\b")
     for path in (ROOT / "channel").rglob("*"):
@@ -164,6 +183,7 @@ def main() -> None:
     check_manifest(parse_manifest())
     check_images()
     check_greeting_rules()
+    check_greeting_draws()
     check_no_secrets()
     check_zip()
     print("validate ok")

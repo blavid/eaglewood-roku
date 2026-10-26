@@ -27,20 +27,19 @@ FONT = "/usr/share/fonts/truetype/macos/Inter-Bold.ttf"
 BADGE_FONT = "/usr/share/fonts/truetype/macos/Inter-SemiBold.ttf"
 
 
-def parse_label(xml: str, node_id: str) -> dict[str, str]:
-    match = re.search(
-        rf'<Label\s+id="{node_id}"([^>]*)>(.*?)</Label>',
-        xml,
-        re.DOTALL,
-    )
+def parse_tag(xml: str, tag: str, node_id: str) -> dict[str, str]:
+    match = re.search(rf'<{tag}\s+id="{node_id}"([^>]*)/?>', xml)
     if match is None:
-        raise SystemExit(f"label {node_id} not found")
-    attrs = dict(re.findall(r'(\w+)="([^"]*)"', match.group(1)))
-    font = re.search(r'<Font\b([^>]*)/>', match.group(2))
-    if font is None:
-        raise SystemExit(f"font for {node_id} not found")
-    attrs.update(dict(re.findall(r'(\w+)="([^"]*)"', font.group(1))))
-    return attrs
+        raise SystemExit(f"{tag} {node_id} not found")
+    return dict(re.findall(r'(\w+)="([^"]*)"', match.group(1)))
+
+
+def font_size() -> int:
+    source = (ROOT / "channel" / "components" / "MainScene.brs").read_text(encoding="utf-8")
+    match = re.search(r"m\.greeting\.font\.size\s*=\s*(\d+)", source)
+    if match is None:
+        raise SystemExit("greeting font size is not set in MainScene.brs")
+    return int(match.group(1))
 
 
 def box(translation: str, width: str, height: str) -> tuple[int, int, int, int]:
@@ -61,24 +60,17 @@ def color(value: str) -> tuple[int, int, int, int]:
 
 def render(greeting: str, badge: str) -> Image.Image:
     xml = SCENE.read_text(encoding="utf-8")
-    greeting_attrs = parse_label(xml, "greeting")
-    shadow_attrs = parse_label(xml, "greetingShadow")
+    backing = parse_tag(xml, "Rectangle", "greetingBacking")
+    greeting_attrs = parse_tag(xml, "Label", "greeting")
+    bx, by, bw, bh = box(backing["translation"], backing["width"], backing["height"])
     gx, gy, gw, gh = box(greeting_attrs["translation"], greeting_attrs["width"], greeting_attrs["height"])
-    sx, sy, sw, sh = box(shadow_attrs["translation"], shadow_attrs["width"], shadow_attrs["height"])
-    size = int(greeting_attrs["size"])
-    font = ImageFont.truetype(FONT, size)
+    font = ImageFont.truetype(FONT, font_size())
 
     background = Image.open(IMAGES / "background.jpg").convert("RGBA")
     scrim = Image.open(IMAGES / "scrim.png").convert("RGBA").resize(background.size, Image.Resampling.BILINEAR)
     image = Image.alpha_composite(background, scrim)
     draw = ImageDraw.Draw(image)
-    draw.text(
-        (sx + sw / 2, sy + sh / 2),
-        greeting,
-        font=font,
-        fill=color(shadow_attrs["color"]),
-        anchor="mm",
-    )
+    draw.rectangle((bx, by, bx + bw, by + bh), fill=color(backing["color"]))
     draw.text(
         (gx + gw / 2, gy + gh / 2),
         greeting,
