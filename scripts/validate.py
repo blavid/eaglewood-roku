@@ -59,7 +59,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "6",
+    "build_version": "7",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -217,10 +217,39 @@ def check_render_thread() -> None:
     if "function DaysFromCivil(" not in rules or "Val(" not in rules or "Mid(" not in rules:
         fail("YYYY-MM-DD must be parsed with Mid and Val and converted with days-from-civil")
     scene = SCENE_BRS.read_text(encoding="utf-8")
-    if 'CreateObject("roSGNode", "Font")' not in scene or 'font.uri = "font:SystemFontFile"' not in scene:
-        fail("wrap measurement must use a Font node with font:SystemFontFile")
     if 'm.greeting.font = "font:LargeBoldSystemFont"' not in scene:
         fail("the label must still draw font:LargeBoldSystemFont")
+    if "ApplyPlainGreeting(FallbackGreeting())" not in scene:
+        fail("init must set the fallback text before greeting layout")
+    plain_at = scene.find("ApplyPlainGreeting(FallbackGreeting())")
+    layout_at = scene.find("ApplyGreetingLayout(")
+    if plain_at < 0 or layout_at < 0 or plain_at > layout_at:
+        fail("plain greeting text must be assigned before greeting layout")
+    check_font_sources()
+
+
+def check_font_sources() -> None:
+    """Font node uris must be packaged .ttf files. The font registry must not appear."""
+    uri_in_tag = re.compile(r"<Font\b[^>]*\buri=\"([^\"]+)\"", re.IGNORECASE | re.DOTALL)
+    uri_assign = re.compile(r"(?i)\.uri\s*=\s*\"([^\"]+)\"")
+    ttf = re.compile(r"pkg:/.*\.ttf\Z", re.IGNORECASE)
+    for path in (ROOT / "channel").rglob("*"):
+        if not path.is_file() or path.suffix.lower() not in {".brs", ".xml"}:
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        if "roFontRegistry" in text:
+            fail(f"{path.relative_to(ROOT)} references roFontRegistry")
+        if "GetOneLineWidth" in text or "GetOneLineHeight" in text:
+            fail(f"{path.relative_to(ROOT)} measures text at runtime")
+        for uri in uri_in_tag.findall(text):
+            if ttf.fullmatch(uri) is None:
+                fail(f"{path.relative_to(ROOT)} Font uri {uri!r} is not a packaged .ttf")
+        if 'CreateObject("roSGNode", "Font")' in text or "<Font" in text:
+            assigned = uri_assign.findall(text)
+            if not assigned or any(ttf.fullmatch(uri) is None for uri in assigned):
+                fail(f"{path.relative_to(ROOT)} has a Font node without a packaged .ttf uri")
+        for uri in re.findall(r'uri="(font:[^"]+)"', text):
+            fail(f"{path.relative_to(ROOT)} uses Font uri {uri!r}; system faces belong on the Label font attribute")
 
 
 def check_greeting_draws() -> None:

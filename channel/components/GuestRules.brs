@@ -502,11 +502,10 @@ end function
 
 function MeasureText(text as string, font as object, charWidth as integer) as integer
     if text = invalid or text = "" then return 0
-    if font <> invalid
-        width = font.GetOneLineWidth(text, 20000)
-        if width <> invalid and width > 0 then return width
-    end if
     if charWidth < 1 then charWidth = 1
+    ' Length times a per-size width. A Font node has no measurement methods,
+    ' and calling one suspends the app before the label draws.
+    if font = invalid then return Len(text) * charWidth
     return Len(text) * charWidth
 end function
 

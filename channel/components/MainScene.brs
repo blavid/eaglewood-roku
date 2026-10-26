@@ -3,10 +3,11 @@ sub init()
     m.backing = m.top.findNode("greetingBacking")
     m.guestTask = invalid
     m.fetchGeneration = 0
-    m.measureFonts = {}
     m.top.backgroundColor = "0x100E0CFF"
     m.top.setFocus(true)
     m.top.observeField("relaunchCount", "onRelaunch")
+    ' Readable text before any layout. A layout failure must not leave this blank.
+    ApplyPlainGreeting(FallbackGreeting())
     ShowGreeting(FallbackGreeting())
     startGuestFetch()
     printUiResolution()
@@ -98,6 +99,32 @@ end function
 
 sub ShowGreeting(text as string)
     if text = invalid or text = "" then text = FallbackGreeting()
+    ApplyPlainGreeting(text)
+    try
+        ApplyGreetingLayout(text)
+    catch err
+        print "Eaglewood: layout error = "; LayoutErrorText(err)
+    end try
+    print "Eaglewood: greeting = "; text
+end sub
+
+' The same string assignment build 5 used. Built-in names only, no Font uri
+' and no custom size. The label wraps; this does not measure glyphs.
+sub ApplyPlainGreeting(text as string)
+    if m.greeting = invalid then return
+    m.greeting.font = "font:LargeBoldSystemFont"
+    m.greeting.color = "0xFFFFFFFF"
+    m.greeting.width = GreetingLabelWidth()
+    m.greeting.wrap = true
+    m.greeting.maxLines = 2
+    m.greeting.horizAlign = "center"
+    m.greeting.vertAlign = "center"
+    m.greeting.height = GreetingBarMinHeight()
+    m.greeting.translation = [80, 800]
+    m.greeting.text = text
+end sub
+
+sub ApplyGreetingLayout(text as string)
     layout = GreetingLayout(text)
     if m.backing <> invalid
         m.backing.color = "0x000000B3"
@@ -105,68 +132,56 @@ sub ShowGreeting(text as string)
         m.backing.height = layout.barHeight
         m.backing.translation = [0, layout.barTop]
     end if
-    if m.greeting <> invalid
-        ' String assignment selects the built-in face. Size is set on that
-        ' Font node afterward. A child Font uri cannot load a system font.
-        m.greeting.font = "font:LargeBoldSystemFont"
-        if m.greeting.font <> invalid then m.greeting.font.size = layout.fontSize
-        m.greeting.color = "0xFFFFFFFF"
-        m.greeting.width = GreetingLabelWidth()
-        m.greeting.wrap = true
-        m.greeting.maxLines = 2
-        m.greeting.horizAlign = "center"
-        m.greeting.vertAlign = "center"
-        m.greeting.height = layout.barHeight
-        m.greeting.translation = [80, layout.barTop]
-        m.greeting.text = text
-    end if
-    print "Eaglewood: greeting = "; text
+    if m.greeting = invalid then return
+    m.greeting.font = layout.fontName
+    m.greeting.height = layout.barHeight
+    m.greeting.translation = [80, layout.barTop]
 end sub
 
 function GreetingLayout(text as string) as object
     sizes = GreetingFontSizes()
-    chosen = sizes[sizes.Count() - 1]
+    names = GreetingFontNames()
+    chosen = sizes.Count() - 1
     lineCount = 2
     index = 0
+    limit = GreetingLabelWidth()
+    if text = invalid then text = ""
     while index < sizes.Count()
-        size = sizes[index]
-        fitted = WrapGreeting(text, GreetingLabelWidth(), MeasureFont(size), FallbackCharWidth(size))
-        if fitted.Count() >= 1 and fitted.Count() <= 2
-            chosen = size
-            lineCount = fitted.Count()
+        pixels = Len(text) * FallbackCharWidth(sizes[index])
+        if pixels <= limit
+            chosen = index
+            lineCount = 1
+            exit while
+        else if pixels <= (limit * 2)
+            chosen = index
+            lineCount = 2
             exit while
         end if
         index = index + 1
     end while
-    bar = GreetingBarBox(lineCount, LineHeightForSize(chosen))
-    bar.fontSize = chosen
+    if chosen >= names.Count() then chosen = names.Count() - 1
+    if chosen < 0 then chosen = 0
+    size = sizes[chosen]
+    lineHeight = size + (size \ 5)
+    bar = GreetingBarBox(lineCount, lineHeight)
+    bar.fontName = names[chosen]
     bar.lineCount = lineCount
     return bar
 end function
 
-' The font registry object cannot be created on this render thread.
-' The label still draws font:LargeBoldSystemFont. This node is only for
-' measuring the wrap. font:SystemFontFile is the system font file URI.
-function MeasureFont(size as integer) as object
-    if m.measureFonts = invalid then m.measureFonts = {}
-    key = size.ToStr()
-    existing = m.measureFonts.Lookup(key)
-    if existing <> invalid then return existing
-    font = CreateObject("roSGNode", "Font")
-    if font = invalid then return invalid
-    font.uri = "font:SystemFontFile"
-    font.size = size
-    m.measureFonts[key] = font
-    return font
+function GreetingFontNames() as object
+    return ["font:LargeBoldSystemFont", "font:MediumBoldSystemFont", "font:SmallBoldSystemFont", "font:SmallestBoldSystemFont"]
 end function
 
-function LineHeightForSize(size as integer) as integer
-    font = MeasureFont(size)
-    if font <> invalid
-        height = font.GetOneLineHeight()
-        if height <> invalid and height > 0 then return height
+function LayoutErrorText(err as object) as string
+    if err = invalid then return "layout failed"
+    kind = type(err)
+    if kind = "String" or kind = "roString" then return err
+    if kind = "roAssociativeArray"
+        message = err.Lookup("message")
+        if message <> invalid and message <> "" then return message
     end if
-    return size + (size \ 5)
+    return "layout failed"
 end function
 
 sub printUiResolution()

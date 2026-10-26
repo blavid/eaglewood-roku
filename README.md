@@ -24,7 +24,7 @@ The body is JSON:
 
 Each name part is trimmed. Curly apostrophes and dashes are normalized. The part is kept only when every character is a letter (including Latin-1 and Latin Extended-A, except × and ÷), hyphen, apostrophe, space, or period, and at least one character is a letter. Internal spaces collapse to one. Each part is capped at 32 characters. `{}`, a timeout, a non-200 response, or any other failure leaves **Welcome to Eaglewood**.
 
-Long greetings wrap on spaces and hyphens, up to two lines, inside the 1760px label. The type size steps from 64 to 52, 42, and 34 until the line fits. Width and line height come from a SceneGraph `Font` node (`font:SystemFontFile`), because `roFontRegistry` cannot be created on the render thread. The label itself still draws `font:LargeBoldSystemFont`. The dark bar stays at least 160px tall, grows with the text, and stays anchored to the bottom of that band.
+Long greetings use the label's own wrap, two lines maximum, inside the 1760px label. The face is `font:LargeBoldSystemFont`, stepping to `font:MediumBoldSystemFont`, `font:SmallBoldSystemFont`, and `font:SmallestBoldSystemFont` when the character length no longer fits. The choice uses length times a per-size character width. There is no Font node and no runtime glyph measurement. The dark bar stays at least 160px tall, grows from the estimated line count, and stays anchored to the bottom of that band.
 
 ## Photograph
 
