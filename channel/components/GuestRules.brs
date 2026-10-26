@@ -131,24 +131,20 @@ function CheckoutSeconds(raw as object)
     if year < 2000 or year > 2037 then return invalid
     if month < 1 or month > 12 then return invalid
     if day < 1 or day > DaysInMonth(year, month) then return invalid
+    ' YYYY-MM-DD is a Pacific calendar day. A timestamp is an exact instant.
+    if Len(text) = 10 then return PacificDateEndSeconds(year, month, day)
 
-    timeText = "23:59:59"
-    offsetText = ""
-    if Len(text) = 10
-        offsetText = "Z"
-    else
-        rest = Right(text, Len(text) - 10)
-        sep = Left(rest, 1)
-        if sep <> "T" and sep <> "t" and sep <> " " then return invalid
-        if Len(rest) < 9 then return invalid
-        timeText = Slice(rest, 2, 8)
-        if not IsClock(timeText) then return invalid
-        tail = ""
-        if Len(rest) > 9 then tail = Right(rest, Len(rest) - 9)
-        tail = DropFraction(tail)
-        if tail = invalid then return invalid
-        offsetText = tail
-    end if
+    rest = Right(text, Len(text) - 10)
+    sep = Left(rest, 1)
+    if sep <> "T" and sep <> "t" and sep <> " " then return invalid
+    if Len(rest) < 9 then return invalid
+    timeText = Slice(rest, 2, 8)
+    if not IsClock(timeText) then return invalid
+    tail = ""
+    if Len(rest) > 9 then tail = Right(rest, Len(rest) - 9)
+    tail = DropFraction(tail)
+    if tail = invalid then return invalid
+    offsetText = tail
 
     zoneSeconds = 0
     if offsetText <> ""
@@ -164,6 +160,64 @@ function CheckoutSeconds(raw as object)
     utcSeconds = ParsedWallSeconds(iso, year, month, day, hour, minute, second)
     if utcSeconds = invalid then return invalid
     return utcSeconds - zoneSeconds
+end function
+
+' Midnight at the end of this calendar day in America/Los_Angeles.
+' Standard time is 08:00 UTC the next day. Daylight time is 07:00 UTC.
+' The US rule since 2007 is used, not the TV's timezone setting.
+function PacificDateEndSeconds(year as integer, month as integer, day as integer)
+    utcHour = 8
+    if PacificDaylightAtEnd(year, month, day) then utcHour = 7
+    nextYear = year
+    nextMonth = month
+    nextDay = day + 1
+    if nextDay > DaysInMonth(year, month)
+        nextDay = 1
+        nextMonth = month + 1
+        if nextMonth > 12
+            nextMonth = 1
+            nextYear = year + 1
+        end if
+    end if
+    hourText = Pad2(utcHour)
+    iso = Pad4(nextYear) + "-" + Pad2(nextMonth) + "-" + Pad2(nextDay) + "T" + hourText + ":00:00"
+    return ParsedWallSeconds(iso, nextYear, nextMonth, nextDay, utcHour, 0, 0)
+end function
+
+function PacificDaylightAtEnd(year as integer, month as integer, day as integer) as boolean
+    if month < 3 or month > 11 then return false
+    if month > 3 and month < 11 then return true
+    if month = 3 then return day >= NthSunday(year, 3, 2)
+    return day < NthSunday(year, 11, 1)
+end function
+
+function NthSunday(year as integer, month as integer, nth as integer) as integer
+    firstDow = WeekdayOf(year, month, 1)
+    firstSunday = 1
+    if firstDow <> 0 then firstSunday = 8 - firstDow
+    return firstSunday + ((nth - 1) * 7)
+end function
+
+function WeekdayOf(year as integer, month as integer, day as integer) as integer
+    ' 0 = Sunday. Sakamoto's formula, so this does not read the device zone.
+    offsets = [0, 3, 2, 5, 0, 3, 5, 1, 4, 6, 2, 4]
+    adjusted = year
+    if month < 3 then adjusted = year - 1
+    total = adjusted + (adjusted \ 4) - (adjusted \ 100) + (adjusted \ 400) + offsets[month - 1] + day
+    return total mod 7
+end function
+
+function Pad2(value as integer) as string
+    if value < 10 then return "0" + value.ToStr()
+    return value.ToStr()
+end function
+
+function Pad4(value as integer) as string
+    text = value.ToStr()
+    while Len(text) < 4
+        text = "0" + text
+    end while
+    return text
 end function
 
 function DropFraction(tail as string)

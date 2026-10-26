@@ -47,7 +47,7 @@ A successful launch returns an `<app>` element whose id is `dev`. The title is `
 Sending `POST /launch/dev` again, whether or not the app is already open, should leave the guest on this same welcome screen.
 
 - If the app is not running, Roku starts it and calls `Main()`.
-- If it is already running, Roku delivers an `roInput` event instead of starting a second copy. The manifest sets `supports_input_launch=1` so that event arrives. The app reads `contentId`, `mediaType`, and `source` and does not navigate. It also puts the fallback greeting back on screen and fetches `guest.json` again.
+- If it is already running, Roku delivers an `roInput` event instead of starting a second copy. The manifest sets `supports_input_launch=1` so that event arrives. The app reads `contentId`, `mediaType`, and `source` and does not navigate. It also puts the fallback greeting back on screen and fetches `guest.json` again. A date-only `checkout` in that file is the end of that day in Pacific time. The TV's timezone setting is not consulted.
 
 Deep-link query parameters are accepted and ignored. This is still the welcome screen:
 

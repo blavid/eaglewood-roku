@@ -52,8 +52,52 @@ sub Main()
         print "FAIL leap day rejected"
         failed = failed + 1
     end if
-    if CheckoutSeconds("2026-10-28") <> CheckoutSeconds("2026-10-28T23:59:59Z")
-        print "FAIL date-only checkout"
+    ' 2026-10-28 is during Pacific Daylight Time. The plain date ends at
+    ' midnight PDT, which is 07:00 UTC the next morning.
+    if CheckoutSeconds("2026-10-28") <> CheckoutSeconds("2026-10-29T07:00:00Z")
+        print "FAIL date-only daylight checkout"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2026-01-15") <> CheckoutSeconds("2026-01-16T08:00:00Z")
+        print "FAIL date-only standard checkout"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2026-03-07") <> CheckoutSeconds("2026-03-08T08:00:00Z")
+        print "FAIL day before daylight time starts"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2026-03-08") <> CheckoutSeconds("2026-03-09T07:00:00Z")
+        print "FAIL daylight-time start day"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2026-10-31") <> CheckoutSeconds("2026-11-01T07:00:00Z")
+        print "FAIL day before standard time returns"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2026-11-01") <> CheckoutSeconds("2026-11-02T08:00:00Z")
+        print "FAIL standard-time return day"
+        failed = failed + 1
+    end if
+    if CheckoutSeconds("2028-02-29") <> CheckoutSeconds("2028-03-01T08:00:00Z")
+        print "FAIL leap-day date-only checkout"
+        failed = failed + 1
+    end if
+    eveningBefore = CheckoutSeconds("2026-10-28T03:00:00Z")
+    if StayIsCurrent("2026-10-28", true, eveningBefore) <> true
+        print "FAIL evening before the Pacific checkout day"
+        failed = failed + 1
+    end if
+    checkoutAfternoon = CheckoutSeconds("2026-10-28T22:00:00Z")
+    if StayIsCurrent("2026-10-28", true, checkoutAfternoon) <> true
+        print "FAIL afternoon of the Pacific checkout day"
+        failed = failed + 1
+    end if
+    if StayIsCurrent("2026-10-28", true, CheckoutSeconds("2026-10-29T06:00:00Z")) <> true
+        print "FAIL late evening of the Pacific checkout day"
+        failed = failed + 1
+    end if
+    if StayIsCurrent("2026-10-28", true, CheckoutSeconds("2026-10-29T07:30:00Z")) <> false
+        print "FAIL after Pacific midnight"
         failed = failed + 1
     end if
     if CheckoutSeconds("2026-10-28T11:00:00") <> CheckoutSeconds("2026-10-28T11:00:00Z")
