@@ -1,0 +1,63 @@
+sub Main(args as object)
+    AcceptLaunchArgs(args)
+
+    screen = CreateObject("roSGScreen")
+    m.port = CreateObject("roMessagePort")
+    screen.setMessagePort(m.port)
+
+    scene = screen.CreateScene("MainScene")
+    screen.show()
+
+    ' A second POST /launch/dev while this app is already open arrives here
+    ' instead of starting Main() again. Deep-link parameters are ignored.
+    input = CreateObject("roInput")
+    if input <> invalid
+        input.setMessagePort(m.port)
+    end if
+
+    ' Required for certification as of October 1, 2026. This screen has no
+    ' cache to release; the handler still consumes the warning.
+    monitor = CreateObject("roAppMemoryMonitor")
+    if monitor <> invalid
+        monitor.setMessagePort(m.port)
+        monitor.EnableMemoryWarningEvent(true)
+    end if
+
+    while true
+        msg = wait(0, m.port)
+        msgType = type(msg)
+        if msgType = "roSGScreenEvent"
+            if msg.isScreenClosed() then return
+        else if msgType = "roInputEvent"
+            if msg.isInput()
+                AcceptLaunchArgs(msg.getInfo())
+                scene.relaunchCount = scene.relaunchCount + 1
+            end if
+        else if msgType = "roAppMemoryNotificationEvent"
+            NoteMemoryWarning(msg)
+        end if
+    end while
+end sub
+
+sub AcceptLaunchArgs(args as object)
+    if args = invalid then return
+    if type(args) <> "roAssociativeArray" then return
+    contentId = args.lookup("contentId")
+    if contentId = invalid then contentId = args.lookup("contentID")
+    mediaType = args.lookup("mediaType")
+    if mediaType = invalid then mediaType = args.lookup("MediaType")
+    source = args.lookup("source")
+    ' One screen. contentId, mediaType, and source do not navigate anywhere.
+    if contentId <> invalid or mediaType <> invalid or source <> invalid
+        return
+    end if
+end sub
+
+sub NoteMemoryWarning(msg as object)
+    if msg = invalid then return
+    info = msg.getInfo()
+    if info = invalid then return
+    percent = info.lookup("MemoryUsagePercent")
+    if percent = invalid then return
+    if percent < 0 then return
+end sub

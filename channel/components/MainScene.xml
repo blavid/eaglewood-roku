@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<component name="MainScene" extends="Scene">
+    <interface>
+        <!-- Incremented when ECP relaunches the running app. Same screen. -->
+        <field id="relaunchCount" type="integer" alwaysNotify="true" value="0" />
+    </interface>
+
+    <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
+
+    <children>
+        <Poster
+            id="background"
+            translation="[0, 0]"
+            width="1920"
+            height="1080"
+            uri="pkg:/images/background.jpg"
+            loadDisplayMode="scaleToFill" />
+        <Poster
+            id="scrim"
+            translation="[0, 0]"
+            width="1920"
+            height="1080"
+            uri="pkg:/images/scrim.png"
+            loadDisplayMode="scaleToFill" />
+        <!-- Shadow sits 2px right and 4px down from the greeting. -->
+        <Label
+            id="greetingShadow"
+            translation="[82, 774]"
+            width="1760"
+            height="120"
+            horizAlign="center"
+            vertAlign="center"
+            text="Welcome to Eaglewood"
+            color="0x000000AA">
+            <Font role="font" uri="font:LargeBoldSystemFont" size="92" />
+        </Label>
+        <Label
+            id="greeting"
+            translation="[80, 770]"
+            width="1760"
+            height="120"
+            horizAlign="center"
+            vertAlign="center"
+            text="Welcome to Eaglewood"
+            color="0xF7F4EFFF">
+            <Font role="font" uri="font:LargeBoldSystemFont" size="92" />
+        </Label>
+    </children>
+</component>
