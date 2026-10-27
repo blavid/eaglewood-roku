@@ -18,8 +18,11 @@ IMAGES = ROOT / "channel" / "images"
 SCENE_BRS = ROOT / "channel" / "components" / "MainScene.brs"
 SCENE_XML = ROOT / "channel" / "components" / "MainScene.xml"
 RULES_BRS = ROOT / "channel" / "components" / "GuestRules.brs"
-# These files run on the render thread. GuestRules.brs is included by the scene.
-RENDER_THREAD_FILES = (SCENE_BRS, SCENE_XML, RULES_BRS)
+GUIDE_UI_BRS = ROOT / "channel" / "components" / "GuideUi.brs"
+GUIDE_FORMAT_BRS = ROOT / "channel" / "components" / "GuideFormat.brs"
+GUIDE_MODEL_BRS = ROOT / "channel" / "components" / "GuideModel.brs"
+# These files run on the render thread. The scene includes the guide scripts.
+RENDER_THREAD_FILES = (SCENE_BRS, SCENE_XML, RULES_BRS, GUIDE_UI_BRS, GUIDE_FORMAT_BRS, GUIDE_MODEL_BRS)
 # roDateTime and roDeviceInfo are usable there. roSGNode is how the scene is built.
 RENDER_THREAD_CREATE = {"roSGNode", "roDeviceInfo", "roDateTime"}
 # Creating these logs "MAIN|TASK-only component failed on RENDER thread".
@@ -59,7 +62,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "7",
+    "build_version": "8",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -261,8 +264,8 @@ def check_greeting_draws() -> None:
         fail("greeting Label must set font:LargeBoldSystemFont")
     if xml.find('id="background"') > xml.find('id="greeting"'):
         fail("greeting Label must come after the background Poster")
-    if 'width="1760"' not in xml or 'wrap="true"' not in xml or 'maxLines="2"' not in xml:
-        fail("greeting Label must wrap to two lines inside 1760px")
+    if 'width="1132"' not in xml or 'wrap="true"' not in xml or 'maxLines="2"' not in xml:
+        fail("greeting Label must wrap to two lines inside the 1132px home column")
     if 'm.greeting.font = "font:LargeBoldSystemFont"' not in source:
         fail("init must select the system font in BrightScript")
     if "m.greeting.text = text" not in source:
@@ -366,6 +369,64 @@ def check_no_secrets() -> None:
             fail(f"unexpected sensitive token {found.group(0)!r} in {path}")
 
 
+def check_guide() -> None:
+    task_path = ROOT / "channel" / "components" / "GuideTask.brs"
+    task_xml = ROOT / "channel" / "components" / "GuideTask.xml"
+    task = task_path.read_text(encoding="utf-8")
+    xml = task_xml.read_text(encoding="utf-8")
+    scene = SCENE_BRS.read_text(encoding="utf-8")
+    scene_xml = SCENE_XML.read_text(encoding="utf-8")
+    if 'extends="Task"' not in xml:
+        fail("guide fetch must run on a Task node")
+    if 'SetCertificatesFile("common:/certs/ca-bundle.crt")' not in task:
+        fail("guide fetch must set the CA bundle")
+    if "InitClientCertificates()" not in task:
+        fail("guide fetch must call InitClientCertificates")
+    if "If-None-Match" not in task:
+        fail("guide fetch must send If-None-Match")
+    if "cachefs:/eaglewood/guide.json" not in task or "pkg:/data/guide.json" not in task:
+        fail("guide fetch must read cachefs and the packaged snapshot")
+    if "cachefs:/eaglewood/checkout.json" not in task or "pkg:/data/checkout.json" not in task:
+        fail("checkout fetch must read cachefs and the packaged snapshot")
+    if "https://sunrivertownhome.com/data/guide.json" not in task:
+        fail("guide URL missing from GuideTask.brs")
+    if "https://sunrivertownhome.com/data/checkout.json" not in task:
+        fail("checkout URL missing from GuideTask.brs")
+    if 'duration="600"' not in scene_xml or "duration = 600" not in scene:
+        fail("idle timeout must be 600 seconds")
+    for needle in (
+        "Eaglewood: idle return home",
+        "Eaglewood: back exit",
+        "Eaglewood: focus restored",
+        "Eaglewood: screen=",
+    ):
+        if needle not in scene:
+            fail(f"MainScene.brs is missing {needle}")
+    for needle in (
+        'print "Eaglewood: guide version="',
+        'print "Eaglewood: checkout decision="',
+        '" request sent"',
+        '" response code="',
+        '" etag stored"',
+        '" etag match"',
+    ):
+        if needle not in task:
+            fail(f"GuideTask.brs is missing {needle}")
+    if "GetOneLineWidth" in task or "roFontRegistry" in task:
+        fail("guide task must not measure fonts")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "guide_snapshot.py"), "--check"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        fail(detail or "sanitized guide snapshot check failed")
+    print(result.stdout.strip())
+
+
 def check_zip() -> None:
     if not ZIP_PATH.is_file():
         print("skip zip (dist/eaglewood.zip not built)")
@@ -379,6 +440,9 @@ def check_zip() -> None:
         fail("zip is missing manifest at the archive root")
     if "components/secrets.brs" not in names:
         fail("zip is missing components/secrets.brs")
+    for name in ("data/guide.json", "data/checkout.json"):
+        if name not in names:
+            fail(f"zip is missing {name}")
     if any(name.startswith("/") or name.startswith("\\") or ".." in name.split("/") for name in names):
         fail(f"zip has unsafe entry names: {names}")
     if any(name.startswith("channel/") for name in names):
@@ -393,6 +457,7 @@ def main() -> None:
     check_render_thread()
     check_greeting_draws()
     check_guest_fetch()
+    check_guide()
     check_secret_file_is_untracked()
     check_no_secrets()
     check_zip()

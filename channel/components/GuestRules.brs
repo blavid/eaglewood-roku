@@ -11,7 +11,7 @@ function GreetingFontSizes() as object
 end function
 
 function GreetingLabelWidth() as integer
-    return 1760
+    return 1132
 end function
 
 function GreetingBarBottom() as integer
