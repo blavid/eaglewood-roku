@@ -130,51 +130,6 @@ function ShownBrand(brand as string) as string
     return text
 end function
 
-function KeepsNetworkName(text as string) as boolean
-    if text = invalid then return false
-    if text = "" then return false
-    if Instr(1, text, "Escape Guest") > 0 then return true
-    if Instr(1, LCase(text), "network name:") > 0 then return true
-    return false
-end function
-
-' Guest copy says Eaglewood 19. The Wi-Fi network name stays exactly as stored.
-function GuestFacingText(value as object) as string
-    text = AsText(value)
-    if text = "" then return ""
-    if KeepsNetworkName(text) = true then return text
-    needle = "Eaglewood"
-    replacement = "Eaglewood 19"
-    out = ""
-    index = 1
-    width = Len(needle)
-    limit = Len(text)
-    while index <= limit
-        room = limit - index + 1
-        if room >= width
-            if Mid(text, index, width) = needle
-                already = false
-                if room >= width + 3
-                    if Mid(text, index + width, 3) = " 19" then already = true
-                end if
-                if already = true
-                    out = out + needle
-                else
-                    out = out + replacement
-                end if
-                index = index + width
-            else
-                out = out + Mid(text, index, 1)
-                index = index + 1
-            end if
-        else
-            out = out + Mid(text, index, 1)
-            index = index + 1
-        end if
-    end while
-    return out
-end function
-
 function ActivityEmptyText(section as string) as string
     if section = "todo" then return "OK for Dining, Hiking, and the seasons."
     if section = "fishing" then return "No fishing spots listed right now."
@@ -671,7 +626,7 @@ sub PaintRules()
             label.text = ""
         else
             label.visible = true
-            label.text = "-  " + GuestFacingText(text)
+            label.text = "-  " + text
         end if
     end for
 end sub
@@ -689,7 +644,7 @@ sub PaintFixes()
         else
             row.group.visible = true
             issue = FixIssues()[issueIndex]
-            row.label.text = GuestFacingText(AsText(issue.Lookup("issue")))
+            row.label.text = AsText(issue.Lookup("issue"))
             selected = (issueIndex = m.issueIndex)
             focused = selected and m.zone = "list"
             if focused
@@ -735,7 +690,7 @@ sub PaintSteps()
         title = AsText(issue.Lookup("issue"))
         steps = issue.Lookup("steps")
     end if
-    if m.detailTitle <> invalid then m.detailTitle.text = GuestFacingText(title)
+    if m.detailTitle <> invalid then m.detailTitle.text = title
     maxScroll = StepCount() - VisibleSteps()
     if maxScroll < 0 then maxScroll = 0
     if m.stepScroll > maxScroll then m.stepScroll = maxScroll
@@ -751,7 +706,7 @@ sub PaintSteps()
         else
             row.group.visible = true
             row.numberLabel.text = (stepIndex + 1).ToStr()
-            row.body.text = GuestFacingText(text)
+            row.body.text = text
         end if
     end for
 end sub
@@ -764,7 +719,7 @@ end function
 
 sub PaintCheckout()
     if m.checkoutSummary = invalid then return
-    m.checkoutSummary.text = GuestFacingText(m.summary)
+    m.checkoutSummary.text = m.summary
     if m.checkoutWhen <> invalid then m.checkoutWhen.text = CheckoutWhenLine()
     if m.checkoutHost <> invalid then m.checkoutHost.text = HostLine()
     if m.checkoutStepRows = invalid then return
@@ -782,7 +737,7 @@ sub PaintCheckout()
         else
             row.group.visible = true
             row.numberLabel.text = (start + index + 1).ToStr()
-            row.body.text = GuestFacingText(text)
+            row.body.text = text
         end if
     end for
 end sub

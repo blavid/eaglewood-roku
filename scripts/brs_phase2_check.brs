@@ -767,54 +767,8 @@ function PrintNavTrace() as integer
     return missed
 end function
 
-function HasBareEaglewood(text as string) as boolean
-    if text = invalid or text = "" then return false
-    needle = "Eaglewood"
-    index = 1
-    width = Len(needle)
-    limit = Len(text)
-    while index <= limit
-        room = limit - index + 1
-        if room < width then return false
-        if Mid(text, index, width) = needle
-            if room < width + 3 then return true
-            if Mid(text, index + width, 3) <> " 19" then return true
-            index = index + width
-        else
-            index = index + 1
-        end if
-    end while
-    return false
-end function
-
-function RejectBare(label as string, raw as string) as integer
-    if raw = invalid then return 0
-    if raw = "" then return 0
-    if KeepsNetworkName(raw) = true
-        print "NAV kept-network "; raw
-        return 0
-    end if
-    shown = GuestFacingText(raw)
-    if shown <> raw then print "NAV renamed "; label; " => "; shown
-    if HasBareEaglewood(shown) = true
-        print "FAIL bare Eaglewood remains in "; label
-        return 1
-    end if
-    return 0
-end function
-
 function ExpectBrandCopy() as integer
     missed = 0
-    pool = GuestFacingText("Eaglewood Community Pool")
-    blurb = GuestFacingText("exclusive to Eaglewood guests and residents")
-    print "NAV shown-name "; pool
-    print "NAV shown-blurb "; blurb
-    if pool <> "Eaglewood 19 Community Pool" then missed = missed + 1
-    if blurb <> "exclusive to Eaglewood 19 guests and residents" then missed = missed + 1
-    if HasBareEaglewood(pool) = true then missed = missed + 1
-    if HasBareEaglewood(blurb) = true then missed = missed + 1
-    if GuestFacingText("Welcome to Eaglewood 19") <> "Welcome to Eaglewood 19" then missed = missed + 1
-    if GuestFacingText("Network name: Eaglewood Escape Guest") <> "Network name: Eaglewood Escape Guest" then missed = missed + 1
     if FallbackGreeting() <> "Welcome to Eaglewood 19" then missed = missed + 1
     if ShownBrand("Eaglewood") <> "Eaglewood 19" then missed = missed + 1
     if ShownBrand("") <> "Eaglewood 19" then missed = missed + 1
@@ -829,62 +783,23 @@ function ExpectBrandCopy() as integer
         print "FAIL packaged activities did not normalize"
         return missed + 1
     end if
-    if norm <> invalid
-        if IsList(norm.items)
-            last = norm.items.Count() - 1
-            for index = 0 to last
-                item = norm.items[index]
-                id = ItemText(item, "id")
-                missed = missed + RejectBare(id + " name", ItemText(item, "name"))
-                missed = missed + RejectBare(id + " description", ItemText(item, "description"))
-                missed = missed + RejectBare(id + " distance", ItemText(item, "distance"))
-                missed = missed + RejectBare(id + " tip", ItemText(item, "tip"))
-                missed = missed + RejectBare(id + " credit", ItemText(item, "credit"))
-                missed = missed + RejectBare(id + " extra", DetailExtra(item))
-            end for
+    poolName = ""
+    poolBody = ""
+    last = norm.items.Count() - 1
+    for index = 0 to last
+        item = norm.items[index]
+        if ItemText(item, "id") = "eaglewood-pool"
+            poolName = ItemText(item, "name")
+            poolBody = ItemText(item, "description")
         end if
-    end if
-    guideText = ReadAsciiFile("pkg:/data/guide.json")
-    guide = ParseObjectText(guideText)
-    if not IsAssoc(guide)
-        print "FAIL packaged guide did not parse"
-        return missed + 1
-    end if
-    rules = guide.Lookup("houseRules")
-    if IsList(rules)
-        ruleLast = rules.Count() - 1
-        for index = 0 to ruleLast
-            missed = missed + RejectBare("houseRules", AsText(rules[index]))
-        end for
-    end if
-    issues = guide.Lookup("troubleshooting")
-    if IsList(issues)
-        issueLast = issues.Count() - 1
-        for index = 0 to issueLast
-            issue = issues[index]
-            if IsAssoc(issue)
-                missed = missed + RejectBare("issue", AsText(issue.Lookup("issue")))
-                steps = issue.Lookup("steps")
-                if IsList(steps)
-                    stepLast = steps.Count() - 1
-                    for stepAt = 0 to stepLast
-                        missed = missed + RejectBare("step", AsText(steps[stepAt]))
-                    end for
-                end if
-            end if
-        end for
-    end if
-    book = guide.Lookup("bookDirect")
-    if IsAssoc(book)
-        missed = missed + RejectBare("banner", AsText(book.Lookup("banner")))
-        missed = missed + RejectBare("body", AsText(book.Lookup("body")))
-        missed = missed + RejectBare("savings", AsText(book.Lookup("savingsText")))
-        missed = missed + RejectBare("signOff", AsText(book.Lookup("signOff")))
-        missed = missed + RejectBare("prompt", AsText(book.Lookup("homePromptTitle")))
-        missed = missed + RejectBare("promptSub", AsText(book.Lookup("homePromptSub")))
-    end if
-    print "NAV offscreen guestGuideSections are not drawn"
-    if missed <> 0 then print "FAIL guest-facing Eaglewood copy"
+    end for
+    print "NAV pool-title "; poolName
+    print "NAV pool-body "; poolBody
+    if poolName <> "Eaglewood Community Pool" then missed = missed + 1
+    if Instr(1, poolBody, "exclusive to Eaglewood guests and residents") < 1 then missed = missed + 1
+    if Instr(1, poolName, "Eaglewood 19") > 0 then missed = missed + 1
+    if Instr(1, poolBody, "Eaglewood 19") > 0 then missed = missed + 1
+    if missed <> 0 then print "FAIL pool title was rewritten"
     return missed
 end function
 
