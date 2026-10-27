@@ -6,9 +6,13 @@ sub init()
     m.guestTask = invalid
     m.guideTask = invalid
     m.wifiTask = invalid
+    m.qrTask = invalid
     m.fetchGeneration = 0
     m.guideGeneration = 0
     m.wifiGeneration = 0
+    m.qrGeneration = 0
+    m.qrJobKey = ""
+    m.qrFormats = {}
     m.shell = invalid
     m.zone = "prompt"
     m.section = "home"
@@ -740,7 +744,7 @@ sub onWifiFetch()
     if png = "" then png = "no"
     ssidLen = 0
     if result.ssidLen <> invalid then ssidLen = result.ssidLen
-    print "Eaglewood: wifi applied source="; source; " ssid len="; ssidLen; " png="; png
+    print "Eaglewood: wifi applied source="; source; " ssid len="; ssidLen; " png="; png; " json code="; m.wifiJsonCode; " png code="; m.wifiPngCode
     HoldFocus()
 end sub
 
@@ -776,6 +780,100 @@ sub onRefresh()
     startGuideFetch()
     startWifiFetch()
 end sub
+
+sub EnsureQrJobs()
+    badge = ""
+    book = ""
+    detail = ""
+    if m.badgeRemote <> invalid then badge = m.badgeRemote
+    if m.bookQrUri <> invalid then book = m.bookQrUri
+    if m.detailQrUri <> invalid then detail = m.detailQrUri
+    key = badge + "|" + book + "|" + detail
+    if key = m.qrJobKey and m.qrTask <> invalid then return
+    if badge = "" and book = "" and detail = "" then return
+    m.qrJobKey = key
+    if m.qrTask <> invalid
+        m.qrTask.unobserveField("result")
+        m.qrTask.control = "STOP"
+        m.qrTask = invalid
+    end if
+    m.qrGeneration = m.qrGeneration + 1
+    task = CreateObject("roSGNode", "QrTask")
+    if task = invalid
+        print "Eaglewood: qr skip reason=task-create-failed"
+        m.qrJobKey = ""
+        return
+    end if
+    task.generation = m.qrGeneration
+    task.badgeUrl = badge
+    task.bookUrl = book
+    task.detailUrl = detail
+    task.observeField("result", "onQrReady")
+    m.qrTask = task
+    task.control = "RUN"
+end sub
+
+sub onQrReady()
+    task = m.qrTask
+    if task = invalid then return
+    result = task.result
+    if result = invalid then return
+    if result.generationText <> invalid and result.generationText <> "" and result.generationText <> m.qrGeneration.ToStr() then return
+    ApplyQrResult(result)
+end sub
+
+sub ApplyQrResult(result as object)
+    slot = AsText(result.slot)
+    remote = AsText(result.remote)
+    uri = AsText(result.uri)
+    ok = AsText(result.ok)
+    if slot = "badge"
+        if remote <> m.badgeRemote then return
+        if ok = "yes" and uri <> "" and m.badgePoster <> invalid
+            m.badgeFailed = false
+            m.badgePoster.uri = uri
+        else
+            m.badgeFailed = true
+            m.badgeReady = false
+            if m.badgeMissing <> invalid then m.badgeMissing.text = "Link unavailable offline."
+            UpdateBadgeVisible()
+        end if
+        RememberQrFormat(slot, result)
+    else if slot = "book"
+        if remote <> m.bookQrUri then return
+        if ok = "yes" and uri <> "" and m.bookQr <> invalid
+            m.bookQr.uri = uri
+        else if m.bookQrMissing <> invalid
+            m.bookQr.visible = false
+            m.bookQrMissing.text = "Link unavailable offline."
+        end if
+        RememberQrFormat(slot, result)
+    else if slot = "detail"
+        if remote <> m.detailQrUri then return
+        if ok = "yes" and uri <> "" and m.detailQr <> invalid
+            m.detailQrFailed = false
+            m.detailQr.uri = uri
+        else
+            m.detailQrFailed = true
+            if m.detailQr <> invalid then m.detailQr.visible = false
+            if m.detailQrMissing <> invalid
+                m.detailQrMissing.visible = true
+                m.detailQrMissing.text = "Link unavailable offline."
+            end if
+        end if
+        RememberQrFormat(slot, result)
+    end if
+end sub
+
+sub RememberQrFormat(slot as string, result as object)
+    if m.qrFormats = invalid then m.qrFormats = {}
+    m.qrFormats[slot] = "bitdepth=" + NumberText(result.bit) + " colortype=" + NumberText(result.color) + " interlace=" + NumberText(result.interlace) + " indexed=" + AsText(result.indexed)
+end sub
+
+function NumberText(value as object) as string
+    if value = invalid then return "0"
+    return value.ToStr()
+end function
 
 sub HoldFocus()
     focused = true

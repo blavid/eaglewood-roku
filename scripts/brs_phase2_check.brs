@@ -137,6 +137,23 @@ sub Main()
         print "FAIL booking URL changed"
         failed = failed + 1
     end if
+    if HomePromptTitle({ homePromptTitle: "Book direct & save" }) <> "Book your next stay direct and save!"
+        print "FAIL the home strip kept the short title"
+        failed = failed + 1
+    end if
+    if HomePromptTitle({ homePromptTitle: "Come back in the fall" }) <> "Come back in the fall"
+        print "FAIL a custom home title was replaced"
+        failed = failed + 1
+    end if
+    if WifiLines("coming-soon", "", "").mode <> "coming-soon"
+        print "FAIL Wi-Fi lines ignored coming-soon"
+        failed = failed + 1
+    end if
+    if WifiLines("", "Cabin", "secret").password <> "secret"
+        print "FAIL Wi-Fi lines dropped the password"
+        failed = failed + 1
+    end if
+
     if DisplayDomain() <> "sunrivertownhome.com"
         print "FAIL QR caption is not the marketing host"
         failed = failed + 1

@@ -9,8 +9,8 @@
     <script type="text/brightscript" uri="pkg:/components/ActivityCard.brs" />
 
     <children>
-        <Rectangle id="ring" width="364" height="252" color="0xF2A93BFF" visible="false" cornerRadius="18" />
-        <Rectangle id="fill" translation="[5, 5]" width="354" height="242" color="0x1A2438F2" cornerRadius="16" />
+        <Rectangle id="ring" width="364" height="252" color="0xF2A93BFF" visible="false" />
+        <Rectangle id="fill" translation="[5, 5]" width="354" height="242" color="0x1A2438F2" />
         <Rectangle id="swatch" translation="[5, 5]" width="354" height="150" color="0x5C4033FF" />
         <Poster
             id="photo"
@@ -22,7 +22,7 @@
             loadDisplayMode="scaleToZoom"
             failedBitmapUri="pkg:/images/tv-placeholder.jpg"
             loadingBitmapUri="pkg:/images/tv-placeholder.jpg" />
-        <Rectangle id="chip" translation="[16, 16]" width="132" height="32" color="0xF2A93BFF" cornerRadius="10" />
+        <Rectangle id="chip" translation="[16, 16]" width="132" height="32" color="0xF2A93BFF" />
         <Label
             id="chipText"
             translation="[16, 16]"

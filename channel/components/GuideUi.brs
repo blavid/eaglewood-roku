@@ -143,7 +143,6 @@ sub BuildShell()
     shell.translation = [0, 0]
 
     panel = AddRect(shell, GlassColor(), RailX(), RailY(), RailW(), RailH())
-    panel.cornerRadius = 28
     m.railBrand = AddLabel(shell, "Eaglewood", "font:MediumBoldSystemFont", InkColor(), RailX() + 24, RailY() + 18, RailW() - 48, 40)
     m.railPlace = AddLabel(shell, "Sunriver, Oregon", "font:SmallSystemFont", MuteColor(), RailX() + 24, RailY() + 58, RailW() - 48, 32)
 
@@ -154,7 +153,6 @@ sub BuildShell()
         group = CreateObject("roSGNode", "Group")
         group.translation = [RailX() + 12, RailY() + 112 + (index * 72)]
         bg = AddRect(group, "0x00000000", 0, 0, RailW() - 24, 64)
-        bg.cornerRadius = 16
         label = AddLabel(group, RailLabel(sections[index]), "font:MediumBoldSystemFont", InkColor(), 16, 0, RailW() - 56, 64)
         shell.appendChild(group)
         m.railItems.Push({ group: group, bg: bg, label: label })
@@ -162,7 +160,7 @@ sub BuildShell()
 
     m.homePane = CreateObject("roSGNode", "Group")
     shell.appendChild(m.homePane)
-    m.subtitle = AddLabel(m.homePane, "Checkout", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 138, ContentWidth(), 56)
+    m.subtitle = AddLabel(m.homePane, "Checkout", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 138, ContentWidth(), 44)
     m.subtitle.vertAlign = "top"
     m.subtitle.maxLines = 2
     BuildTiles(m.homePane)
@@ -188,7 +186,7 @@ sub BuildTiles(parent as object)
     sections = TileSections()
     tileW = 362
     tileH = 164
-    originY = 400
+    originY = 480
     last = sections.Count() - 1
     for index = 0 to last
         col = index mod 3
@@ -198,9 +196,7 @@ sub BuildTiles(parent as object)
         group = CreateObject("roSGNode", "Group")
         group.translation = [x, y]
         outer = AddRect(group, TileColor(), 0, 0, tileW, tileH)
-        outer.cornerRadius = 18
         inner = AddRect(group, TileColor(), 0, 0, tileW, tileH)
-        inner.cornerRadius = 18
         title = AddLabel(group, TileTitle(sections[index]), "font:MediumBoldSystemFont", InkColor(), 22, 48, tileW - 44, 64)
         title.vertAlign = "center"
         subLabel = AddLabel(group, "", "font:SmallSystemFont", MuteColor(), 22, 116, tileW - 44, 40)
@@ -248,7 +244,6 @@ function BuildFixesPane(parent as object) as object
         group = CreateObject("roSGNode", "Group")
         group.translation = [listX, listY + (index * 66)]
         bg = AddRect(group, "0x00000000", 0, 0, 456, 60)
-        bg.cornerRadius = 14
         label = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 16, 0, 424, 60)
         label.maxLines = 2
         pane.appendChild(group)
@@ -256,7 +251,6 @@ function BuildFixesPane(parent as object) as object
     end for
 
     card = AddRect(pane, GlassColor(), ContentLeft() + 476, listY, 656, 528)
-    card.cornerRadius = 20
     m.detailTitle = AddLabel(pane, "", "font:MediumBoldSystemFont", InkColor(), ContentLeft() + 500, listY + 16, 608, 88)
     m.detailTitle.vertAlign = "top"
     m.detailTitle.maxLines = 2
@@ -266,7 +260,6 @@ function BuildFixesPane(parent as object) as object
         group = CreateObject("roSGNode", "Group")
         group.translation = [ContentLeft() + 500, listY + 112 + (index * 96)]
         badge = AddRect(group, AmberColor(), 0, 4, 36, 36)
-        badge.cornerRadius = 18
         numberLabel = AddLabel(group, "", "font:SmallBoldSystemFont", InkOnAmber(), 0, 4, 36, 36)
         numberLabel.horizAlign = "center"
         body = AddLabel(group, "", "font:SmallSystemFont", InkColor(), 48, 0, 560, 92)
@@ -294,7 +287,6 @@ function BuildCheckoutPane(parent as object) as object
         group = CreateObject("roSGNode", "Group")
         group.translation = [ContentLeft(), ContentTop() + 236 + (index * 72)]
         badge = AddRect(group, AmberColor(), 0, 8, 36, 36)
-        badge.cornerRadius = 18
         numberLabel = AddLabel(group, "", "font:SmallBoldSystemFont", InkOnAmber(), 0, 8, 36, 36)
         numberLabel.horizAlign = "center"
         body = AddLabel(group, "", "font:SmallSystemFont", InkColor(), 52, 0, ContentWidth() - 52, 68)
@@ -370,6 +362,7 @@ sub ShowSection(section as string)
     if m.footer <> invalid then m.footer.visible = (section <> "book")
     if not onActivity then ReleaseCardImages()
     UpdateBadgeVisible()
+    LogQrScreen()
 end sub
 
 sub PaintAll()

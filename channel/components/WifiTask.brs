@@ -8,6 +8,7 @@ sub fetchWifi()
     generation = ReadWifiGeneration()
     cached = ReadWifiCache()
     if WifiCacheOk(cached)
+        if cached.png = "yes" then NoteWifiPng(cached)
         PublishWifi(cached, generation)
     else
         PublishWifi(EmptyWifi("builtin", ""), generation)
@@ -23,7 +24,7 @@ sub fetchWifi()
     print "Eaglewood: wifi response code="; remote.code
     mode = WifiScreenMode(remote.code, WifiCacheOk(cached))
     if mode = "show" and remote.reason = "ok"
-        cached = { ssid: remote.ssid, password: remote.password, png: "no", pngBytes: 0, source: "network", notice: "" }
+        cached = { ssid: remote.ssid, password: remote.password, png: "no", pngBytes: 0, source: "network", notice: "", jsonCode: remote.code }
         if remote.etag <> "" then print "Eaglewood: wifi etag stored"
         RememberWifiFetch("wifiJson", remote.etag)
     else if mode = "show" and remote.reason = "not-modified"
@@ -37,6 +38,7 @@ sub fetchWifi()
         print "Eaglewood: wifi png request sent"
         png = WifiHttp(pngUrl, RememberedWifiEtag("wifiPng"), WifiPngPath(), false)
         print "Eaglewood: wifi png response code="; png.code
+        cached.pngCode = png.code
         if png.reason = "ok" or png.reason = "not-modified"
             size = PngFileBytes(WifiPngPath())
             if size > 0
@@ -55,9 +57,21 @@ sub fetchWifi()
         end if
         cached.notice = ""
         if cached.source <> "network" then cached.source = "cachefs"
+        if cached.png = "yes" then NoteWifiPng(cached)
+        if cached.jsonCode = invalid then cached.jsonCode = remote.code
         PublishWifi(cached, generation)
     else if mode = "coming-soon"
-        PublishWifi(EmptyWifi("unavailable", "coming-soon"), generation)
+        soon = EmptyWifi("unavailable", "coming-soon")
+        soon.jsonCode = remote.code
+        soon.remoteSafe = SafeUri(WifiPngUrl())
+        PublishWifi(soon, generation)
+        cached = soon
+    else if not WifiCacheOk(cached)
+        failed = EmptyWifi("builtin", "")
+        failed.jsonCode = remote.code
+        failed.remoteSafe = SafeUri(WifiPngUrl())
+        PublishWifi(failed, generation)
+        cached = failed
     end if
     shown = cached
     if not WifiCacheOk(shown) then shown = EmptyWifi("builtin", "")
@@ -66,8 +80,40 @@ sub fetchWifi()
 end sub
 
 function EmptyWifi(source as string, notice as string) as object
-    return { ssid: "", password: "", png: "no", pngBytes: 0, source: source, notice: notice }
+    return {
+        ssid: "",
+        password: "",
+        png: "no",
+        pngBytes: 0,
+        source: source,
+        notice: notice,
+        jsonCode: 0,
+        pngCode: 0,
+        pngBit: 0,
+        pngColor: -1,
+        pngInterlace: 0,
+        pngIndexed: "no",
+        remoteSafe: ""
+    }
 end function
+
+sub NoteWifiPng(info as object)
+    if info = invalid then return
+    prepared = ExpandPngFile(WifiPngPath(), WifiPngPath())
+    info.pngBit = prepared.bit
+    info.pngColor = prepared.color
+    info.pngInterlace = prepared.interlace
+    indexed = "no"
+    if prepared.converted = true or prepared.color = 3 then indexed = "yes"
+    info.pngIndexed = indexed
+    info.remoteSafe = SafeUri(WifiPngUrl())
+    print "Eaglewood: wifi png format bitdepth="; prepared.bit; " colortype="; prepared.color; " interlace="; prepared.interlace; " indexed="; indexed
+    if prepared.ok <> true
+        print "Eaglewood: wifi png failure reason="; prepared.reason
+        info.png = "no"
+        info.pngBytes = 0
+    end if
+end sub
 
 function WifiCacheOk(cached as object) as boolean
     if cached = invalid then return false
@@ -326,6 +372,20 @@ sub PublishWifi(info as object, generation as integer)
     if info.pngBytes <> invalid then pngBytes = info.pngBytes
     source = info.source
     if source = invalid or source = "" then source = "builtin"
+    jsonCode = 0
+    if info.jsonCode <> invalid then jsonCode = info.jsonCode
+    pngCode = 0
+    if info.pngCode <> invalid then pngCode = info.pngCode
+    pngBit = 0
+    if info.pngBit <> invalid then pngBit = info.pngBit
+    pngColor = -1
+    if info.pngColor <> invalid then pngColor = info.pngColor
+    pngInterlace = 0
+    if info.pngInterlace <> invalid then pngInterlace = info.pngInterlace
+    pngIndexed = info.pngIndexed
+    if pngIndexed = invalid or pngIndexed = "" then pngIndexed = "no"
+    remoteSafe = info.remoteSafe
+    if remoteSafe = invalid or remoteSafe = "" then remoteSafe = SafeUri(WifiPngUrl())
     m.top.result = {
         generation: generation,
         generationText: generation.ToStr(),
@@ -335,7 +395,14 @@ sub PublishWifi(info as object, generation as integer)
         png: png,
         pngBytes: pngBytes,
         ssidLen: Len(ssid),
-        notice: notice
+        notice: notice,
+        jsonCode: jsonCode,
+        pngCode: pngCode,
+        pngBit: pngBit,
+        pngColor: pngColor,
+        pngInterlace: pngInterlace,
+        pngIndexed: pngIndexed,
+        remoteSafe: remoteSafe
     }
 end sub
 

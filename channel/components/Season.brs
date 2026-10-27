@@ -394,7 +394,7 @@ function DefaultBookDirect() as object
         photoFallback: "https://sunrivertownhome.com/images/photos/house/living-room-1.jpg",
         perks: DefaultPerks(),
         signOff: "Thanks for staying!",
-        homePromptTitle: "Book direct & save",
+        homePromptTitle: "Book your next stay direct and save!",
         homePromptSub: "Up to about 10% less than Airbnb or Vrbo"
     }
 end function

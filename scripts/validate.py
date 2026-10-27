@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "9",
+    "build_version": "10",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -487,6 +487,21 @@ def check_phase2() -> None:
             fail(f"tv-placeholder.jpg is {image.size}, expected 64x64")
     if "Wi-Fi details coming soon" not in phase2:
         fail("a 503 with no cache must show the coming-soon line")
+    if "Book your next stay direct and save!" not in phase2:
+        fail("the home strip needs the direct-booking headline")
+    if "function HomePromptTitle(" not in phase2:
+        fail("the home strip title must come from HomePromptTitle")
+    png = (ROOT / "channel" / "components" / "PngRgb.brs").read_text(encoding="utf-8")
+    wifi = (ROOT / "channel" / "components" / "WifiTask.brs").read_text(encoding="utf-8")
+    if "function ExpandPngBytes(" not in png or "function SafeUri(" not in png:
+        fail("QR PNGs need the indexed rewrite and a redacted URI")
+    if "wifi png format bitdepth=" not in wifi:
+        fail("wifi png format must be logged")
+    if 'print "Eaglewood: poster ' not in phase2 or 'print "Eaglewood: qr ' not in phase2:
+        fail("poster loadStatus must be logged for late debug consoles")
+    for path in channel_text_files():
+        if "cornerRadius" in path.read_text(encoding="utf-8", errors="replace"):
+            fail(f"{path.relative_to(ROOT)} sets cornerRadius, which this firmware rejects")
     if 'duration="21600"' not in xml or "duration = 21600" not in scene:
         fail("guide and Wi-Fi refresh must be 21600 seconds")
     if "zone=prompt" not in scene:
