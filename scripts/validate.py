@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "17",
+    "build_version": "18",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -532,10 +532,10 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 17 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 18 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 17 "' not in scene:
-        fail("startup must log build 17 and the commit")
+    if 'print "Eaglewood: build 18 "' not in scene:
+        fail("startup must log build 18 and the commit")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
     if 'id="finalUri"' not in qr_xml or "alwaysNotify" not in qr_xml:
         fail("each QR task needs a finalUri field")
@@ -568,8 +568,34 @@ def check_phase2() -> None:
         fail("Book Direct must measure its QR slot and assign the live poster")
     if 'print "Eaglewood: qr detail open url="' not in phase2:
         fail("activity detail must fetch its QR when the screen opens")
-    if "0xFF00FFFF" not in phase2:
-        fail("QR slots need a visible magenta marker")
+    if "sub EnsureQrSlot(" not in phase2 or "sub ShowQrFrame(" not in phase2:
+        fail("badge, book, and detail must share one QR slot helper")
+    if 'EnsureQrSlot("badge"' not in phase2 or 'EnsureQrSlot("book"' not in phase2 or 'EnsureQrSlot("detail"' not in phase2:
+        fail("badge, book, and detail must open a QR through EnsureQrSlot")
+    deliver = scene[scene.find("sub DeliverQrPath("):scene.find("sub RememberQrFormat(")]
+    if "ShowQrFrame(slot, true)" not in deliver or "AssignQrPoster(slot, uri)" not in deliver:
+        fail("a finished QR path must show the frame and then assign the poster")
+    if "ShowBookQr" in deliver or "ShowDetailQr" in deliver or "UpdateBadgeVisible" in deliver:
+        fail("QR deliver must use the same helper for every slot")
+    debug = phase2[phase2.find("function QrDebugMarks()"):phase2.find("function QrMarkColor(")]
+    if "return false" not in debug:
+        fail("magenta QR marks must stay behind a debug flag that is off")
+    if 'return "0xFFFFFFF2"' not in phase2 or "0xFF00FFFF" not in phase2:
+        fail("QR placeholders are cream unless the debug flag is on")
+    badge = phase2[phase2.find("sub BuildBadge("):phase2.find("function BuildBookPane(")]
+    if "AddRect(parent," in badge or badge.find("m.badgeMark") > badge.find("group.appendChild(m.badgePoster)"):
+        fail("the badge placeholder must sit under the poster, on the badge group")
+    book_pane = phase2[phase2.find("function BuildBookPane("):phase2.find("function BuildWifiPane(")]
+    if "m.bookQrMark" not in book_pane or book_pane.find("m.bookQrMark") > book_pane.find("pane.appendChild(m.bookQr)"):
+        fail("the book poster must be appended after its placeholder")
+    detail = phase2[phase2.find("function BuildDetailPane("):phase2.find("sub PaintPhase2(")]
+    if "m.detailQrMark" not in detail or detail.find("m.detailQrMark") > detail.find("pane.appendChild(m.detailQr)"):
+        fail("the detail poster must be appended after its placeholder")
+    guide = GUIDE_UI_BRS.read_text(encoding="utf-8")
+    if "m.buildLabel" in guide or "BuildStampLine()" in guide:
+        fail("the build number stays in the startup log, not on Home")
+    if "RaiseBadge()" not in guide or "sub RaiseBadge(" not in phase2:
+        fail("the corner badge must be raised above later panes")
     if "function QrRectText(" not in phase2 or "rect=" not in phase2:
         fail("each QR must log its uri, loadStatus, and bounding rect")
     if 'print "Eaglewood: qr ' not in phase2:

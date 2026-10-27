@@ -160,8 +160,6 @@ sub BuildShell()
 
     m.homePane = CreateObject("roSGNode", "Group")
     shell.appendChild(m.homePane)
-    m.buildLabel = AddLabel(m.homePane, BuildStampLine(), "font:SmallestSystemFont", "0xFF00FFFF", ContentLeft(), 988, 520, 32)
-    m.buildLabel.visible = true
     m.subtitle = AddLabel(m.homePane, "Checkout", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 138, ContentWidth(), 44)
     m.subtitle.vertAlign = "top"
     m.subtitle.maxLines = 2
@@ -181,6 +179,7 @@ sub BuildShell()
 
     m.top.appendChild(shell)
     m.shell = shell
+    RaiseBadge()
 end sub
 
 sub BuildTiles(parent as object)
@@ -363,7 +362,9 @@ sub ShowSection(section as string)
     if m.detailPane <> invalid then m.detailPane.visible = onActivity and m.zone = "item"
     if m.footer <> invalid then m.footer.visible = (section <> "book")
     if not onActivity then ReleaseCardImages()
-    UpdateBadgeVisible()
+    ShowQrFrame("badge", QrRemote("badge") <> "")
+    ShowQrFrame("book", QrRemote("book") <> "")
+    ShowQrFrame("detail", QrRemote("detail") <> "")
     ReassignStoredQrs()
     LogQrScreen()
 end sub

@@ -211,6 +211,10 @@ sub Main()
         print "FAIL the Scan me slot falls outside its card or the screen"
         failed = failed + 1
     end if
+    if QrDebugMarks() <> false or QrMarkColor() <> "0xFFFFFFF2"
+        print "FAIL QR debug marks are on"
+        failed = failed + 1
+    end if
 
     book = NormalizeBookDirect({
         bookDirect: {

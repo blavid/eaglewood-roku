@@ -67,12 +67,11 @@ sub BuildBadge(parent as object)
     group = CreateObject("roSGNode", "Group")
     group.translation = [1496, 830]
     group.visible = false
-    ' Card translation is 0,0 inside this group, so the slot on screen is 1496,830 220x200.
-    ' The marker stays on the shell, behind the group, so it shows when the group is hidden.
-    AddRect(parent, DiagMagenta(), 1496, 830, 220, 200)
     card = AddRect(group, "0xFFFFFFF2", 0, 0, 220, 200)
     card.visible = false
     m.badgeCard = card
+    m.badgeMark = AddRect(group, QrMarkColor(), 0, 0, 220, 200)
+    m.badgeMark.visible = false
     m.badgeLabel = AddLabel(group, "Book direct", "font:SmallestBoldSystemFont", "0x1B4D38FF", 8, 4, 204, 36)
     m.badgeLabel.horizAlign = "center"
     m.badgeLabel.visible = false
@@ -86,7 +85,6 @@ sub BuildBadge(parent as object)
     m.badgePoster.loadHeight = 256
     m.badgePoster.loadDisplayMode = "scaleToFit"
     m.badgePoster.visible = false
-    group.appendChild(m.badgePoster)
     m.badgePoster.observeField("loadStatus", "onBadgeStatus")
     m.badgeMissing = AddLabel(group, "", "font:SmallestSystemFont", "0x1C1408FF", 12, 78, 196, 64)
     m.badgeMissing.horizAlign = "center"
@@ -94,6 +92,7 @@ sub BuildBadge(parent as object)
     m.badgeDomain = AddLabel(group, DisplayDomain(), "font:SmallestBoldSystemFont", "0x146B3AFF", 8, 172, 204, 24)
     m.badgeDomain.horizAlign = "center"
     m.badgeDomain.visible = false
+    group.appendChild(m.badgePoster)
     parent.appendChild(group)
     m.badgeGroup = group
     m.badgeHint = AddLabel(parent, "", "font:SmallSystemFont", MuteColor(), 980, 800, 500, 28)
@@ -150,7 +149,8 @@ function BuildBookPane(parent as object) as object
     qrCard = AddRect(pane, "0x1B4D38FF", slot.cardX, slot.cardY, slot.cardW, slot.cardH)
     qrCard.visible = false
     m.bookQrCard = qrCard
-    AddRect(pane, DiagMagenta(), slot.cardX, slot.cardY, slot.cardW, slot.cardH)
+    m.bookQrMark = AddRect(pane, QrMarkColor(), slot.cardX, slot.cardY, slot.cardW, slot.cardH)
+    m.bookQrMark.visible = false
     scan = AddLabel(pane, "Scan me!", "font:SmallBoldSystemFont", InkColor(), slot.labelX, slot.labelY, slot.labelW, slot.labelH)
     scan.horizAlign = "center"
     scan.visible = false
@@ -293,7 +293,8 @@ function BuildDetailPane(parent as object) as object
     m.detailPhoto.observeField("loadStatus", "onDetailPhotoStatus")
     m.detailQrCard = AddRect(pane, "0xFFFFFFF2", ContentLeft() + 740, ContentTop() + 140, 280, 280)
     m.detailQrCard.visible = false
-    AddRect(pane, DiagMagenta(), ContentLeft() + 740, ContentTop() + 140, 280, 280)
+    m.detailQrMark = AddRect(pane, QrMarkColor(), ContentLeft() + 740, ContentTop() + 140, 280, 280)
+    m.detailQrMark.visible = false
     place = AddLabel(pane, "This place", "font:SmallBoldSystemFont", "0x1C1408FF", ContentLeft() + 756, ContentTop() + 146, 248, 36)
     place.horizAlign = "center"
     place.visible = false
@@ -387,44 +388,31 @@ function BookText(book as object, key as string, fallback as string) as string
 end function
 
 sub PaintBadge()
-    if m.badgePoster = invalid or m.badgeGroup = invalid then return
     uri = ""
     if IsAssoc(m.book) then uri = GuideLimitedText(m.book.Lookup("bookingQrImageUrl"), 320)
     if not PosterKindOk(uri) then uri = ""
     uri = WithQrVersion(uri)
-    if uri <> m.badgeRemote
-        m.badgeRemote = uri
-        m.badgeUri = uri
-        m.badgeFile = ""
-        m.badgeReady = false
-        m.badgeFailed = false
-        ClearStoredQr("badge")
-        ClearQrAssign("badge")
-        if m.badgeMissing <> invalid then m.badgeMissing.text = ""
-        if uri <> "" then StartQrFetch("badge")
-    end if
     if m.badgeDomain <> invalid then m.badgeDomain.text = DisplayDomain()
-    UpdateBadgeVisible()
-    ApplyStoredQr("badge")
+    EnsureQrSlot("badge", uri)
 end sub
 
 sub onBadgeStatus()
-    if m.badgePoster = invalid then return
-    LogQrState("badge", m.badgePoster)
-    if m.badgePoster.loadStatus = "ready" then m.badgeReady = true
+    NoteQrLoaded("badge")
 end sub
 
 sub UpdateBadgeVisible()
-    if m.badgeGroup = invalid then return
-    remote = ""
-    if m.badgeRemote <> invalid then remote = m.badgeRemote
-    show = (remote <> "" and m.section <> "book")
-    m.badgeGroup.visible = show
+    ShowQrFrame("badge", QrRemote("badge") <> "")
+end sub
+
+sub ShowBadgeFrame(show as boolean)
+    if m.section = "book" then show = false
+    if m.badgeGroup <> invalid then m.badgeGroup.visible = show
     if m.badgeCard <> invalid then m.badgeCard.visible = show
     if m.badgeLabel <> invalid then m.badgeLabel.visible = show
     if m.badgeDomain <> invalid then m.badgeDomain.visible = show
     if m.badgePoster <> invalid then m.badgePoster.visible = show
     if m.badgeMissing <> invalid then m.badgeMissing.visible = false
+    ShowQrMark("badge", show)
     if m.badgeHint = invalid then return
     if show and m.zone = "item"
         m.badgeHint.text = "Always available"
@@ -463,18 +451,7 @@ sub PaintBook()
     end if
     qr = WithQrVersion(GuideLimitedText(m.book.Lookup("qrImageUrl"), 320))
     if not PosterKindOk(qr) then qr = ""
-    poster = PosterForSlot("book")
-    if qr <> m.bookQrUri and poster <> invalid
-        m.bookQrUri = qr
-        m.bookQrTried = false
-        m.bookFile = ""
-        ClearStoredQr("book")
-        ClearQrAssign("book")
-        if m.bookQrMissing <> invalid then m.bookQrMissing.text = ""
-        if qr <> "" then StartQrFetch("book")
-    end if
-    ShowBookQr(qr <> "")
-    ApplyStoredQr("book")
+    EnsureQrSlot("book", qr)
 end sub
 
 function BookHeadline(book as object) as object
@@ -543,6 +520,7 @@ sub ShowBookQr(show as boolean)
     if m.bookDomain <> invalid then m.bookDomain.visible = show
     if m.bookQr <> invalid then m.bookQr.visible = show
     if m.bookQrMissing <> invalid then m.bookQrMissing.visible = false
+    ShowQrMark("book", show)
 end sub
 
 ' Assign a path the task already finished. The scene does not read the file.
@@ -581,10 +559,7 @@ sub MountQrPosterBody(poster as object, path as string, slot as string)
 end sub
 
 sub onBookQrStatus()
-    poster = PosterForSlot("book")
-    if poster = invalid then return
-    LogQrState("book", poster)
-    if poster.loadStatus = "ready" then poster.visible = true
+    NoteQrLoaded("book")
 end sub
 
 sub PaintWifi()
@@ -852,30 +827,13 @@ sub PaintDetail()
         else m.detailQrCaption.text = "Scan for this place"
     end if
     if qr = ""
-        if m.detailQrUri <> ""
-            m.detailQrUri = ""
-            m.detailFile = ""
-            ClearStoredQr("detail")
-            ClearQrAssign("detail")
-        end if
-        ShowDetailQr(false)
         source = "none"
         if m.activitiesSource <> invalid and m.activitiesSource <> "" then source = m.activitiesSource
         print "Eaglewood: qr detail skip reason=no-url id="; ItemText(item, "id"); " index="; m.cardIndex; " source="; source
-        return
-    end if
-    if qr <> m.detailQrUri
-        m.detailQrUri = qr
-        m.detailQrFailed = false
-        m.detailFile = ""
-        ClearStoredQr("detail")
-        ClearQrAssign("detail")
-        if m.detailQrMissing <> invalid then m.detailQrMissing.text = ""
+    else if qr <> QrRemote("detail")
         print "Eaglewood: qr detail open url="; SafeUri(qr)
     end if
-    ShowDetailQr(true)
-    StartQrFetch("detail")
-    ApplyStoredQr("detail")
+    EnsureQrSlot("detail", qr)
 end sub
 
 sub ShowDetailQr(show as boolean)
@@ -885,6 +843,7 @@ sub ShowDetailQr(show as boolean)
     if m.detailQrCaption <> invalid then m.detailQrCaption.visible = show
     if m.detailQr <> invalid then m.detailQr.visible = show
     if m.detailQrMissing <> invalid then m.detailQrMissing.visible = false
+    ShowQrMark("detail", show)
 end sub
 
 function DetailMeta(item as object) as string
@@ -950,10 +909,7 @@ sub onDetailPhotoStatus()
 end sub
 
 sub onDetailQrStatus()
-    poster = PosterForSlot("detail")
-    if poster = invalid then return
-    LogQrState("detail", poster)
-    if poster.loadStatus = "ready" then poster.visible = true
+    NoteQrLoaded("detail")
 end sub
 
 sub ApplyWifiResult(result as object)
@@ -983,8 +939,13 @@ function ResultNumber(result as object, key as string) as integer
     return GuideInt(result.Lookup(key))
 end function
 
-function DiagMagenta() as string
-    return "0xFF00FFFF"
+function QrDebugMarks() as boolean
+    return false
+end function
+
+function QrMarkColor() as string
+    if QrDebugMarks() then return "0xFF00FFFF"
+    return "0xFFFFFFF2"
 end function
 
 ' Scan me card, poster, label, and domain. All of it sits inside the card
@@ -1121,9 +1082,105 @@ sub ClearStoredQr(slot as string)
     m.qrPaths[slot] = ""
 end sub
 
+sub EnsureQrSlot(slot as string, url as string)
+    if url = invalid then url = ""
+    if url <> QrRemote(slot)
+        RememberQrRemote(slot, url)
+        if slot = "badge"
+            m.badgeFile = ""
+            m.badgeReady = false
+            m.badgeFailed = false
+            if m.badgeMissing <> invalid then m.badgeMissing.text = ""
+        end if
+        if slot = "book"
+            m.bookQrTried = false
+            m.bookFile = ""
+            if m.bookQrMissing <> invalid then m.bookQrMissing.text = ""
+        end if
+        if slot = "detail"
+            m.detailQrFailed = false
+            m.detailFile = ""
+            if m.detailQrMissing <> invalid then m.detailQrMissing.text = ""
+        end if
+        ClearStoredQr(slot)
+        ClearQrAssign(slot)
+        if url <> "" then StartQrFetch(slot)
+    end if
+    ShowQrFrame(slot, url <> "")
+    ApplyStoredQr(slot)
+end sub
+
+function QrRemote(slot as string) as string
+    if slot = "badge"
+        if m.badgeRemote = invalid then return ""
+        return m.badgeRemote
+    end if
+    if slot = "book"
+        if m.bookQrUri = invalid then return ""
+        return m.bookQrUri
+    end if
+    if slot = "detail"
+        if m.detailQrUri = invalid then return ""
+        return m.detailQrUri
+    end if
+    return ""
+end function
+
+sub RememberQrRemote(slot as string, url as string)
+    if slot = "badge"
+        m.badgeRemote = url
+        m.badgeUri = url
+    end if
+    if slot = "book" then m.bookQrUri = url
+    if slot = "detail" then m.detailQrUri = url
+end sub
+
+sub ShowQrFrame(slot as string, show as boolean)
+    if slot = "badge" then ShowBadgeFrame(show)
+    if slot = "book" then ShowBookQr(show)
+    if slot = "detail" then ShowDetailQr(show)
+end sub
+
+sub ShowQrMark(slot as string, show as boolean)
+    mark = QrMarkForSlot(slot)
+    if mark = invalid then return
+    if show
+        poster = PosterForSlot(slot)
+        if poster <> invalid
+            if poster.loadStatus = "ready" then show = false
+        end if
+    end if
+    mark.visible = show
+end sub
+
+function QrMarkForSlot(slot as string) as object
+    if slot = "badge" then return m.badgeMark
+    if slot = "book" then return m.bookQrMark
+    if slot = "detail" then return m.detailQrMark
+    return invalid
+end function
+
+sub NoteQrLoaded(slot as string)
+    poster = PosterForSlot(slot)
+    if poster = invalid then return
+    LogQrState(slot, poster)
+    if poster.loadStatus <> "ready" then return
+    if slot = "badge" then m.badgeReady = true
+    poster.visible = true
+    mark = QrMarkForSlot(slot)
+    if mark <> invalid then mark.visible = false
+end sub
+
+sub RaiseBadge()
+    if m.badgeGroup = invalid or m.shell = invalid then return
+    m.shell.removeChild(m.badgeGroup)
+    m.shell.appendChild(m.badgeGroup)
+end sub
+
 sub ApplyStoredQr(slot as string)
     path = StoredQrPath(slot)
     if path = "" then return
+    ShowQrFrame(slot, true)
     AssignQrPoster(slot, path)
 end sub
 
