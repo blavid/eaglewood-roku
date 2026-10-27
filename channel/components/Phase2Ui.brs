@@ -857,7 +857,9 @@ sub PaintDetail()
             ClearQrAssign("detail")
         end if
         ShowDetailQr(false)
-        print "Eaglewood: qr detail skip reason=no-url"
+        source = "none"
+        if m.activitiesSource <> invalid and m.activitiesSource <> "" then source = m.activitiesSource
+        print "Eaglewood: qr detail skip reason=no-url id="; ItemText(item, "id"); " source="; source
         return
     end if
     if qr <> m.detailQrUri
@@ -1024,8 +1026,8 @@ function InsideSlot(x as integer, y as integer, width as integer, height as inte
 end function
 
 function DetailQrUrl(item as object) as string
-    qr = WithQrVersion(ItemText(item, "qrUri"))
-    if not PosterKindOk(qr) then qr = WithQrVersion(ItemText(item, "qrUrl"))
+    qr = WithQrVersion(ItemText(item, "qrUrl"))
+    if not PosterKindOk(qr) then qr = WithQrVersion(ItemText(item, "qrUri"))
     if not PosterKindOk(qr) then return ""
     return qr
 end function

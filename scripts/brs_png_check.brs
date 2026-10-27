@@ -73,6 +73,23 @@ sub Main()
         print "FAIL an empty digest still built a QR path"
         failed = failed + 1
     end if
+    helloBytes = [104, 101, 108, 108, 111]
+    if LCase(Md5Hex(helloBytes)) <> "5d41402abc4b2a76b9719d911017c592" or Md5Tag(helloBytes) <> "5d41402a"
+        print "FAIL md5 of hello"
+        failed = failed + 1
+    end if
+    if Md5Tag(invalid) <> ""
+        print "FAIL a missing buffer still hashed"
+        failed = failed + 1
+    end if
+    if StaleQrCacheName("qr-fetch-book.png") <> false or StaleQrCacheName("qr-fetch-book.png.tmp") <> false
+        print "FAIL an in-flight QR download was treated as stale"
+        failed = failed + 1
+    end if
+    if StaleQrCacheName("qr-badge-2-incoming.tmp.tmp") <> true
+        print "FAIL a double tmp QR name was kept"
+        failed = failed + 1
+    end if
     if PngDigestTag(invalid) <> ""
         print "FAIL a missing digest became a file suffix"
         failed = failed + 1

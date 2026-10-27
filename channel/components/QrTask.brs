@@ -43,53 +43,42 @@ end function
 sub FetchQrBody(slot as string, url as string, generation as integer)
     if url = invalid then url = ""
     if slot = invalid or slot = "" or url = "" then return
+    print "Eaglewood: qr "; slot; " url="; QrExactUrl(url)
     code = 0
     prepared = invalid
     finalUri = CachedContentPath(slot, url)
     busy = ""
     if m.top.busyPaths <> invalid then busy = m.top.busyPaths
     if finalUri <> ""
-        wrapped = ReadFileBytes(finalUri)
-        prepared = ExpandPngBytes(wrapped)
-        if prepared <> invalid and prepared.converted = true
-            bytes = CopyToByteArray(prepared.bytes)
-            if bytes <> invalid then finalUri = CommitQrBytes(slot, bytes, busy)
-        else if prepared <> invalid
-            prepared.path = finalUri
-        end if
-        readBack = QrReadLength(finalUri)
-        print "Eaglewood: qr "; slot; " file bytes="; readBack; " read="; readBack
+        print "Eaglewood: qr "; slot; " response code=cache"
+        prepared = ExpandPngBytes(ReadFileBytes(finalUri))
+        if prepared <> invalid then prepared.path = finalUri
+        LogQrFile(slot, "cached", FsExists(finalUri), QrReadLength(finalUri))
     else
         print "Eaglewood: qr "; slot; " request sent"
-        incoming = "cachefs:/eaglewood/qr-" + slot + "-" + generation.ToStr() + "-incoming.tmp"
-        code = DownloadQr(url, incoming)
+        fetched = DownloadQrBytes(slot, url)
+        code = fetched.code
         print "Eaglewood: qr "; slot; " response code="; code
-        if code <> 200
-            DeleteQrFile(incoming)
+        if code <> 200 or fetched.bytes = invalid
+            if fetched.reason <> invalid and fetched.reason <> "" and fetched.reason <> "ok"
+                print "Eaglewood: qr "; slot; " failure reason="; fetched.reason
+            end if
             PublishQr(slot, generation, url, code, FailQr("http"), "", 0)
             print "Eaglewood: qr "; slot; " final uri=none"
             return
         end if
-        raw = CreateObject("roByteArray")
-        if raw = invalid or raw.ReadFile(incoming) <> true
-            DeleteQrFile(incoming)
-            PublishQr(slot, generation, url, code, FailQr("bad-png"), "", 0)
-            print "Eaglewood: qr "; slot; " final uri=none"
-            return
-        end if
+        raw = fetched.bytes
         prepared = ExpandPngBytes(AsBuf(raw))
         bytes = raw
         if prepared <> invalid and prepared.converted = true
             bytes = CopyToByteArray(prepared.bytes)
         end if
         if prepared = invalid or prepared.ok <> true or bytes = invalid
-            DeleteQrFile(incoming)
             PublishQr(slot, generation, url, code, prepared, "", 0)
             print "Eaglewood: qr "; slot; " final uri=none"
             return
         end if
-        finalUri = CommitQrBytes(slot, bytes, busy)
-        DeleteQrFile(incoming)
+        finalUri = SaveQrBytes(slot, bytes, busy)
         if prepared <> invalid then prepared.path = finalUri
     end if
     LogQrFormat(slot, prepared)
@@ -138,25 +127,117 @@ function FsExists(path as string) as boolean
     return false
 end function
 
-function DownloadQr(url as string, dest as string) as integer
-    EnsureQrDir()
-    DeleteQrFile(dest)
+' Same transfer setup as WifiHttp. The body is read into memory, then WriteFile
+' goes straight to the md5 name. Nothing is renamed and the dest does not end in .tmp.
+function DownloadQrBytes(slot as string, url as string) as object
+    result = { code: 0, reason: "no-transfer", bytes: invalid }
     transfer = CreateObject("roUrlTransfer")
     port = CreateObject("roMessagePort")
-    if transfer = invalid or port = invalid then return 0
+    if transfer = invalid or port = invalid then return result
     transfer.SetMessagePort(port)
     transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
     transfer.InitClientCertificates()
+    transfer.RetainBodyOnError(true)
     transfer.SetUrl(url)
+    EnsureQrDir()
+    dest = QrFetchPath(slot)
+    DeleteQrFile(dest)
+    DeleteQrFile(dest + ".tmp")
     transfer.AddHeader("Accept", "image/png")
     started = transfer.AsyncGetToFile(dest)
-    if started = false or started = invalid then return 0
+    if started = false or started = invalid
+        result.reason = "async-failed"
+        return result
+    end if
     event = wait(8000, port)
     if type(event) <> "roUrlEvent"
         transfer.AsyncCancel()
-        return 0
+        DeleteQrFile(dest)
+        DeleteQrFile(dest + ".tmp")
+        result.reason = "timeout"
+        return result
     end if
-    return event.GetResponseCode()
+    result.code = event.GetResponseCode()
+    if result.code <> 200
+        reason = event.GetFailureReason()
+        if reason = invalid or reason = "" then reason = "http"
+        if Len(reason) > 180 then reason = Left(reason, 180)
+        result.reason = reason
+        DeleteQrFile(dest)
+        DeleteQrFile(dest + ".tmp")
+        return result
+    end if
+    data = CreateObject("roByteArray")
+    if data = invalid or data.ReadFile(dest) <> true or data.Count() < 8
+        result.reason = "bad-png"
+        DeleteQrFile(dest)
+        DeleteQrFile(dest + ".tmp")
+        return result
+    end if
+    DeleteQrFile(dest)
+    DeleteQrFile(dest + ".tmp")
+    result.bytes = data
+    result.reason = "ok"
+    return result
+end function
+
+function QrFetchPath(slot as string) as string
+    return "cachefs:/eaglewood/qr-fetch-" + slot + ".png"
+end function
+
+function SaveQrBytes(slot as string, raw as object, busy as string) as string
+    count = 0
+    if raw <> invalid and raw.Count() <> invalid then count = raw.Count()
+    tag = ""
+    try
+        tag = PngDigestTag(raw)
+    catch err
+        print "Eaglewood: qr "; slot; " digest error="; TaskErrorText(err)
+        tag = ""
+    end try
+    if tag = "" then tag = Md5Tag(raw)
+    print "Eaglewood: qr "; slot; " digest="; tag
+    name = QrContentFileName(slot, tag)
+    if name = ""
+        print "Eaglewood: qr "; slot; " WriteFile=skipped"
+        print "Eaglewood: qr "; slot; " Exists=false bytes="; count
+        return ""
+    end if
+    path = "cachefs:/eaglewood/" + name
+    if EnsureParentDir(path) <> true
+        print "Eaglewood: qr "; slot; " WriteFile=no-dir"
+        print "Eaglewood: qr "; slot; " Exists=false bytes="; count
+        return ""
+    end if
+    fs = CreateObject("roFileSystem")
+    if fs = invalid
+        print "Eaglewood: qr "; slot; " WriteFile=no-fs"
+        print "Eaglewood: qr "; slot; " Exists=false bytes="; count
+        return ""
+    end if
+    existing = QrReadLength(path)
+    if existing = count and count > 0 and fs.Exists(path) = true
+        LogQrFile(slot, "unchanged", true, existing)
+        return path
+    end if
+    if fs.Exists(path) = true and PathIsBusy(path, busy) <> true then fs.Delete(path)
+    wrote = raw.WriteFile(path)
+    found = fs.Exists(path)
+    readBack = QrReadLength(path)
+    LogQrFile(slot, WriteResultText(wrote), found, readBack)
+    if wrote <> true or found <> true or readBack < 8 then return ""
+    return path
+end function
+
+sub LogQrFile(slot as string, wrote as object, found as object, bytes as integer)
+    print "Eaglewood: qr "; slot; " WriteFile="; wrote
+    print "Eaglewood: qr "; slot; " Exists="; WriteResultText(found); " bytes="; bytes
+end sub
+
+function QrExactUrl(url as string) as string
+    if url = invalid or url = "" then return "none"
+    if Instr(1, url, "/tv/") > 0 then return SafeUri(url)
+    return url
 end function
 
 sub LogQrFormat(slot as string, prepared as object)

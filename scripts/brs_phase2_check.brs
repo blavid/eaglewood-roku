@@ -132,6 +132,41 @@ sub Main()
         print "FAIL a missing qrUrl still built a QR"
         failed = failed + 1
     end if
+    norm = NormalizeActivities({
+        version: 4,
+        activitySections: [{
+            id: "guided-tours-and-activities",
+            activities: [{
+                id: "viator-ebike-tour",
+                name: "Electric Bike Tour",
+                url: "https://www.viator.com/tours/Bend/example",
+                qrUrl: "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png"
+            }]
+        }]
+    })
+    if norm = invalid or norm.items.Count() <> 1
+        print "FAIL the detail activity did not normalize"
+        failed = failed + 1
+    else
+        item = norm.items[0]
+        wanted = "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png?v=rgb2"
+        if item.qrUrl <> wanted or item.qrUri <> wanted or DetailQrUrl(item) <> wanted
+            print "FAIL qrUrl was not passed to the detail item"
+            failed = failed + 1
+        end if
+    end if
+    stale = { items: [{ id: "viator-ebike-tour", qrUri: "" }] }
+    fresh = { items: [{ id: "viator-ebike-tour", qrUrl: "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png?v=rgb2" }] }
+    picked = ChooseActivities(stale, fresh)
+    if picked = invalid or picked.items[0].qrUrl = ""
+        print "FAIL a cache without qrUrl beat the bundled snapshot"
+        failed = failed + 1
+    end if
+    kept = ChooseActivities(fresh, stale)
+    if kept = invalid or kept.items[0].qrUrl <> fresh.items[0].qrUrl
+        print "FAIL a cache with qrUrl was discarded"
+        failed = failed + 1
+    end if
     if BookQrFits(BookQrSlot()) <> true
         print "FAIL the Scan me slot falls outside its card or the screen"
         failed = failed + 1

@@ -187,6 +187,31 @@ function ItemOnScreen(item as object, screen as string) as boolean
     return false
 end function
 
+function ActivitiesQrCount(items as object) as integer
+    total = 0
+    if not IsList(items) then return 0
+    last = items.Count() - 1
+    if last < 0 then return 0
+    for index = 0 to last
+        item = items[index]
+        if IsAssoc(item)
+            qr = GuideLimitedText(item.Lookup("qrUrl"), 420)
+            if qr = "" then qr = GuideLimitedText(item.Lookup("qrUri"), 420)
+            if qr <> "" then total = total + 1
+        end if
+    end for
+    return total
+end function
+
+' A cached activities file from before qrUrl existed still normalizes.
+' Prefer it only when it actually carries QR links. Otherwise use the bundle.
+function ChooseActivities(cached as object, bundled as object) as object
+    if cached <> invalid and ActivitiesQrCount(cached.items) > 0 then return cached
+    if bundled <> invalid and ActivitiesQrCount(bundled.items) > 0 then return bundled
+    if cached <> invalid then return cached
+    return bundled
+end function
+
 function ActivitySection(section as string) as boolean
     if section = "dining" or section = "hiking" or section = "todo" then return true
     return false
@@ -337,6 +362,7 @@ function SlimActivity(raw as object, sectionId as string, sourceIndex as integer
     poster = ActivityPoster(raw)
     ranks = raw.Lookup("seasonRank")
     if not IsAssoc(ranks) then ranks = {}
+    qr = ActivityQr(raw)
     return {
         id: GuideLimitedText(raw.Lookup("id"), 80),
         name: name,
@@ -348,7 +374,8 @@ function SlimActivity(raw as object, sectionId as string, sourceIndex as integer
         seasonLabel: GuideLimitedText(raw.Lookup("seasonLabel"), 80),
         tip: GuideLimitedText(raw.Lookup("tip"), 180),
         url: GuideLimitedText(raw.Lookup("url"), 400),
-        qrUri: ActivityQr(raw),
+        qrUrl: qr,
+        qrUri: qr,
         poster: poster.poster,
         posterFallback: poster.posterFallback,
         credit: CreditLine(raw.Lookup("imageCredit")),

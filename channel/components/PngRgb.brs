@@ -348,6 +348,154 @@ function DigestTagFromHex(hex as string) as string
     return Left(clean, 8)
 end function
 
+' MD5 of the PNG bytes. roEVPDigest is used when the device provides it.
+' This path stays inside byte values so a missing digest still names the file.
+function Md5Tag(raw as object) as string
+    return DigestTagFromHex(Md5Hex(raw))
+end function
+
+function Md5Hex(raw as object) as string
+    if raw = invalid then return ""
+    count = raw.Count()
+    if count = invalid or count < 0 then return ""
+    bytes = []
+    if count > 0
+        last = count - 1
+        for index = 0 to last
+            bytes.Push(raw[index])
+        end for
+    end if
+    bytes.Push(128)
+    while (bytes.Count() mod 64) <> 56
+        bytes.Push(0)
+    end while
+    bits = count * 8
+    for index = 0 to 7
+        bytes.Push(bits mod 256)
+        bits = bits \ 256
+    end for
+    words = Md5K()
+    shifts = Md5S()
+    stateA = [1, 35, 69, 103]
+    stateB = [137, 171, 205, 239]
+    stateC = [254, 220, 186, 152]
+    stateD = [118, 84, 50, 16]
+    blocks = bytes.Count() \ 64
+    lastBlock = blocks - 1
+    for block = 0 to lastBlock
+        base = block * 64
+        message = []
+        for word = 0 to 15
+            at = base + (word * 4)
+            message.Push([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+        end for
+        wordA = stateA
+        wordB = stateB
+        wordC = stateC
+        wordD = stateD
+        for round = 0 to 63
+            if round < 16
+                mixed = Md5F(wordB, wordC, wordD)
+                pick = round
+            else if round < 32
+                mixed = Md5G(wordB, wordC, wordD)
+                pick = (5 * round + 1) mod 16
+            else if round < 48
+                mixed = Md5H(wordB, wordC, wordD)
+                pick = (3 * round + 5) mod 16
+            else
+                mixed = Md5I(wordB, wordC, wordD)
+                pick = (7 * round) mod 16
+            end if
+            mixed = WAdd(mixed, wordA)
+            mixed = WAdd(mixed, words[round])
+            mixed = WAdd(mixed, message[pick])
+            wordA = wordD
+            wordD = wordC
+            wordC = wordB
+            wordB = WAdd(wordB, WRotL(mixed, shifts[round]))
+        end for
+        stateA = WAdd(stateA, wordA)
+        stateB = WAdd(stateB, wordB)
+        stateC = WAdd(stateC, wordC)
+        stateD = WAdd(stateD, wordD)
+    end for
+    return WHex(stateA) + WHex(stateB) + WHex(stateC) + WHex(stateD)
+end function
+
+function Md5F(b as object, c as object, d as object) as object
+    return WOr(WAnd(b, c), WAnd(WNot(b), d))
+end function
+
+function Md5G(b as object, c as object, d as object) as object
+    return WOr(WAnd(b, d), WAnd(c, WNot(d)))
+end function
+
+function Md5H(b as object, c as object, d as object) as object
+    return WXor(WXor(b, c), d)
+end function
+
+function Md5I(b as object, c as object, d as object) as object
+    return WXor(c, WOr(b, WNot(d)))
+end function
+
+function WAdd(left as object, right as object) as object
+    out = [0, 0, 0, 0]
+    carry = 0
+    for index = 0 to 3
+        sum = left[index] + right[index] + carry
+        out[index] = sum mod 256
+        carry = sum \ 256
+    end for
+    return out
+end function
+
+function WAnd(left as object, right as object) as object
+    return [left[0] and right[0], left[1] and right[1], left[2] and right[2], left[3] and right[3]]
+end function
+
+function WOr(left as object, right as object) as object
+    return [left[0] or right[0], left[1] or right[1], left[2] or right[2], left[3] or right[3]]
+end function
+
+function WXor(left as object, right as object) as object
+    return [WXorByte(left[0], right[0]), WXorByte(left[1], right[1]), WXorByte(left[2], right[2]), WXorByte(left[3], right[3])]
+end function
+
+function WXorByte(left as integer, right as integer) as integer
+    return (left or right) - (left and right)
+end function
+
+function WNot(word as object) as object
+    return [255 - word[0], 255 - word[1], 255 - word[2], 255 - word[3]]
+end function
+
+function WRotL(word as object, bits as integer) as object
+    out = [word[0], word[1], word[2], word[3]]
+    left = bits
+    while left > 0
+        left = left - 1
+        carry = out[3] \ 128
+        out[3] = ((out[3] * 2) mod 256) + (out[2] \ 128)
+        out[2] = ((out[2] * 2) mod 256) + (out[1] \ 128)
+        out[1] = ((out[1] * 2) mod 256) + (out[0] \ 128)
+        out[0] = ((out[0] * 2) mod 256) + carry
+    end while
+    return out
+end function
+
+function WHex(word as object) as string
+    return HexByte(word[0]) + HexByte(word[1]) + HexByte(word[2]) + HexByte(word[3])
+end function
+
+function Md5S() as object
+    return [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21]
+end function
+
+function Md5K() as object
+    return [[120, 164, 106, 215], [86, 183, 199, 232], [219, 112, 32, 36], [238, 206, 189, 193], [175, 15, 124, 245], [42, 198, 135, 71], [19, 70, 48, 168], [1, 149, 70, 253], [216, 152, 128, 105], [175, 247, 68, 139], [177, 91, 255, 255], [190, 215, 92, 137], [34, 17, 144, 107], [147, 113, 152, 253], [142, 67, 121, 166], [33, 8, 180, 73], [98, 37, 30, 246], [64, 179, 64, 192], [81, 90, 94, 38], [170, 199, 182, 233], [93, 16, 47, 214], [83, 20, 68, 2], [129, 230, 161, 216], [200, 251, 211, 231], [230, 205, 225, 33], [214, 7, 55, 195], [135, 13, 213, 244], [237, 20, 90, 69], [5, 233, 227, 169], [248, 163, 239, 252], [217, 2, 111, 103], [138, 76, 42, 141], [66, 57, 250, 255], [129, 246, 113, 135], [34, 97, 157, 109], [12, 56, 229, 253], [68, 234, 190, 164], [169, 207, 222, 75], [96, 75, 187, 246], [112, 188, 191, 190], [198, 126, 155, 40], [250, 39, 161, 234], [133, 48, 239, 212], [5, 29, 136, 4], [57, 208, 212, 217], [229, 153, 219, 230], [248, 124, 162, 31], [101, 86, 172, 196], [68, 34, 41, 244], [151, 255, 42, 67], [167, 35, 148, 171], [57, 160, 147, 252], [195, 89, 91, 101], [146, 204, 12, 143], [125, 244, 239, 255], [209, 93, 132, 133], [79, 126, 168, 111], [224, 230, 44, 254], [20, 67, 1, 163], [161, 17, 8, 78], [130, 126, 83, 247], [53, 242, 58, 189], [187, 210, 215, 42], [145, 211, 134, 235]]
+end function
+
 function PngDigestTag(raw as object) as string
     if raw = invalid then return ""
     digest = CreateObject("roEVPDigest")
@@ -472,6 +620,7 @@ function StaleQrCacheName(name as object) as boolean
     if Instr(1, name, "/") > 0 or Instr(1, name, ":") > 0 then return false
     lower = LCase(name)
     if Left(lower, 4) = "wifi" then return false
+    if Left(lower, 8) = "qr-fetch" then return false
     if Instr(1, lower, "qr") < 1 then return false
     if Right(lower, 4) = ".png" then return true
     if Right(lower, 4) = ".url" then return true

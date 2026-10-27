@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "15",
+    "build_version": "16",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -532,10 +532,18 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 15 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 16 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 15 "' not in scene:
-        fail("startup must log build 15 and the commit")
+    if 'print "Eaglewood: build 16 "' not in scene:
+        fail("startup must log build 16 and the commit")
+    if "RetainBodyOnError(true)" not in qr_task or "InitClientCertificates()" not in qr_task:
+        fail("public QR downloads must use the Wi-Fi certificate setup")
+    if "raw.WriteFile(path)" not in qr_task or "fs.Exists(path)" not in qr_task:
+        fail("public QR bytes must be written to the final file and checked with Exists")
+    if "incoming.tmp" in qr_task or ".Rename(" in qr_task:
+        fail("public QR saves must not use a temp file or rename")
+    if "qrUrl: qr" not in season or "function ChooseActivities(" not in season:
+        fail("activity qrUrl must be passed through to the detail item")
     if "function QrContentFileName(" not in png or "function CommitQrBytes(" not in png:
         fail("QR files must be content-named")
     if 'print "Eaglewood: heartbeat"' not in scene or 'id="heartbeatTimer"' not in xml:

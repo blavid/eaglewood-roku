@@ -163,12 +163,15 @@ function FinishRemote(kind as string, parsed as object, source as string, code a
 end function
 
 function LoadActivitiesLocal() as object
-    parsed = ParseObjectText(ReadText("cachefs:/eaglewood/activities.json"))
-    found = FinishActivities(parsed, "cachefs", "0")
-    if found <> invalid then return found
-    parsed = ParseObjectText(ReadText("pkg:/data/activities.json"))
-    found = FinishActivities(parsed, "pkg", "0")
-    if found <> invalid then return found
+    cached = FinishActivities(ParseObjectText(ReadText("cachefs:/eaglewood/activities.json")), "cachefs", "0")
+    bundled = FinishActivities(ParseObjectText(ReadText("pkg:/data/activities.json")), "pkg", "0")
+    if cached <> invalid and bundled <> invalid
+        if ActivitiesQrCount(cached.items) = 0 and ActivitiesQrCount(bundled.items) > 0
+            print "Eaglewood: activities cache missing qrUrl"
+        end if
+    end if
+    chosen = ChooseActivities(cached, bundled)
+    if chosen <> invalid then return chosen
     return EmptyActivities()
 end function
 
@@ -191,7 +194,7 @@ end function
 
 sub LogActivitiesChoice(activities as object)
     if activities = invalid then return
-    print "Eaglewood: activities version="; VersionText(activities.activitiesVersion); " source="; activities.activitiesSource; " code="; activities.activitiesCode
+    print "Eaglewood: activities version="; VersionText(activities.activitiesVersion); " source="; activities.activitiesSource; " code="; activities.activitiesCode; " qr="; ActivitiesQrCount(activities.items)
 end sub
 
 function HttpGet(url as string, etag as string) as object
