@@ -76,6 +76,8 @@ try {
     }
 
     New-Item -ItemType Directory -Force -Path $out | Out-Null
+    $snapshot = Join-Path $out "snapshot"
+    Invoke-Python @((Join-Path $PSScriptRoot "guide_snapshot.py"), "--into-stage", $stage, "--snapshot-dir", $snapshot)
     if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 
     Add-Type -AssemblyName System.IO.Compression

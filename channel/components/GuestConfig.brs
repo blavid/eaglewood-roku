@@ -14,3 +14,17 @@ function GuestJsonUrl() as string
     if key = invalid or key = "" then return ""
     return GuestServiceOrigin() + key + "/guest.json"
 end function
+
+function WifiJsonUrl() as string
+    return WifiAssetUrl("wifi.json")
+end function
+
+function WifiPngUrl() as string
+    return WifiAssetUrl("wifi.png")
+end function
+
+function WifiAssetUrl(name as string) as string
+    key = GuestPathKey()
+    if key = invalid or key = "" then return ""
+    return GuestServiceOrigin() + key + "/" + name
+end function

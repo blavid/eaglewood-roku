@@ -1,22 +1,108 @@
 sub init()
+    ClearStaleQrCache()
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
+    m.idleTimer = m.top.findNode("idleTimer")
+    m.refreshTimer = m.top.findNode("refreshTimer")
     m.guestTask = invalid
+    m.guideTask = invalid
+    m.wifiTask = invalid
+    m.qrTask = invalid
     m.fetchGeneration = 0
+    m.guideGeneration = 0
+    m.wifiGeneration = 0
+    m.qrGeneration = 0
+    m.qrJobKey = ""
+    m.qrFormats = {}
+    m.qrPending = {}
+    m.shell = invalid
+    m.zone = "prompt"
+    m.section = "home"
+    m.cardIndex = 0
+    m.activities = []
+    m.activitiesToken = 0
+    m.fixIssues = []
+    m.book = invalid
+    m.wifiSsid = ""
+    m.wifiPassword = ""
+    m.wifiPng = "no"
+    m.wifiNotice = ""
+    m.wifiSource = "builtin"
+    m.tileIndex = 0
+    m.railIndex = 0
+    m.issueIndex = 0
+    m.stepScroll = 0
+    m.ruleScroll = 0
+    m.checkoutScroll = 0
+    m.guestCheckout = ""
+    m.guestCheckoutPresent = "no"
+    m.guestStay = "missing"
+    m.brand = "Eaglewood"
+    m.place = "Sunriver, Oregon"
+    m.domain = "sunrivertownhome.com"
+    m.checkIn = "4:00 PM"
+    m.checkOut = "11:00 AM"
+    m.quietHours = "Quiet hours after 10:00 PM"
+    m.hostName = ""
+    m.hostEmail = ""
+    m.hostPhone = ""
+    m.summary = ""
+    m.guideSource = "builtin"
+    m.guideCode = "0"
+    m.guideVersion = "0"
+    m.checkoutSource = "builtin"
+    m.checkoutCode = "0"
+    m.checkoutVersion = "0"
+    m.rules = []
+    m.issues = []
+    m.checkoutSteps = []
     m.top.backgroundColor = "0x100E0CFF"
     m.top.setFocus(true)
     m.top.observeField("relaunchCount", "onRelaunch")
     ' Readable text before any layout. A layout failure must not leave this blank.
     ApplyPlainGreeting(FallbackGreeting())
     ShowGreeting(FallbackGreeting())
+    try
+        BuildShell()
+        ApplyBundle(BuiltinBundle())
+        ShowSection("home")
+        print "Eaglewood: screen=home zone=prompt"
+    catch err
+        print "Eaglewood: layout error = "; LayoutErrorText(err)
+    end try
+    if m.idleTimer <> invalid then m.idleTimer.observeField("fire", "onIdle")
+    if m.refreshTimer <> invalid then m.refreshTimer.observeField("fire", "onRefresh")
+    BumpIdle()
+    HoldFocus()
     startGuestFetch()
+    startGuideFetch()
+    startWifiFetch()
+    StartRefresh()
     printUiResolution()
 end sub
 
 sub onRelaunch()
     print "Eaglewood: relaunch"
+    m.guestStay = "missing"
+    m.guestCheckout = ""
+    m.guestCheckoutPresent = "no"
     ShowGreeting(FallbackGreeting())
+    m.zone = "prompt"
+    m.section = "home"
+    m.railIndex = 0
+    m.tileIndex = 0
+    m.cardIndex = 0
+    m.issueIndex = 0
+    m.stepScroll = 0
+    ShowSection("home")
+    print "Eaglewood: screen=home zone=prompt"
+    PaintAll()
+    HoldFocus()
+    BumpIdle()
     startGuestFetch()
+    startGuideFetch()
+    startWifiFetch()
+    StartRefresh()
 end sub
 
 sub startGuestFetch()
@@ -38,6 +124,27 @@ sub startGuestFetch()
     m.guestTask = task
     task.control = "RUN"
     print "Eaglewood: task started generation="; m.fetchGeneration
+end sub
+
+sub startGuideFetch()
+    if m.guideTask <> invalid
+        m.guideTask.unobserveField("result")
+        m.guideTask.control = "STOP"
+        m.guideTask = invalid
+    end if
+    m.guideGeneration = m.guideGeneration + 1
+    print "Eaglewood: guide task created generation="; m.guideGeneration
+    task = CreateObject("roSGNode", "GuideTask")
+    if task = invalid
+        print "Eaglewood: guide skip reason=task-create-failed"
+        return
+    end if
+    task.functionName = "fetchGuideBundle"
+    task.generation = m.guideGeneration
+    task.observeField("result", "onGuideFetch")
+    m.guideTask = task
+    task.control = "RUN"
+    print "Eaglewood: guide task started generation="; m.guideGeneration
 end sub
 
 sub onGuestFetch()
@@ -66,6 +173,10 @@ sub onGuestFetch()
     print "Eaglewood: fetch result ok="; ok; " reason="; reason
     if ok <> "yes"
         print "Eaglewood: skip reason="; reason
+        m.guestStay = "missing"
+        m.guestCheckout = ""
+        m.guestCheckoutPresent = "no"
+        RefreshHomeLine()
         ShowGreeting(FallbackGreeting())
         return
     end if
@@ -73,14 +184,76 @@ sub onGuestFetch()
     if result.checkoutPresent = "yes" then present = true
     decision = CheckoutDecision(result.checkout, present, NowSeconds())
     print "Eaglewood: checkout decision="; decision
+    m.guestStay = decision
+    m.guestCheckout = AsText(result.checkout)
+    m.guestCheckoutPresent = "no"
+    if result.checkoutPresent <> invalid then m.guestCheckoutPresent = result.checkoutPresent
+    RefreshHomeLine()
     text = GreetingFromGuest(result.firstName, result.lastName, result.checkout, present)
     ShowGreeting(text)
+end sub
+
+sub onGuideFetch()
+    task = m.guideTask
+    if task = invalid
+        print "Eaglewood: guide skip reason=no-task"
+        return
+    end if
+    result = task.result
+    if result = invalid
+        print "Eaglewood: guide skip reason=no-result"
+        return
+    end if
+    if not GuideGenerationMatches(result)
+        print "Eaglewood: guide skip reason=generation"
+        return
+    end if
+    try
+        ApplyBundle(BundleFromResult(result))
+    catch err
+        print "Eaglewood: layout error = "; LayoutErrorText(err)
+        HoldFocus()
+        return
+    end try
+    rules = 0
+    issues = 0
+    steps = 0
+    if m.rules <> invalid then rules = m.rules.Count()
+    if m.issues <> invalid then issues = m.issues.Count()
+    if m.checkoutSteps <> invalid then steps = m.checkoutSteps.Count()
+    print "Eaglewood: guide applied source="; m.guideSource; " version="; m.guideVersion; " rules="; rules; " issues="; issues
+    present = "no"
+    if result.hostPhonePresent <> invalid and result.hostPhonePresent <> "" then present = result.hostPhonePresent
+    print "Eaglewood: host phone present="; present
+    print "Eaglewood: checkout applied source="; m.checkoutSource; " version="; m.checkoutVersion; " steps="; steps
+    count = 0
+    if m.activities <> invalid then count = m.activities.Count()
+    print "Eaglewood: activities applied source="; m.activitiesSource; " version="; m.activitiesVersion; " count="; count
+    HoldFocus()
 end sub
 
 ' The observer is only attached to the current task. A result whose generation
 ' is still 0 was published before that field was visible; apply it.
 function GenerationMatches(result as object) as boolean
     want = m.fetchGeneration.ToStr()
+    text = result.generationText
+    number = result.generation
+    if text <> invalid
+        if text = want then return true
+    end if
+    if number <> invalid
+        if number.ToStr() = want then return true
+    end if
+    blank = false
+    if text = invalid or text = "" or text = "0" then blank = true
+    if blank
+        if number = invalid or number = 0 then return true
+    end if
+    return false
+end function
+
+function GuideGenerationMatches(result as object) as boolean
+    want = m.guideGeneration.ToStr()
     text = result.generationText
     number = result.generation
     if text <> invalid
@@ -108,69 +281,53 @@ sub ShowGreeting(text as string)
     print "Eaglewood: greeting = "; text
 end sub
 
-' The same string assignment build 5 used. Built-in names only, no Font uri
-' and no custom size. The label wraps; this does not measure glyphs.
+' Built-in names only, on the Label font field. The label wraps; this does not
+' measure glyphs. Text is assigned before ApplyGreetingLayout runs.
 sub ApplyPlainGreeting(text as string)
+    if m.backing <> invalid then m.backing.visible = false
     if m.greeting = invalid then return
     m.greeting.font = "font:LargeBoldSystemFont"
     m.greeting.color = "0xFFFFFFFF"
     m.greeting.width = GreetingLabelWidth()
     m.greeting.wrap = true
     m.greeting.maxLines = 2
-    m.greeting.horizAlign = "center"
+    m.greeting.horizAlign = "left"
     m.greeting.vertAlign = "center"
-    m.greeting.height = GreetingBarMinHeight()
-    m.greeting.translation = [80, 800]
+    m.greeting.height = 130
+    m.greeting.translation = [ContentLeft(), ContentTop()]
     m.greeting.text = text
 end sub
 
 sub ApplyGreetingLayout(text as string)
-    layout = GreetingLayout(text)
-    if m.backing <> invalid
-        m.backing.color = "0x000000B3"
-        m.backing.width = 1920
-        m.backing.height = layout.barHeight
-        m.backing.translation = [0, layout.barTop]
-    end if
+    if m.backing <> invalid then m.backing.visible = false
     if m.greeting = invalid then return
-    m.greeting.font = layout.fontName
-    m.greeting.height = layout.barHeight
-    m.greeting.translation = [80, layout.barTop]
+    m.greeting.font = GreetingFace(text)
 end sub
-
-function GreetingLayout(text as string) as object
-    sizes = GreetingFontSizes()
-    names = GreetingFontNames()
-    chosen = sizes.Count() - 1
-    lineCount = 2
-    index = 0
-    limit = GreetingLabelWidth()
-    if text = invalid then text = ""
-    while index < sizes.Count()
-        pixels = Len(text) * FallbackCharWidth(sizes[index])
-        if pixels <= limit
-            chosen = index
-            lineCount = 1
-            exit while
-        else if pixels <= (limit * 2)
-            chosen = index
-            lineCount = 2
-            exit while
-        end if
-        index = index + 1
-    end while
-    if chosen >= names.Count() then chosen = names.Count() - 1
-    if chosen < 0 then chosen = 0
-    size = sizes[chosen]
-    lineHeight = size + (size \ 5)
-    bar = GreetingBarBox(lineCount, lineHeight)
-    bar.fontName = names[chosen]
-    bar.lineCount = lineCount
-    return bar
-end function
 
 function GreetingFontNames() as object
     return ["font:LargeBoldSystemFont", "font:MediumBoldSystemFont", "font:SmallBoldSystemFont", "font:SmallestBoldSystemFont"]
+end function
+
+function GreetingFace(text as string) as string
+    names = GreetingFontNames()
+    sizes = GreetingFontSizes()
+    chosen = 0
+    if names.Count() < 1 then return "font:LargeBoldSystemFont"
+    chosen = names.Count() - 1
+    limit = GreetingLabelWidth()
+    if text = invalid then text = ""
+    last = sizes.Count() - 1
+    if last < 0 then return names[0]
+    for index = 0 to last
+        pixels = Len(text) * FallbackCharWidth(sizes[index])
+        if pixels <= (limit * 2)
+            chosen = index
+            exit for
+        end if
+    end for
+    if chosen >= names.Count() then chosen = names.Count() - 1
+    if chosen < 0 then chosen = 0
+    return names[chosen]
 end function
 
 function LayoutErrorText(err as object) as string
@@ -192,11 +349,551 @@ sub printUiResolution()
     print "Eaglewood: ui = "; ui.name; " "; ui.width; "x"; ui.height
 end sub
 
-' Back is not consumed. On this screen that exits the app, which is what
-' certification requires. The Home key never arrives; the OS leaves the app.
 function onKeyEvent(key as string, press as boolean) as boolean
-    if press and key = "back"
-        return false
+    if press <> true then return false
+    handled = true
+    try
+        handled = RouteKey(key)
+    catch err
+        print "Eaglewood: key error = "; LayoutErrorText(err)
+        HoldFocus()
+        handled = true
+        if key = "back"
+            if m.section = "home" and m.zone = "rail" then handled = false
+        end if
+    end try
+    return handled
+end function
+
+function RouteKey(key as string) as boolean
+    BumpIdle()
+    HoldFocus()
+    if m.shell = invalid
+        if key = "back"
+            print "Eaglewood: back exit"
+            return false
+        end if
+        return true
+    end if
+    if key = "back" then return HandleBack()
+    if key = "up" then return HandleVertical(-1)
+    if key = "down" then return HandleVertical(1)
+    if key = "left" then return HandleLeft()
+    if key = "right" then return HandleRight()
+    if key = "OK" then return HandleOk()
+    return false
+end function
+
+function HandleVertical(direction as integer) as boolean
+    if m.zone = "prompt" then return MovePrompt(direction)
+    if m.zone = "rail" then return MoveRail(direction)
+    if m.zone = "tiles" then return MoveTiles(direction)
+    if m.zone = "grid" then return MoveCards(0, direction)
+    if m.zone = "list" then return MoveIssue(direction)
+    if m.zone = "detail" then return MoveStepScroll(direction)
+    if m.zone = "panel" and m.section = "rules" then return MoveRuleScroll(direction)
+    if m.zone = "panel" and m.section = "checkout" then return MoveCheckoutScroll(direction)
+    return true
+end function
+
+function MovePrompt(direction as integer) as boolean
+    if direction > 0
+        m.zone = "tiles"
+        if m.tileIndex < 0 then m.tileIndex = 0
+        PaintPrompt()
+        PaintTiles()
+        HoldFocus()
+    end if
+    return true
+end function
+
+function MoveRail(direction as integer) as boolean
+    sections = RailSections()
+    nextIndex = m.railIndex + direction
+    if nextIndex < 0 or nextIndex >= sections.Count() then return true
+    m.railIndex = nextIndex
+    PreviewSection(sections[nextIndex])
+    return true
+end function
+
+function MoveTiles(direction as integer) as boolean
+    row = m.tileIndex \ 3
+    if direction < 0
+        if row > 0
+            m.tileIndex = m.tileIndex - 3
+        else
+            m.zone = "prompt"
+        end if
+    else
+        if row = 0 then m.tileIndex = m.tileIndex + 3
+    end if
+    PaintPrompt()
+    PaintTiles()
+    HoldFocus()
+    return true
+end function
+
+function MoveCards(dx as integer, dy as integer) as boolean
+    count = CardCount()
+    if count < 1 then return true
+    if m.cardIndex < 0 or m.cardIndex >= count then m.cardIndex = 0
+    col = m.cardIndex mod 3
+    if dx < 0
+        if col = 0 then return FocusRail()
+        m.cardIndex = m.cardIndex - 1
+    else if dx > 0
+        if col >= 2 then return true
+        nextIndex = m.cardIndex + 1
+        if nextIndex >= count then return true
+        m.cardIndex = nextIndex
+    else if dy <> 0
+        nextIndex = m.cardIndex + (dy * 3)
+        if nextIndex < 0 or nextIndex >= count then return true
+        m.cardIndex = nextIndex
+    end if
+    ShowCardFocus()
+    HoldFocus()
+    return true
+end function
+
+function MoveIssue(direction as integer) as boolean
+    count = IssueCount()
+    if count < 1 then return true
+    nextIndex = m.issueIndex + direction
+    if nextIndex < 0 or nextIndex >= count then return true
+    m.issueIndex = nextIndex
+    m.stepScroll = 0
+    PaintFixes()
+    HoldFocus()
+    return true
+end function
+
+function MoveStepScroll(direction as integer) as boolean
+    maxScroll = StepCount() - VisibleSteps()
+    if maxScroll < 0 then maxScroll = 0
+    nextScroll = m.stepScroll + direction
+    if nextScroll < 0 or nextScroll > maxScroll then return true
+    m.stepScroll = nextScroll
+    PaintFixes()
+    HoldFocus()
+    return true
+end function
+
+function MoveRuleScroll(direction as integer) as boolean
+    maxScroll = RuleCount() - VisibleRules()
+    if maxScroll < 0 then maxScroll = 0
+    nextScroll = m.ruleScroll + direction
+    if nextScroll < 0 or nextScroll > maxScroll then return true
+    m.ruleScroll = nextScroll
+    PaintRules()
+    HoldFocus()
+    return true
+end function
+
+function MoveCheckoutScroll(direction as integer) as boolean
+    maxScroll = CheckoutStepCount() - VisibleCheckoutSteps()
+    if maxScroll < 0 then maxScroll = 0
+    nextScroll = m.checkoutScroll + direction
+    if nextScroll < 0 or nextScroll > maxScroll then return true
+    m.checkoutScroll = nextScroll
+    PaintCheckout()
+    HoldFocus()
+    return true
+end function
+
+function HandleLeft() as boolean
+    if m.zone = "item" then return CloseActivityDetail()
+    if m.zone = "prompt" then return FocusRail()
+    if m.zone = "grid" then return MoveCards(-1, 0)
+    if m.zone = "detail"
+        m.zone = "list"
+        print "Eaglewood: screen="; m.section; " zone=list"
+        PaintFixes()
+        HoldFocus()
+        return true
+    end if
+    if m.zone = "tiles"
+        col = m.tileIndex mod 3
+        if col > 0
+            m.tileIndex = m.tileIndex - 1
+            PaintTiles()
+            HoldFocus()
+            return true
+        end if
+        return FocusRail()
+    end if
+    if m.zone = "list" or m.zone = "panel" then return FocusRail()
+    if m.zone = "rail"
+        if m.section = "home" then return true
+        return GoHomeOnRail()
+    end if
+    return true
+end function
+
+function HandleRight() as boolean
+    if m.zone = "rail"
+        OpenSection(CurrentRailSection())
+        return true
+    end if
+    if m.zone = "grid" then return MoveCards(1, 0)
+    if m.zone = "tiles"
+        col = m.tileIndex mod 3
+        if col < 2 then m.tileIndex = m.tileIndex + 1
+        PaintTiles()
+        HoldFocus()
+        return true
+    end if
+    if m.zone = "list" then return OpenStepScroll()
+    return true
+end function
+
+function HandleOk() as boolean
+    if m.zone = "rail"
+        OpenSection(CurrentRailSection())
+        return true
+    end if
+    if m.zone = "prompt"
+        OpenSection("book")
+        return true
+    end if
+    if m.zone = "tiles"
+        OpenSection(CurrentTileSection())
+        return true
+    end if
+    if m.zone = "grid" then return OpenActivityDetail()
+    if m.zone = "list" then return OpenStepScroll()
+    return true
+end function
+
+function OpenActivityDetail() as boolean
+    if CardCount() < 1 then return true
+    m.zone = "item"
+    ReleaseCardImages()
+    ShowSection(m.section)
+    print "Eaglewood: screen="; m.section; " zone=item"
+    PaintDetail()
+    UpdateBadgeVisible()
+    HoldFocus()
+    return true
+end function
+
+function CloseActivityDetail() as boolean
+    m.zone = "grid"
+    ShowSection(m.section)
+    print "Eaglewood: screen="; m.section; " zone=grid"
+    PaintActivity()
+    HoldFocus()
+    return true
+end function
+
+function HandleBack() as boolean
+    if m.zone = "item" then return CloseActivityDetail()
+    if m.zone <> "rail"
+        return FocusRail()
+    end if
+    if m.section <> "home" then return GoHomeOnRail()
+    print "Eaglewood: back exit"
+    return false
+end function
+
+function FocusRail() as boolean
+    m.zone = "rail"
+    print "Eaglewood: screen="; m.section; " zone=rail"
+    PaintAll()
+    HoldFocus()
+    return true
+end function
+
+function GoHomeOnRail() as boolean
+    m.zone = "rail"
+    m.section = "home"
+    m.railIndex = 0
+    m.tileIndex = 0
+    ShowSection("home")
+    print "Eaglewood: screen=home zone=rail"
+    PaintAll()
+    HoldFocus()
+    return true
+end function
+
+function CurrentRailSection() as string
+    sections = RailSections()
+    if m.railIndex < 0 or m.railIndex >= sections.Count() then return "home"
+    return sections[m.railIndex]
+end function
+
+function CurrentTileSection() as string
+    sections = TileSections()
+    if m.tileIndex < 0 or m.tileIndex >= sections.Count() then return "wifi"
+    return sections[m.tileIndex]
+end function
+
+sub OpenSection(section as string)
+    m.section = section
+    m.railIndex = RailIndexOf(section)
+    if section = "home"
+        m.zone = "prompt"
+        m.tileIndex = 0
+    else if section = "fixes"
+        m.zone = "list"
+        m.stepScroll = 0
+    else if ActivitySection(section)
+        m.zone = "grid"
+    else
+        m.zone = "panel"
+    end if
+    ShowSection(section)
+    print "Eaglewood: screen="; section; " zone="; m.zone
+    PaintAll()
+    HoldFocus()
+end sub
+
+sub PreviewSection(section as string)
+    m.section = section
+    ShowSection(section)
+    print "Eaglewood: screen="; section; " zone="; m.zone
+    PaintAll()
+    HoldFocus()
+end sub
+
+function OpenStepScroll() as boolean
+    if StepCount() <= VisibleSteps() then return true
+    m.zone = "detail"
+    if m.stepScroll < 0 then m.stepScroll = 0
+    print "Eaglewood: screen="; m.section; " zone=detail"
+    PaintFixes()
+    HoldFocus()
+    return true
+end function
+
+sub onIdle()
+    if m.idleTimer = invalid then return
+    if m.idleTimer.fire <> true then return
+    print "Eaglewood: idle return home"
+    try
+        m.section = "home"
+        m.zone = "prompt"
+        m.railIndex = 0
+        m.tileIndex = 0
+        m.cardIndex = 0
+        m.issueIndex = 0
+        m.stepScroll = 0
+        m.ruleScroll = 0
+        m.checkoutScroll = 0
+        ShowSection("home")
+        print "Eaglewood: screen=home zone=prompt"
+        PaintAll()
+        HoldFocus()
+    catch err
+        print "Eaglewood: layout error = "; LayoutErrorText(err)
+        HoldFocus()
+    end try
+    BumpIdle()
+end sub
+
+sub BumpIdle()
+    if m.idleTimer = invalid then return
+    m.idleTimer.control = "stop"
+    m.idleTimer.duration = 600
+    m.idleTimer.control = "start"
+end sub
+
+sub startWifiFetch()
+    if m.wifiTask <> invalid
+        m.wifiTask.unobserveField("result")
+        m.wifiTask.control = "STOP"
+        m.wifiTask = invalid
+    end if
+    m.wifiGeneration = m.wifiGeneration + 1
+    print "Eaglewood: wifi task created generation="; m.wifiGeneration
+    task = CreateObject("roSGNode", "WifiTask")
+    if task = invalid
+        print "Eaglewood: wifi skip reason=task-create-failed"
+        return
+    end if
+    task.functionName = "fetchWifi"
+    task.generation = m.wifiGeneration
+    task.observeField("result", "onWifiFetch")
+    m.wifiTask = task
+    task.control = "RUN"
+    print "Eaglewood: wifi task started generation="; m.wifiGeneration
+end sub
+
+sub onWifiFetch()
+    task = m.wifiTask
+    if task = invalid
+        print "Eaglewood: wifi skip reason=no-task"
+        return
+    end if
+    result = task.result
+    if result = invalid
+        print "Eaglewood: wifi skip reason=no-result"
+        return
+    end if
+    if not WifiGenerationMatches(result)
+        print "Eaglewood: wifi skip reason=generation"
+        return
+    end if
+    try
+        ApplyWifiResult(result)
+    catch err
+        print "Eaglewood: layout error = "; LayoutErrorText(err)
+        HoldFocus()
+        return
+    end try
+    source = AsText(result.source)
+    png = AsText(result.png)
+    if png = "" then png = "no"
+    ssidLen = 0
+    if result.ssidLen <> invalid then ssidLen = result.ssidLen
+    print "Eaglewood: wifi applied source="; source; " ssid len="; ssidLen; " png="; png; " json code="; m.wifiJsonCode; " png code="; m.wifiPngCode
+    HoldFocus()
+end sub
+
+function WifiGenerationMatches(result as object) as boolean
+    want = m.wifiGeneration.ToStr()
+    text = result.generationText
+    number = result.generation
+    if text <> invalid
+        if text = want then return true
+    end if
+    if number <> invalid
+        if number.ToStr() = want then return true
+    end if
+    blank = false
+    if text = invalid or text = "" or text = "0" then blank = true
+    if blank
+        if number = invalid or number = 0 then return true
     end if
     return false
 end function
+
+sub StartRefresh()
+    if m.refreshTimer = invalid then return
+    m.refreshTimer.control = "stop"
+    m.refreshTimer.repeat = true
+    m.refreshTimer.duration = 21600
+    m.refreshTimer.control = "start"
+end sub
+
+sub onRefresh()
+    if m.refreshTimer = invalid then return
+    if m.refreshTimer.fire <> true then return
+    startGuideFetch()
+    startWifiFetch()
+end sub
+
+sub StartQrFallback(slot as string)
+    url = ""
+    if slot = "badge" and m.badgeRemote <> invalid then url = m.badgeRemote
+    if slot = "book" and m.bookQrUri <> invalid then url = m.bookQrUri
+    if slot = "detail" and m.detailQrUri <> invalid then url = m.detailQrUri
+    if url = "" then return
+    if m.qrPending = invalid then m.qrPending = {}
+    m.qrPending[slot] = url
+    badge = PendingQr("badge")
+    book = PendingQr("book")
+    detail = PendingQr("detail")
+    key = badge + "|" + book + "|" + detail
+    if key = m.qrJobKey and m.qrTask <> invalid then return
+    m.qrJobKey = key
+    if m.qrTask <> invalid
+        m.qrTask.unobserveField("result")
+        m.qrTask.control = "STOP"
+        m.qrTask = invalid
+    end if
+    m.qrGeneration = m.qrGeneration + 1
+    task = CreateObject("roSGNode", "QrTask")
+    if task = invalid
+        print "Eaglewood: qr skip reason=task-create-failed"
+        m.qrJobKey = ""
+        return
+    end if
+    task.generation = m.qrGeneration
+    task.badgeUrl = badge
+    task.bookUrl = book
+    task.detailUrl = detail
+    task.observeField("result", "onQrReady")
+    m.qrTask = task
+    task.control = "RUN"
+end sub
+
+function PendingQr(slot as string) as string
+    if m.qrPending = invalid then return ""
+    value = m.qrPending.Lookup(slot)
+    if value = invalid then return ""
+    return value
+end function
+
+sub onQrReady()
+    task = m.qrTask
+    if task = invalid then return
+    result = task.result
+    if result = invalid then return
+    if result.generationText <> invalid and result.generationText <> "" and result.generationText <> m.qrGeneration.ToStr() then return
+    ApplyQrResult(result)
+end sub
+
+sub ApplyQrResult(result as object)
+    slot = AsText(result.slot)
+    remote = AsText(result.remote)
+    uri = AsText(result.uri)
+    ok = AsText(result.ok)
+    if uri = "" or uri = remote then ok = "no"
+    if slot = "badge"
+        if remote <> m.badgeRemote then return
+        if ok = "yes" and m.badgePoster <> invalid
+            m.badgeFailed = false
+            m.badgePoster.visible = true
+            m.badgePoster.uri = uri
+        else
+            m.badgeFailed = true
+            m.badgeReady = false
+            UpdateBadgeVisible()
+        end if
+        RememberQrFormat(slot, result)
+    else if slot = "book"
+        if remote <> m.bookQrUri then return
+        if ok = "yes" and m.bookQr <> invalid
+            m.bookQr.visible = true
+            m.bookQr.uri = uri
+        else
+            ShowBookQr(false)
+        end if
+        RememberQrFormat(slot, result)
+    else if slot = "detail"
+        if remote <> m.detailQrUri then return
+        if ok = "yes" and m.detailQr <> invalid
+            m.detailQrFailed = false
+            m.detailQr.visible = true
+            m.detailQr.uri = uri
+        else
+            m.detailQrFailed = true
+            ShowDetailQr(false)
+        end if
+        RememberQrFormat(slot, result)
+    end if
+end sub
+
+sub RememberQrFormat(slot as string, result as object)
+    if m.qrFormats = invalid then m.qrFormats = {}
+    m.qrFormats[slot] = "bitdepth=" + NumberText(result.bit) + " colortype=" + NumberText(result.color) + " interlace=" + NumberText(result.interlace) + " indexed=" + AsText(result.indexed)
+end sub
+
+function NumberText(value as object) as string
+    if value = invalid then return "0"
+    return value.ToStr()
+end function
+
+sub HoldFocus()
+    focused = true
+    try
+        focused = m.top.hasFocus()
+    catch err
+        focused = false
+        print "Eaglewood: layout error = "; LayoutErrorText(err)
+    end try
+    if focused = true then return
+    m.top.setFocus(true)
+    print "Eaglewood: focus restored"
+end sub

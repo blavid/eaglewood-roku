@@ -18,8 +18,24 @@ IMAGES = ROOT / "channel" / "images"
 SCENE_BRS = ROOT / "channel" / "components" / "MainScene.brs"
 SCENE_XML = ROOT / "channel" / "components" / "MainScene.xml"
 RULES_BRS = ROOT / "channel" / "components" / "GuestRules.brs"
-# These files run on the render thread. GuestRules.brs is included by the scene.
-RENDER_THREAD_FILES = (SCENE_BRS, SCENE_XML, RULES_BRS)
+GUIDE_UI_BRS = ROOT / "channel" / "components" / "GuideUi.brs"
+GUIDE_FORMAT_BRS = ROOT / "channel" / "components" / "GuideFormat.brs"
+GUIDE_MODEL_BRS = ROOT / "channel" / "components" / "GuideModel.brs"
+SEASON_BRS = ROOT / "channel" / "components" / "Season.brs"
+PHASE2_BRS = ROOT / "channel" / "components" / "Phase2Ui.brs"
+CARD_BRS = ROOT / "channel" / "components" / "ActivityCard.brs"
+# These files run on the render thread. The scene includes the guide scripts.
+RENDER_THREAD_FILES = (
+    SCENE_BRS,
+    SCENE_XML,
+    RULES_BRS,
+    GUIDE_UI_BRS,
+    GUIDE_FORMAT_BRS,
+    GUIDE_MODEL_BRS,
+    SEASON_BRS,
+    PHASE2_BRS,
+    CARD_BRS,
+)
 # roDateTime and roDeviceInfo are usable there. roSGNode is how the scene is built.
 RENDER_THREAD_CREATE = {"roSGNode", "roDeviceInfo", "roDateTime"}
 # Creating these logs "MAIN|TASK-only component failed on RENDER thread".
@@ -59,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "7",
+    "build_version": "11",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -261,8 +277,8 @@ def check_greeting_draws() -> None:
         fail("greeting Label must set font:LargeBoldSystemFont")
     if xml.find('id="background"') > xml.find('id="greeting"'):
         fail("greeting Label must come after the background Poster")
-    if 'width="1760"' not in xml or 'wrap="true"' not in xml or 'maxLines="2"' not in xml:
-        fail("greeting Label must wrap to two lines inside 1760px")
+    if 'width="1132"' not in xml or 'wrap="true"' not in xml or 'maxLines="2"' not in xml:
+        fail("greeting Label must wrap to two lines inside the 1132px home column")
     if 'm.greeting.font = "font:LargeBoldSystemFont"' not in source:
         fail("init must select the system font in BrightScript")
     if "m.greeting.text = text" not in source:
@@ -366,6 +382,64 @@ def check_no_secrets() -> None:
             fail(f"unexpected sensitive token {found.group(0)!r} in {path}")
 
 
+def check_guide() -> None:
+    task_path = ROOT / "channel" / "components" / "GuideTask.brs"
+    task_xml = ROOT / "channel" / "components" / "GuideTask.xml"
+    task = task_path.read_text(encoding="utf-8")
+    xml = task_xml.read_text(encoding="utf-8")
+    scene = SCENE_BRS.read_text(encoding="utf-8")
+    scene_xml = SCENE_XML.read_text(encoding="utf-8")
+    if 'extends="Task"' not in xml:
+        fail("guide fetch must run on a Task node")
+    if 'SetCertificatesFile("common:/certs/ca-bundle.crt")' not in task:
+        fail("guide fetch must set the CA bundle")
+    if "InitClientCertificates()" not in task:
+        fail("guide fetch must call InitClientCertificates")
+    if "If-None-Match" not in task:
+        fail("guide fetch must send If-None-Match")
+    if "cachefs:/eaglewood/guide.json" not in task or "pkg:/data/guide.json" not in task:
+        fail("guide fetch must read cachefs and the packaged snapshot")
+    if "cachefs:/eaglewood/checkout.json" not in task or "pkg:/data/checkout.json" not in task:
+        fail("checkout fetch must read cachefs and the packaged snapshot")
+    if "https://sunrivertownhome.com/data/guide.json" not in task:
+        fail("guide URL missing from GuideTask.brs")
+    if "https://sunrivertownhome.com/data/checkout.json" not in task:
+        fail("checkout URL missing from GuideTask.brs")
+    if 'duration="600"' not in scene_xml or "duration = 600" not in scene:
+        fail("idle timeout must be 600 seconds")
+    for needle in (
+        "Eaglewood: idle return home",
+        "Eaglewood: back exit",
+        "Eaglewood: focus restored",
+        "Eaglewood: screen=",
+    ):
+        if needle not in scene:
+            fail(f"MainScene.brs is missing {needle}")
+    for needle in (
+        'print "Eaglewood: guide version="',
+        'print "Eaglewood: checkout decision="',
+        '" request sent"',
+        '" response code="',
+        '" etag stored"',
+        '" etag match"',
+    ):
+        if needle not in task:
+            fail(f"GuideTask.brs is missing {needle}")
+    if "GetOneLineWidth" in task or "roFontRegistry" in task:
+        fail("guide task must not measure fonts")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "scripts" / "guide_snapshot.py"), "--check"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        detail = (result.stderr or result.stdout).strip()
+        fail(detail or "sanitized guide snapshot check failed")
+    print(result.stdout.strip())
+
+
 def check_zip() -> None:
     if not ZIP_PATH.is_file():
         print("skip zip (dist/eaglewood.zip not built)")
@@ -379,11 +453,80 @@ def check_zip() -> None:
         fail("zip is missing manifest at the archive root")
     if "components/secrets.brs" not in names:
         fail("zip is missing components/secrets.brs")
+    for name in ("data/guide.json", "data/checkout.json", "data/activities.json"):
+        if name not in names:
+            fail(f"zip is missing {name}")
+    if "data/wifi.json" in names or "data/wifi.png" in names:
+        fail("zip includes Wi-Fi secrets")
     if any(name.startswith("/") or name.startswith("\\") or ".." in name.split("/") for name in names):
         fail(f"zip has unsafe entry names: {names}")
     if any(name.startswith("channel/") for name in names):
         fail("zip wraps the channel in an extra folder")
     print(f"zip {size} bytes, {len(names)} entries")
+
+
+def check_phase2() -> None:
+    season = SEASON_BRS.read_text(encoding="utf-8")
+    phase2 = PHASE2_BRS.read_text(encoding="utf-8")
+    scene = SCENE_BRS.read_text(encoding="utf-8")
+    xml = SCENE_XML.read_text(encoding="utf-8")
+    config = CONFIG_BRS.read_text(encoding="utf-8")
+    if "function ResolveContentUrl(" not in season or "function ContentOrigin(" not in season:
+        fail("relative activity URLs must resolve against the site origin")
+    if "function WifiScreenMode(" not in season:
+        fail("Wi-Fi responses need a screen mode")
+    if 'return "pkg:/images/tv-placeholder.jpg"' not in season:
+        fail("the channel must bundle its own TV placeholder")
+    placeholder = IMAGES / "tv-placeholder.jpg"
+    if not placeholder.is_file():
+        fail("missing channel/images/tv-placeholder.jpg")
+    from PIL import Image
+
+    with Image.open(placeholder) as image:
+        if image.size != (64, 64):
+            fail(f"tv-placeholder.jpg is {image.size}, expected 64x64")
+    if "Wi-Fi details coming soon" not in phase2:
+        fail("a 503 with no cache must show the coming-soon line")
+    if "Book your next stay direct and save!" not in phase2:
+        fail("the home strip needs the direct-booking headline")
+    if "Wi-Fi details couldn't load right now." not in phase2:
+        fail("Wi-Fi fallback needs the host message")
+    if "function NetworkValue(" not in phase2:
+        fail("the Wi-Fi network value must drop a Network name prefix")
+    if "function HomePromptTitle(" not in phase2:
+        fail("the home strip title must come from HomePromptTitle")
+    png = (ROOT / "channel" / "components" / "PngRgb.brs").read_text(encoding="utf-8")
+    wifi = (ROOT / "channel" / "components" / "WifiTask.brs").read_text(encoding="utf-8")
+    if "function ExpandPngBytes(" not in png or "function SafeUri(" not in png:
+        fail("QR PNGs need the indexed rewrite and a redacted URI")
+    if "function StorePngBytes(" not in png or "tmp:/" not in png:
+        fail("QR saves must try cachefs and then tmp")
+    if "function WithQrVersion(" not in season or "?v=rgb2" not in season or "&v=rgb2" not in season:
+        fail("public QR URLs must add v=rgb2")
+    if "sub ClearStaleQrCache(" not in png or "qrCacheVersion" not in png:
+        fail("startup must clear stale QR cache once per version")
+    if "ClearStaleQrCache()" not in scene:
+        fail("startup must clear the stale QR cache")
+    if "wifi png format bitdepth=" not in wifi:
+        fail("wifi png format must be logged")
+    if 'print "Eaglewood: poster ' not in phase2 or 'print "Eaglewood: qr ' not in phase2:
+        fail("poster loadStatus must be logged for late debug consoles")
+    for path in channel_text_files():
+        if "cornerRadius" in path.read_text(encoding="utf-8", errors="replace"):
+            fail(f"{path.relative_to(ROOT)} sets cornerRadius, which this firmware rejects")
+    if 'duration="21600"' not in xml or "duration = 21600" not in scene:
+        fail("guide and Wi-Fi refresh must be 21600 seconds")
+    if "zone=prompt" not in scene:
+        fail("Home must open on the Book Direct strip")
+    if "function WifiJsonUrl(" not in config or "function WifiPngUrl(" not in config:
+        fail("Wi-Fi URLs must be built beside the guest URL")
+    if 'bookingUrl: "https://book.sunrivertownhome.com"' not in season:
+        fail("the corner badge must target the booking host")
+    for path in channel_text_files():
+        if 'return "sunrivertownhome.com"' in path.read_text(encoding="utf-8", errors="replace"):
+            fail(f"{path.relative_to(ROOT)} returns the site domain as a bare literal")
+    if (ROOT / "channel" / "data" / "wifi.json").exists() or (ROOT / "channel" / "data" / "wifi.png").exists():
+        fail("Wi-Fi credentials must not sit in channel/data")
 
 
 def main() -> None:
@@ -393,6 +536,8 @@ def main() -> None:
     check_render_thread()
     check_greeting_draws()
     check_guest_fetch()
+    check_guide()
+    check_phase2()
     check_secret_file_is_untracked()
     check_no_secrets()
     check_zip()

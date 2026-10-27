@@ -60,27 +60,48 @@ else
     python3 "$ROOT/scripts/write_guest_secrets.py" --dest "$STAGE/components/secrets.brs" --key-from-env
 fi
 
-mkdir -p "$OUT"
+mkdir -p "$OUT/snapshot"
+python3 "$ROOT/scripts/guide_snapshot.py" --into-stage "$STAGE" --snapshot-dir "$OUT/snapshot"
+
 rm -f "$ZIP"
 (
     cd "$STAGE"
-    zip -r -X -D "$ZIP" manifest source components images -x '*.DS_Store' -x '*/.DS_Store'
+    zip -r -X -D "$ZIP" manifest source components images data -x '*.DS_Store' -x '*/.DS_Store'
 )
 
 python3 - "$ZIP" <<'PY'
 import sys
 import zipfile
 
+import json
+
 path = sys.argv[1]
+required = ("manifest", "components/secrets.brs", "data/guide.json", "data/checkout.json", "data/activities.json")
 with zipfile.ZipFile(path) as archive:
     names = archive.namelist()
-missing = [name for name in ("manifest", "components/secrets.brs") if name not in names]
-if missing:
-    sys.stderr.write("Package is missing " + ", ".join(missing) + ".\n")
-    sys.exit(1)
-if any(name.startswith("channel/") for name in names):
-    sys.stderr.write("Package wraps the channel in an extra folder.\n")
-    sys.exit(1)
+    missing = [name for name in required if name not in names]
+    if missing:
+        sys.stderr.write("Package is missing " + ", ".join(missing) + ".\n")
+        sys.exit(1)
+    if any(name.startswith("channel/") for name in names):
+        sys.stderr.write("Package wraps the channel in an extra folder.\n")
+        sys.exit(1)
+    if "data/wifi.json" in names or "data/wifi.png" in names:
+        sys.stderr.write("Package must not include Wi-Fi secrets.\n")
+        sys.exit(1)
+    for name in ("data/guide.json", "data/checkout.json", "data/activities.json"):
+        try:
+            payload = json.loads(archive.read(name).decode("utf-8"))
+        except (UnicodeError, json.JSONDecodeError):
+            sys.stderr.write(name + " is not UTF-8 JSON.\n")
+            sys.exit(1)
+        if not isinstance(payload, dict):
+            sys.stderr.write(name + " is not a JSON object.\n")
+            sys.exit(1)
+    activities = json.loads(archive.read("data/activities.json").decode("utf-8"))
+    if not isinstance(activities.get("activitySections"), list):
+        sys.stderr.write("data/activities.json is missing activitySections.\n")
+        sys.exit(1)
 PY
 
 bytes="$(wc -c < "$ZIP" | tr -d ' ')"
