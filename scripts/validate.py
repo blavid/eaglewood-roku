@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "20",
+    "build_version": "21",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -532,10 +532,10 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 20 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 21 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 20 "' not in scene:
-        fail("startup must log build 20 and the commit")
+    if 'print "Eaglewood: build 21 "' not in scene:
+        fail("startup must log build 21 and the commit")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
     if 'id="finalUri"' not in qr_xml or "alwaysNotify" not in qr_xml:
         fail("each QR task needs a finalUri field")
@@ -565,8 +565,10 @@ def check_phase2() -> None:
         fail("public QR bytes must be written to the final file and checked with Exists")
     if "incoming.tmp" in qr_task or ".Rename(" in qr_task:
         fail("public QR saves must not use a temp file or rename")
-    if "qrUrl: qr" not in season or "function ChooseActivities(" not in season:
+    if 'item["qrUrl"] = qr' not in season or 'item["qrUri"] = qr' not in season or "function ChooseActivities(" not in season:
         fail("activity qrUrl must be passed through to the detail item")
+    if "function AaField(" not in GUIDE_MODEL_BRS.read_text(encoding="utf-8"):
+        fail("activity fields must be read by the exact key and the lowercase key")
     if "function QrContentFileName(" not in png or "function CommitQrBytes(" not in png:
         fail("QR files must be content-named")
     if 'print "Eaglewood: heartbeat"' not in scene or 'id="heartbeatTimer"' not in xml:
@@ -600,6 +602,8 @@ def check_phase2() -> None:
     detail = phase2[phase2.find("function BuildDetailPane("):phase2.find("sub PaintPhase2(")]
     if "m.detailQrMark" not in detail or detail.find("m.detailQrMark") > detail.find("pane.appendChild(m.detailQr)"):
         fail("the detail poster must be appended after its placeholder")
+    if "function DetailQrCardRect(" not in phase2 or "DetailQrCardRect()" not in detail:
+        fail("the detail QR card must use one screen rect")
     if "group.translation = [1496, 830]" not in badge:
         fail("the badge group must stay at the build 18 corner")
     if "m.badgePoster.translation = [46, 42]" not in badge or "m.badgePoster.width = 128" not in badge:
@@ -611,8 +615,9 @@ def check_phase2() -> None:
     guide = GUIDE_UI_BRS.read_text(encoding="utf-8")
     if "m.buildLabel" in guide or "BuildStampLine()" in guide:
         fail("the build number stays in the startup log, not on Home")
-    if "RaiseBadge()" not in guide or "sub RaiseBadge(" not in phase2:
-        fail("the corner badge must be raised above later panes")
+    show = guide[guide.find("sub ShowSection("):guide.find("sub PaintAll(")]
+    if "RaiseBadge()" not in show or "sub RaiseBadge(" not in phase2:
+        fail("the corner badge must be raised above the detail pane")
     if "function QrRectText(" not in phase2 or "caption badge rect=" not in phase2:
         fail("caption and Checkout rects must be logged")
     if 'print "Eaglewood: qr ' not in phase2:

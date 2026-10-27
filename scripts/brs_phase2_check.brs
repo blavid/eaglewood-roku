@@ -363,6 +363,44 @@ sub Main()
         failed = failed + 1
     end if
 
+    wanted = "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png?v=rgb2"
+    if norm = invalid
+        print "FAIL the detail activity did not stay normalized"
+        failed = failed + 1
+    else if not IsList(norm.items)
+        print "FAIL the detail activity did not stay normalized"
+        failed = failed + 1
+    else if norm.items.Count() <> 1
+        print "FAIL the detail activity did not stay normalized"
+        failed = failed + 1
+    else
+        copied = DecodeList(EncodeJson(norm.items))
+        if copied.Count() <> 1 or DetailQrUrl(copied[0]) <> wanted
+            print "FAIL the scene activity copy dropped qrUrl"
+            failed = failed + 1
+        end if
+    end if
+    folded = ParseJson("{""id"":""viator-ebike-tour"",""qrurl"":""https://sunrivertownhome.com/data/qr/viator-ebike-tour.png?v=rgb2""}")
+    if DetailQrUrl(folded) <> wanted
+        print "FAIL a lowercase qrurl did not reach the detail screen"
+        failed = failed + 1
+    end if
+    card = DetailQrCardRect()
+    photo = DetailPhotoRect()
+    body = DetailBodyRect()
+    if RectOnScreen(card) <> true or RectOnScreen(BadgeFrame()) <> true
+        print "FAIL the detail QR card or corner badge is off the FHD screen"
+        failed = failed + 1
+    end if
+    if RectsClear(card, photo, 0) <> true or RectsClear(card, body, 0) <> true
+        print "FAIL the detail QR card overlaps the photo or description"
+        failed = failed + 1
+    end if
+    if RectsClear(BadgeFrame(), card, 0) <> true or RectsClear(BadgeFrame(), photo, 0) <> true or RectsClear(BadgeFrame(), body, 0) <> true
+        print "FAIL the corner badge overlaps the detail photo, description, or QR card"
+        failed = failed + 1
+    end if
+
     if failed = 0 then print "brs phase2 checks passed"
 end sub
 

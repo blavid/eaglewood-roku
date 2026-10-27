@@ -279,21 +279,23 @@ function BuildDetailPane(parent as object) as object
     m.detailName.vertAlign = "top"
     m.detailName.maxLines = 3
     m.detailPhoto = CreateObject("roSGNode", "Poster")
-    m.detailPhoto.translation = [ContentLeft(), ContentTop() + 140]
-    m.detailPhoto.width = 700
-    m.detailPhoto.height = 260
+    photo = DetailPhotoRect()
+    m.detailPhoto.translation = [photo.x, photo.y]
+    m.detailPhoto.width = photo.w
+    m.detailPhoto.height = photo.h
     m.detailPhoto.loadWidth = 640
     m.detailPhoto.loadHeight = 360
     m.detailPhoto.loadDisplayMode = "scaleToZoom"
     m.detailPhoto.failedBitmapUri = PlaceholderPoster()
     pane.appendChild(m.detailPhoto)
     m.detailPhoto.observeField("loadStatus", "onDetailPhotoStatus")
-    cardX = ContentLeft() + 740
-    cardY = ContentTop() + 140
-    qrCard = AddRect(pane, "0xFFFFFFF2", cardX, cardY, 280, 280)
+    card = DetailQrCardRect()
+    cardX = card.x
+    cardY = card.y
+    qrCard = AddRect(pane, "0xFFFFFFF2", cardX, cardY, card.w, card.h)
     qrCard.visible = false
     m.detailQrCard = qrCard
-    m.detailQrMark = AddRect(pane, QrMarkColor(), cardX, cardY, 280, 280)
+    m.detailQrMark = AddRect(pane, QrMarkColor(), cardX, cardY, card.w, card.h)
     m.detailQrMark.visible = false
     place = AddLabel(pane, "This place", "font:SmallBoldSystemFont", "0x1C1408FF", cardX + 16, cardY + 6, 248, 36)
     place.horizAlign = "center"
@@ -315,14 +317,15 @@ function BuildDetailPane(parent as object) as object
     m.detailQr.visible = false
     pane.appendChild(m.detailQr)
     m.detailQr.observeField("loadStatus", "onDetailQrStatus")
-    m.detailQrCaption = AddLabel(pane, "", QrCaptionFont(), QrCaptionColor(), cardX, cardY + 248, 280, 28)
+    m.detailQrCaption = AddLabel(pane, "", QrCaptionFont(), QrCaptionColor(), cardX, cardY + card.h - 32, card.w, 28)
     m.detailQrCaption.horizAlign = "center"
     m.detailQrCaption.visible = false
-    m.detailQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", "0x1C1408FF", cardX, cardY + 248, 280, 28)
+    m.detailQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", "0x1C1408FF", cardX, cardY + card.h - 32, card.w, 28)
     m.detailQrMissing.horizAlign = "center"
     m.detailQrMissing.visible = false
     m.detailMeta = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 432, ContentWidth(), 36)
-    m.detailBody = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), ContentLeft(), ContentTop() + 472, ContentWidth(), 200)
+    body = DetailBodyRect()
+    m.detailBody = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), body.x, body.y, body.w, body.h)
     m.detailBody.vertAlign = "top"
     m.detailBody.maxLines = 6
     m.detailTip = AddLabel(pane, "", "font:SmallBoldSystemFont", AmberColor(), ContentLeft(), ContentTop() + 680, 700, 48)
@@ -790,7 +793,7 @@ end function
 
 function ItemText(item as object, key as string) as string
     if not IsAssoc(item) then return ""
-    return GuideLimitedText(item.Lookup(key), 420)
+    return GuideLimitedText(AaField(item, key), 420)
 end function
 
 function SwatchFor(index as integer) as string
@@ -894,6 +897,15 @@ sub LogDetailOpen()
     id = ItemText(item, "id")
     qr = DetailQrForItem(item)
     print "Eaglewood: detail open id="; id; " qrUrl="; qr
+    print "Eaglewood: detail card rect="; ScreenRectText(DetailQrCardRect())
+end sub
+
+sub LogDetailBadge()
+    shown = "false"
+    if m.badgeGroup <> invalid
+        if m.badgeGroup.visible = true then shown = "true"
+    end if
+    print "Eaglewood: detail badge shown="; shown; " rect="; ScreenRectText(BadgeFrame())
 end sub
 
 function DetailQrForItem(item as object) as string
@@ -1092,6 +1104,32 @@ function BadgePosterFailed() as boolean
     status = poster.loadStatus
     if status = "failed" or status = "error" then return true
     return false
+end function
+
+function DetailPhotoRect() as object
+    return { x: ContentLeft(), y: ContentTop() + 140, w: 700, h: 260 }
+end function
+
+function DetailQrCardRect() as object
+    return { x: ContentLeft() + 740, y: ContentTop() + 140, w: 280, h: 280 }
+end function
+
+function DetailBodyRect() as object
+    return { x: ContentLeft(), y: ContentTop() + 472, w: ContentWidth(), h: 200 }
+end function
+
+function RectOnScreen(rect as object) as boolean
+    if rect = invalid then return false
+    if rect.x < 0 or rect.y < 0 then return false
+    if rect.w < 1 or rect.h < 1 then return false
+    if rect.x + rect.w > 1920 then return false
+    if rect.y + rect.h > 1080 then return false
+    return true
+end function
+
+function ScreenRectText(rect as object) as string
+    if rect = invalid then return "0,0 0x0"
+    return rect.x.ToStr() + "," + rect.y.ToStr() + " " + rect.w.ToStr() + "x" + rect.h.ToStr()
 end function
 
 function RectsClear(a as object, b as object, gap as integer) as boolean

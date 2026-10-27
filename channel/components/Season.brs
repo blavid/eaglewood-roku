@@ -106,9 +106,9 @@ end function
 
 function RankFor(activity as object, season as string) as integer
     if not IsAssoc(activity) then return 0
-    ranks = activity.Lookup("seasonRank")
+    ranks = AaField(activity, "seasonRank")
     if not IsAssoc(ranks) then return 0
-    return PositiveRank(ranks.Lookup(season))
+    return PositiveRank(AaField(ranks, season))
 end function
 
 function PositiveRank(value as object) as integer
@@ -134,7 +134,7 @@ end function
 
 function SourceIndexOf(item as object) as integer
     if not IsAssoc(item) then return 0
-    value = item.Lookup("sourceIndex")
+    value = AaField(item, "sourceIndex")
     if value = invalid then return 0
     return GuideInt(value)
 end function
@@ -177,7 +177,7 @@ end function
 
 function ItemOnScreen(item as object, screen as string) as boolean
     if not IsAssoc(item) then return false
-    section = GuideLimitedText(item.Lookup("sectionId"), 80)
+    section = GuideLimitedText(AaField(item, "sectionId"), 80)
     if screen = "dining" then return section = "dining"
     if screen = "hiking" then return section = "hiking"
     if screen = "todo"
@@ -195,8 +195,8 @@ function ActivitiesQrCount(items as object) as integer
     for index = 0 to last
         item = items[index]
         if IsAssoc(item)
-            qr = GuideLimitedText(item.Lookup("qrUrl"), 420)
-            if qr = "" then qr = GuideLimitedText(item.Lookup("qrUri"), 420)
+            qr = GuideLimitedText(AaField(item, "qrUrl"), 420)
+            if qr = "" then qr = GuideLimitedText(AaField(item, "qrUri"), 420)
             if qr <> "" then total = total + 1
         end if
     end for
@@ -329,13 +329,13 @@ end function
 
 function ActivityIdIs(item as object, id as string) as boolean
     if not IsAssoc(item) then return false
-    return GuideLimitedText(item.Lookup("id"), 80) = id
+    return GuideLimitedText(AaField(item, "id"), 80) = id
 end function
 
 function ActivityHasQr(item as object) as boolean
     if not IsAssoc(item) then return false
-    if GuideLimitedText(item.Lookup("qrUrl"), 420) <> "" then return true
-    if GuideLimitedText(item.Lookup("qrUri"), 420) <> "" then return true
+    if GuideLimitedText(AaField(item, "qrUrl"), 420) <> "" then return true
+    if GuideLimitedText(AaField(item, "qrUri"), 420) <> "" then return true
     return false
 end function
 
@@ -425,9 +425,9 @@ end function
 function ActivityQr(item as object) as string
     if not IsAssoc(item) then return ""
     ' Plain url only. affiliateUrl is reserved and must not become a QR.
-    link = GuideLimitedText(item.Lookup("url"), 400)
+    link = GuideLimitedText(AaField(item, "url"), 400)
     if link = "" then return ""
-    given = ResolveContentUrl(item.Lookup("qrUrl"))
+    given = ResolveContentUrl(AaField(item, "qrUrl"))
     if PosterKindOk(given) then return WithQrVersion(given)
     return ""
 end function
@@ -482,39 +482,45 @@ function NormalizeActivities(parsed as object) as object
     }
 end function
 
+function SeasonRankRecord(ranks as object) as object
+    record = {}
+    record["winter"] = PositiveRank(AaField(ranks, "winter"))
+    record["spring"] = PositiveRank(AaField(ranks, "spring"))
+    record["summer"] = PositiveRank(AaField(ranks, "summer"))
+    record["fall"] = PositiveRank(AaField(ranks, "fall"))
+    return record
+end function
+
 function SlimActivity(raw as object, sectionId as string, sourceIndex as integer) as object
     if not IsAssoc(raw) then return invalid
-    name = GuideLimitedText(raw.Lookup("name"), 120)
+    name = GuideLimitedText(AaField(raw, "name"), 120)
     if name = "" then name = "Untitled"
     poster = ActivityPoster(raw)
-    ranks = raw.Lookup("seasonRank")
+    ranks = AaField(raw, "seasonRank")
     if not IsAssoc(ranks) then ranks = {}
     qr = ActivityQr(raw)
-    return {
-        id: GuideLimitedText(raw.Lookup("id"), 80),
-        name: name,
-        description: GuideLimitedText(raw.Lookup("description"), 420),
-        distance: GuideLimitedText(raw.Lookup("distance"), 80),
-        trailDistance: GuideLimitedText(raw.Lookup("trailDistance"), 120),
-        difficulty: GuideLimitedText(raw.Lookup("difficulty"), 40),
-        gettingThere: GuideLimitedText(raw.Lookup("gettingThere"), 220),
-        seasonLabel: GuideLimitedText(raw.Lookup("seasonLabel"), 80),
-        tip: GuideLimitedText(raw.Lookup("tip"), 180),
-        url: GuideLimitedText(raw.Lookup("url"), 400),
-        qrUrl: qr,
-        qrUri: qr,
-        poster: poster.poster,
-        posterFallback: poster.posterFallback,
-        credit: CreditLine(raw.Lookup("imageCredit")),
-        sectionId: sectionId,
-        sourceIndex: sourceIndex,
-        seasonRank: {
-            winter: PositiveRank(ranks.Lookup("winter")),
-            spring: PositiveRank(ranks.Lookup("spring")),
-            summer: PositiveRank(ranks.Lookup("summer")),
-            fall: PositiveRank(ranks.Lookup("fall"))
-        }
-    }
+    ' An AA literal lowercases qrUrl and seasonRank. FormatJson then writes
+    ' those short names, and the scene's case-sensitive ParseJson misses them.
+    item = {}
+    item["id"] = GuideLimitedText(AaField(raw, "id"), 80)
+    item["name"] = name
+    item["description"] = GuideLimitedText(AaField(raw, "description"), 420)
+    item["distance"] = GuideLimitedText(AaField(raw, "distance"), 80)
+    item["trailDistance"] = GuideLimitedText(AaField(raw, "trailDistance"), 120)
+    item["difficulty"] = GuideLimitedText(AaField(raw, "difficulty"), 40)
+    item["gettingThere"] = GuideLimitedText(AaField(raw, "gettingThere"), 220)
+    item["seasonLabel"] = GuideLimitedText(AaField(raw, "seasonLabel"), 80)
+    item["tip"] = GuideLimitedText(AaField(raw, "tip"), 180)
+    item["url"] = GuideLimitedText(AaField(raw, "url"), 400)
+    item["qrUrl"] = qr
+    item["qrUri"] = qr
+    item["poster"] = poster.poster
+    item["posterFallback"] = poster.posterFallback
+    item["credit"] = CreditLine(AaField(raw, "imageCredit"))
+    item["sectionId"] = sectionId
+    item["sourceIndex"] = sourceIndex
+    item["seasonRank"] = SeasonRankRecord(ranks)
+    return item
 end function
 
 function DefaultSavingsText() as string

@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 20 "; BuildCommit()
+    print "Eaglewood: build 21 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -605,6 +605,8 @@ function OpenActivityDetail() as boolean
     ShowSection(m.section)
     print "Eaglewood: screen="; m.section; " zone=item"
     UpdateBadgeVisible()
+    RaiseBadge()
+    LogDetailBadge()
     HoldFocus()
     return true
 end function

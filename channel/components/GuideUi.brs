@@ -111,7 +111,7 @@ function AsText(value as object) as string
     if value = invalid then return ""
     kind = type(value)
     if kind <> "String" and kind <> "roString" then return ""
-    return value
+    return Left(value, Len(value))
 end function
 
 function OrText(value as object, fallback as string) as string
@@ -367,6 +367,8 @@ sub ShowSection(section as string)
     ShowQrFrame("detail", QrRemote("detail") <> "")
     ReassignStoredQrs()
     LogQrScreen()
+    ' Detail is a later shell child. Keep the Home badge above it.
+    RaiseBadge()
 end sub
 
 sub PaintAll()
