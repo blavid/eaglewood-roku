@@ -40,6 +40,14 @@ sub Main()
         print "FAIL an empty URI was logged"
         failed = failed + 1
     end if
+    if StaleQrCacheName("qr-badge.png") <> true or StaleQrCacheName("qr-book.url") <> true
+        print "FAIL a cached QR name was kept"
+        failed = failed + 1
+    end if
+    if StaleQrCacheName("wifi.png") <> false or StaleQrCacheName("guide.json") <> false or StaleQrCacheName("photo.png") <> false
+        print "FAIL a non-QR cache file was selected"
+        failed = failed + 1
+    end if
 
     if failed = 0 then print "brs png checks passed"
 end sub

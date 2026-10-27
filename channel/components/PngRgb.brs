@@ -52,15 +52,24 @@ function ExpandPngFile(srcPath as string, destPath as string) as object
     if wrapped = invalid
         result = PngResult()
         result.reason = "bad-png"
+        result.path = ""
         return result
     end if
     result = ExpandPngBytes(wrapped)
+    result.path = ""
     if result.ok <> true then return result
-    if result.converted <> true and srcPath = destPath then return result
-    if WriteBufToFile(destPath, result.bytes) <> true
-        result.ok = false
-        result.reason = "cache-write"
+    if result.converted <> true and srcPath = destPath
+        result.path = destPath
+        return result
     end if
+    stored = StorePngBytes(result.bytes, destPath, TmpFallbackPath(destPath))
+    if stored <> ""
+        result.path = stored
+        return result
+    end if
+    result.ok = false
+    result.reason = "cache-write"
+    result.path = ""
     return result
 end function
 
@@ -91,7 +100,8 @@ function PngResult() as object
         color: -1,
         interlace: 0,
         converted: false,
-        bytes: invalid
+        bytes: invalid,
+        path: ""
     }
 end function
 
@@ -168,28 +178,188 @@ function ReadFileBytes(path as string) as object
     return AsBuf(raw)
 end function
 
+function TmpFallbackPath(cachePath as string) as string
+    marker = "cachefs:/"
+    if cachePath = invalid or cachePath = "" then return "tmp:/eaglewood/qr-fallback.png"
+    if Left(cachePath, Len(marker)) = marker then return "tmp:/" + Mid(cachePath, Len(marker) + 1)
+    return "tmp:/eaglewood/qr-fallback.png"
+end function
+
+function StorePngBytes(buf as object, cachePath as string, tmpPath as string) as string
+    if WriteBufToFile(cachePath, buf) = true then return cachePath
+    if tmpPath <> invalid and tmpPath <> "" and tmpPath <> cachePath
+        if WriteBufToFile(tmpPath, buf) = true then return tmpPath
+    end if
+    return ""
+end function
+
 function WriteBufToFile(path as string, buf as object) as boolean
-    if buf = invalid then return false
-    raw = buf.data
-    if type(raw) = "roByteArray" and raw.Count() = buf.n
-        wrote = raw.WriteFile(path)
-        if wrote = true then return true
+    if buf = invalid or path = invalid or path = "" or buf.n < 8 then return false
+    EnsureParentDir(path)
+    out = CopyToByteArray(buf)
+    if out = invalid
+        print "Eaglewood: file write path="; path; " result=no-bytes"
         return false
     end if
-    out = CreateObject("roByteArray")
-    if out = invalid then return false
-    out.SetResize(buf.n, true)
-    if out.Count() < buf.n then return false
-    last = buf.n - 1
-    if last >= 0
-        for index = 0 to last
-            out[index] = BufAt(buf, index)
-        end for
-    end if
+    fs = CreateObject("roFileSystem")
+    if fs <> invalid then fs.Delete(path)
     wrote = out.WriteFile(path)
-    if wrote = true then return true
+    print "Eaglewood: file write path="; path; " result="; WriteResultText(wrote); " bytes="; out.Count()
+    if wrote <> true then return false
+    size = FileSize(path)
+    if size = 0 then return false
+    return true
+end function
+
+function CopyToByteArray(buf as object) as object
+    if buf = invalid or buf.n < 1 then return invalid
+    out = CreateObject("roByteArray")
+    if out = invalid then return invalid
+    last = buf.n - 1
+    for index = 0 to last
+        out.Push(BufAt(buf, index))
+        if out.Count() <> index + 1 then return ByteArrayFromHex(buf)
+    end for
+    if out.Count() = buf.n then return out
+    return ByteArrayFromHex(buf)
+end function
+
+function ByteArrayFromHex(buf as object) as object
+    hex = ""
+    last = buf.n - 1
+    if last < 0 then return invalid
+    for index = 0 to last
+        hex = hex + HexByte(BufAt(buf, index))
+    end for
+    out = CreateObject("roByteArray")
+    if out = invalid then return invalid
+    out.FromHexString(hex)
+    if out.Count() <> buf.n then return invalid
+    return out
+end function
+
+function HexByte(value as integer) as string
+    digits = "0123456789ABCDEF"
+    hi = value \ 16
+    lo = value mod 16
+    if hi < 0 or hi > 15 then hi = 0
+    if lo < 0 or lo > 15 then lo = 0
+    return Mid(digits, hi + 1, 1) + Mid(digits, lo + 1, 1)
+end function
+
+function EnsureParentDir(path as string) as boolean
+    parent = ParentPath(path)
+    if parent = "" then return false
+    fs = CreateObject("roFileSystem")
+    if fs = invalid
+        print "Eaglewood: file write path="; parent; " result=no-fs"
+        return false
+    end if
+    if fs.Stat(parent) <> invalid
+        print "Eaglewood: file write path="; parent; " result=exists"
+        return true
+    end if
+    made = fs.CreateDirectory(parent)
+    print "Eaglewood: file write path="; parent; " result="; WriteResultText(made)
+    if made = true then return true
+    if fs.Stat(parent) <> invalid then return true
     return false
 end function
+
+function ParentPath(path as string) as string
+    if path = invalid or path = "" then return ""
+    slash = 0
+    index = Len(path)
+    while index > 0
+        if Mid(path, index, 1) = "/"
+            slash = index
+            exit while
+        end if
+        index = index - 1
+    end while
+    if slash < 2 then return ""
+    return Left(path, slash - 1)
+end function
+
+function FileSize(path as string) as integer
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return -1
+    stat = fs.Stat(path)
+    if stat = invalid or stat.size = invalid then return -1
+    return stat.size
+end function
+
+function WriteResultText(value as object) as string
+    if value = invalid then return "invalid"
+    if value = true then return "true"
+    if value = false then return "false"
+    return value.ToStr()
+end function
+
+' Drop grayscale QR files left from before ?v=rgb2. Runs once per version.
+' wifi.png, wifi.json, and the guide JSON stay put.
+sub ClearStaleQrCache()
+    version = "rgb2"
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section <> invalid
+        saved = section.Read("qrCacheVersion")
+        if saved = version then return
+    end if
+    DeleteStaleQrFiles("cachefs:/eaglewood")
+    DeleteStaleQrFiles("tmp:/eaglewood")
+    DeleteStaleQrFiles("tmp:/")
+    if section <> invalid
+        section.Write("qrCacheVersion", version)
+        section.Flush()
+    end if
+    print "Eaglewood: qr cache cleared version="; version
+end sub
+
+sub DeleteStaleQrFiles(dir as string)
+    fs = CreateObject("roFileSystem")
+    if fs = invalid or dir = invalid or dir = "" then return
+    known = ["qr-badge.png", "qr-book.png", "qr-detail.png", "qr-next.png", "qr-badge.url", "qr-book.url", "qr-detail.url", "qr-fallback.png"]
+    last = known.Count() - 1
+    for index = 0 to last
+        DeleteOneQrFile(fs, JoinFs(dir, known[index]))
+    end for
+    listing = fs.GetDirectoryListing(dir)
+    if listing = invalid then return
+    count = listing.Count()
+    if count = invalid or count < 1 then return
+    last = count - 1
+    for index = 0 to last
+        name = listing[index]
+        if StaleQrCacheName(name) then DeleteOneQrFile(fs, JoinFs(dir, name))
+    end for
+end sub
+
+function JoinFs(dir as string, name as string) as string
+    if dir = invalid or dir = "" then return name
+    if Right(dir, 1) = "/" then return dir + name
+    return dir + "/" + name
+end function
+
+function StaleQrCacheName(name as object) as boolean
+    if name = invalid then return false
+    kind = type(name)
+    if kind <> "String" and kind <> "roString" then return false
+    if Instr(1, name, "/") > 0 or Instr(1, name, ":") > 0 then return false
+    lower = LCase(name)
+    if Instr(1, lower, "wifi") > 0 then return false
+    if Instr(1, lower, "qr") < 1 then return false
+    if Right(lower, 4) = ".png" then return true
+    if Right(lower, 4) = ".url" then return true
+    return false
+end function
+
+sub DeleteOneQrFile(fs as object, path as string)
+    if fs = invalid or path = invalid or path = "" then return
+    if fs.Stat(path) = invalid then return
+    removed = fs.Delete(path)
+    print "Eaglewood: qr cache delete path="; path; " result="; WriteResultText(removed)
+end sub
+
 
 function AsBuf(src as object) as object
     if src = invalid then return { data: [], n: 0 }

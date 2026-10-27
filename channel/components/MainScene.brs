@@ -1,4 +1,5 @@
 sub init()
+    ClearStaleQrCache()
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
     m.idleTimer = m.top.findNode("idleTimer")
@@ -13,6 +14,7 @@ sub init()
     m.qrGeneration = 0
     m.qrJobKey = ""
     m.qrFormats = {}
+    m.qrPending = {}
     m.shell = invalid
     m.zone = "prompt"
     m.section = "home"
@@ -781,16 +783,19 @@ sub onRefresh()
     startWifiFetch()
 end sub
 
-sub EnsureQrJobs()
-    badge = ""
-    book = ""
-    detail = ""
-    if m.badgeRemote <> invalid then badge = m.badgeRemote
-    if m.bookQrUri <> invalid then book = m.bookQrUri
-    if m.detailQrUri <> invalid then detail = m.detailQrUri
+sub StartQrFallback(slot as string)
+    url = ""
+    if slot = "badge" and m.badgeRemote <> invalid then url = m.badgeRemote
+    if slot = "book" and m.bookQrUri <> invalid then url = m.bookQrUri
+    if slot = "detail" and m.detailQrUri <> invalid then url = m.detailQrUri
+    if url = "" then return
+    if m.qrPending = invalid then m.qrPending = {}
+    m.qrPending[slot] = url
+    badge = PendingQr("badge")
+    book = PendingQr("book")
+    detail = PendingQr("detail")
     key = badge + "|" + book + "|" + detail
     if key = m.qrJobKey and m.qrTask <> invalid then return
-    if badge = "" and book = "" and detail = "" then return
     m.qrJobKey = key
     if m.qrTask <> invalid
         m.qrTask.unobserveField("result")
@@ -813,6 +818,13 @@ sub EnsureQrJobs()
     task.control = "RUN"
 end sub
 
+function PendingQr(slot as string) as string
+    if m.qrPending = invalid then return ""
+    value = m.qrPending.Lookup(slot)
+    if value = invalid then return ""
+    return value
+end function
+
 sub onQrReady()
     task = m.qrTask
     if task = invalid then return
@@ -827,39 +839,37 @@ sub ApplyQrResult(result as object)
     remote = AsText(result.remote)
     uri = AsText(result.uri)
     ok = AsText(result.ok)
+    if uri = "" or uri = remote then ok = "no"
     if slot = "badge"
         if remote <> m.badgeRemote then return
-        if ok = "yes" and uri <> "" and m.badgePoster <> invalid
+        if ok = "yes" and m.badgePoster <> invalid
             m.badgeFailed = false
+            m.badgePoster.visible = true
             m.badgePoster.uri = uri
         else
             m.badgeFailed = true
             m.badgeReady = false
-            if m.badgeMissing <> invalid then m.badgeMissing.text = "Link unavailable offline."
             UpdateBadgeVisible()
         end if
         RememberQrFormat(slot, result)
     else if slot = "book"
         if remote <> m.bookQrUri then return
-        if ok = "yes" and uri <> "" and m.bookQr <> invalid
+        if ok = "yes" and m.bookQr <> invalid
+            m.bookQr.visible = true
             m.bookQr.uri = uri
-        else if m.bookQrMissing <> invalid
-            m.bookQr.visible = false
-            m.bookQrMissing.text = "Link unavailable offline."
+        else
+            ShowBookQr(false)
         end if
         RememberQrFormat(slot, result)
     else if slot = "detail"
         if remote <> m.detailQrUri then return
-        if ok = "yes" and uri <> "" and m.detailQr <> invalid
+        if ok = "yes" and m.detailQr <> invalid
             m.detailQrFailed = false
+            m.detailQr.visible = true
             m.detailQr.uri = uri
         else
             m.detailQrFailed = true
-            if m.detailQr <> invalid then m.detailQr.visible = false
-            if m.detailQrMissing <> invalid
-                m.detailQrMissing.visible = true
-                m.detailQrMissing.text = "Link unavailable offline."
-            end if
+            ShowDetailQr(false)
         end if
         RememberQrFormat(slot, result)
     end if

@@ -242,6 +242,16 @@ function PosterKindOk(url as object) as boolean
     return false
 end function
 
+' Cloudflare can keep a grayscale PNG at the plain /data/qr/ URL for hours.
+' v=rgb2 is only for those public QR files. Wi-Fi URLs are left unchanged.
+function WithQrVersion(url as string) as string
+    if url = invalid or url = "" then return ""
+    if Instr(1, url, "/data/qr/") < 1 then return url
+    if Instr(1, url, "?v=rgb2") > 0 or Instr(1, url, "&v=rgb2") > 0 then return url
+    if Instr(1, url, "?") > 0 then return url + "&v=rgb2"
+    return url + "?v=rgb2"
+end function
+
 function ActivityPoster(item as object) as object
     chosen = { poster: "", posterFallback: "" }
     if not IsAssoc(item) then return chosen
@@ -266,24 +276,8 @@ function ActivityQr(item as object) as string
     link = GuideLimitedText(item.Lookup("url"), 400)
     if link = "" then return ""
     given = ResolveContentUrl(item.Lookup("qrUrl"))
-    if PosterKindOk(given) then return given
-    id = SafeActivityId(GuideLimitedText(item.Lookup("id"), 80))
-    if id = "" then return ""
-    return "https://sunrivertownhome.com/data/qr/" + id + ".png"
-end function
-
-function SafeActivityId(id as string) as string
-    if id = invalid or id = "" then return ""
-    if Len(id) > 80 then return ""
-    index = 1
-    while index <= Len(id)
-        code = Asc(Mid(id, index, 1))
-        letter = (code >= 65 and code <= 90) or (code >= 97 and code <= 122)
-        digit = (code >= 48 and code <= 57)
-        if not letter and not digit and code <> 45 and code <> 95 then return ""
-        index = index + 1
-    end while
-    return id
+    if PosterKindOk(given) then return WithQrVersion(given)
+    return ""
 end function
 
 function CreditLine(credit as object) as string
@@ -381,7 +375,7 @@ function DefaultDomain() as string
 end function
 
 function DefaultBookDirect() as object
-    return {
+    book = {
         headline: ["Love our home?", "Want to come back?", "Like saving money?"],
         banner: "Book direct and save!",
         body: "Our website has lots of great information about the house, local activities, dining, outdoor adventures and more!",
@@ -397,6 +391,9 @@ function DefaultBookDirect() as object
         homePromptTitle: "Book your next stay direct and save!",
         homePromptSub: "Up to about 10% less than Airbnb or Vrbo"
     }
+    book.qrImageUrl = WithQrVersion(book.qrImageUrl)
+    book.bookingQrImageUrl = WithQrVersion(book.bookingQrImageUrl)
+    return book
 end function
 
 function DefaultPerks() as object
@@ -436,10 +433,10 @@ function NormalizeBookDirect(parsed as object) as object
     booking = GuideString(block, "bookingUrl", 200)
     if booking = "" then booking = GuideString(site, "bookUrl", 200)
     if booking <> "" then book.bookingUrl = booking
-    qr = FirstPosterUrl(GuideString(block, "qrImageUrl", 240), "https://sunrivertownhome.com/data/qr/book-direct-site.png")
-    book.qrImageUrl = qr
-    bookingQr = FirstPosterUrl(GuideString(block, "bookingQrImageUrl", 240), "https://sunrivertownhome.com/data/qr/book-direct-booking.png")
-    book.bookingQrImageUrl = bookingQr
+    qr = FirstPosterUrl(GuideString(block, "qrImageUrl", 320), "https://sunrivertownhome.com/data/qr/book-direct-site.png")
+    book.qrImageUrl = WithQrVersion(qr)
+    bookingQr = FirstPosterUrl(GuideString(block, "bookingQrImageUrl", 320), "https://sunrivertownhome.com/data/qr/book-direct-booking.png")
+    book.bookingQrImageUrl = WithQrVersion(bookingQr)
     photos = BookPhotos(block)
     book.photo = photos.poster
     book.photoFallback = photos.posterFallback

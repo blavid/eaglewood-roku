@@ -103,13 +103,33 @@ sub Main()
         failed = failed + 1
     end if
     linked = ActivityQr({ id: "cafe", url: "https://cafe.example", qrUrl: "/data/qr/cafe.png", affiliateUrl: "https://affiliate.example/cafe" })
-    if linked <> "https://sunrivertownhome.com/data/qr/cafe.png"
+    if linked <> "https://sunrivertownhome.com/data/qr/cafe.png?v=rgb2"
         print "FAIL qrUrl was not resolved from url"
         failed = failed + 1
     end if
+    joined = WithQrVersion("https://sunrivertownhome.com/data/qr/cafe.png?x=1")
+    if joined <> "https://sunrivertownhome.com/data/qr/cafe.png?x=1&v=rgb2"
+        print "FAIL a QR query was not joined with &"
+        failed = failed + 1
+    end if
+    kept = WithQrVersion("https://sunrivertownhome.com/data/qr/cafe.png?v=rgb2")
+    if kept <> "https://sunrivertownhome.com/data/qr/cafe.png?v=rgb2"
+        print "FAIL the QR version was added twice"
+        failed = failed + 1
+    end if
+    other = WithQrVersion("https://cdn.example/place.png")
+    if other <> "https://cdn.example/place.png"
+        print "FAIL a non-QR image gained a version"
+        failed = failed + 1
+    end if
+    wifiUrl = WithQrVersion("https://cdn.example/tv/wifi.png")
+    if wifiUrl <> "https://cdn.example/tv/wifi.png"
+        print "FAIL a Wi-Fi URL gained a version"
+        failed = failed + 1
+    end if
     derived = ActivityQr({ id: "cafe", url: "https://cafe.example" })
-    if derived <> "https://sunrivertownhome.com/data/qr/cafe.png"
-        print "FAIL a missing qrUrl was not derived"
+    if derived <> ""
+        print "FAIL a missing qrUrl still built a QR"
         failed = failed + 1
     end if
 
@@ -125,7 +145,11 @@ sub Main()
         print "FAIL book photoTvUrl stayed relative"
         failed = failed + 1
     end if
-    if book.bookingQrImageUrl <> "https://sunrivertownhome.com/data/qr/book-direct-booking.png"
+    if book.qrImageUrl <> "https://sunrivertownhome.com/data/qr/book-direct-site.png?v=rgb2"
+        print "FAIL site QR stayed relative"
+        failed = failed + 1
+    end if
+    if book.bookingQrImageUrl <> "https://sunrivertownhome.com/data/qr/book-direct-booking.png?v=rgb2"
         print "FAIL booking QR stayed relative"
         failed = failed + 1
     end if
@@ -151,6 +175,14 @@ sub Main()
     end if
     if WifiLines("", "Cabin", "secret").password <> "secret"
         print "FAIL Wi-Fi lines dropped the password"
+        failed = failed + 1
+    end if
+    if NetworkValue("Network name: Cabin") <> "Cabin" or NetworkValue("Cabin") <> "Cabin"
+        print "FAIL the network label prefix stayed on the value"
+        failed = failed + 1
+    end if
+    if WifiFallbackMessage() <> "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Help)."
+        print "FAIL the Wi-Fi fallback message changed"
         failed = failed + 1
     end if
 

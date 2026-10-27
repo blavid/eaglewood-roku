@@ -68,8 +68,11 @@ sub BuildBadge(parent as object)
     group.translation = [1496, 830]
     group.visible = false
     card = AddRect(group, "0xFFFFFFF2", 0, 0, 220, 200)
+    card.visible = false
+    m.badgeCard = card
     m.badgeLabel = AddLabel(group, "Book direct", "font:SmallestBoldSystemFont", "0x1B4D38FF", 8, 4, 204, 36)
     m.badgeLabel.horizAlign = "center"
+    m.badgeLabel.visible = false
     m.badgePoster = CreateObject("roSGNode", "Poster")
     m.badgePoster.translation = [46, 42]
     m.badgePoster.width = 128
@@ -85,6 +88,7 @@ sub BuildBadge(parent as object)
     m.badgeMissing.maxLines = 3
     m.badgeDomain = AddLabel(group, DisplayDomain(), "font:SmallestBoldSystemFont", "0x146B3AFF", 8, 172, 204, 24)
     m.badgeDomain.horizAlign = "center"
+    m.badgeDomain.visible = false
     parent.appendChild(group)
     m.badgeGroup = group
     m.badgeHint = AddLabel(parent, "", "font:SmallSystemFont", MuteColor(), 980, 800, 500, 28)
@@ -127,46 +131,57 @@ function BuildBookPane(parent as object) as object
     bannerText.horizAlign = "center"
     m.bookBanner = bannerText
     m.bookPhoto = CreateObject("roSGNode", "Poster")
-    m.bookPhoto.translation = [588, 300]
+    m.bookPhoto.translation = [588, 292]
     m.bookPhoto.width = 680
-    m.bookPhoto.height = 300
+    m.bookPhoto.height = 200
     m.bookPhoto.loadWidth = 680
     m.bookPhoto.loadHeight = 360
     m.bookPhoto.loadDisplayMode = "scaleToZoom"
     m.bookPhoto.failedBitmapUri = PlaceholderPoster()
     pane.appendChild(m.bookPhoto)
     m.bookPhoto.observeField("loadStatus", "onBookPhotoStatus")
-    qrCard = AddRect(pane, "0x1B4D38FF", 1296, 300, 300, 360)
-    scan = AddLabel(pane, "Scan me!", "font:SmallBoldSystemFont", InkColor(), 1296, 304, 300, 40)
+    qrCard = AddRect(pane, "0x1B4D38FF", 1296, 292, 300, 280)
+    qrCard.visible = false
+    m.bookQrCard = qrCard
+    scan = AddLabel(pane, "Scan me!", "font:SmallBoldSystemFont", InkColor(), 1296, 296, 300, 40)
     scan.horizAlign = "center"
+    scan.visible = false
+    m.bookScan = scan
     m.bookQr = CreateObject("roSGNode", "Poster")
-    m.bookQr.translation = [1336, 348]
+    m.bookQr.translation = [1336, 340]
     m.bookQr.width = 220
-    m.bookQr.height = 220
+    m.bookQr.height = 180
     m.bookQr.loadWidth = 220
     m.bookQr.loadHeight = 220
     m.bookQr.loadDisplayMode = "scaleToFit"
+    m.bookQr.visible = false
     pane.appendChild(m.bookQr)
     m.bookQr.observeField("loadStatus", "onBookQrStatus")
-    m.bookDomain = AddLabel(pane, DisplayDomain(), "font:SmallBoldSystemFont", AmberColor(), 1312, 578, 268, 32)
+    m.bookDomain = AddLabel(pane, DisplayDomain(), "font:SmallBoldSystemFont", AmberColor(), 1312, 528, 268, 36)
     m.bookDomain.horizAlign = "center"
-    m.bookQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", AmberColor(), 1312, 612, 268, 36)
+    m.bookDomain.visible = false
+    m.bookQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", AmberColor(), 1312, 528, 268, 36)
     m.bookQrMissing.horizAlign = "center"
-    m.bookBody = AddLabel(pane, "", "font:SmallSystemFont", "0x1C2A24FF", 588, 616, 680, 88)
+    m.bookQrMissing.visible = false
+    m.bookBody = AddLabel(pane, "", "font:SmallSystemFont", "0x1C2A24FF", 588, 508, 680, 128)
     m.bookBody.vertAlign = "top"
-    m.bookSavings = AddLabel(pane, "", "font:SmallBoldSystemFont", "0x1B4D38FF", 588, 708, 680, 72)
+    m.bookBody.maxLines = 4
+    m.bookSavings = AddLabel(pane, "", "font:SmallSystemFont", "0x1B4D38FF", 588, 640, 680, 140)
     m.bookSavings.vertAlign = "top"
+    m.bookSavings.maxLines = 4
     m.perkGroups = []
     for index = 0 to 4
         chip = CreateObject("roSGNode", "Group")
-        chip.translation = [ContentLeft() + (index * 214), 792]
-        bg = AddRect(chip, "0x1B4D38FF", 0, 0, 200, 48)
-        text = AddLabel(chip, "", "font:SmallestBoldSystemFont", InkColor(), 8, 0, 184, 48)
+        chip.translation = [ContentLeft() + (index * 226), 788]
+        bg = AddRect(chip, "0x1B4D38FF", 0, 0, 214, 88)
+        text = AddLabel(chip, "", "font:SmallestSystemFont", InkColor(), 8, 4, 198, 80)
         text.horizAlign = "center"
+        text.vertAlign = "center"
+        text.maxLines = 2
         pane.appendChild(chip)
         m.perkGroups.Push({ group: chip, bg: bg, text: text })
     end for
-    m.bookSign = AddLabel(pane, "", "font:SmallBoldSystemFont", "0x2C4A6EFF", 1288, 860, 300, 36)
+    m.bookSign = AddLabel(pane, "", "font:SmallBoldSystemFont", "0x2C4A6EFF", 1288, 888, 300, 36)
     m.bookSign.horizAlign = "right"
     ridges = CreateObject("roSGNode", "Poster")
     ridges.uri = "pkg:/images/decor-ridges.png"
@@ -207,14 +222,14 @@ function BuildWifiPane(parent as object) as object
     m.wifiSsidLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), textX, ContentTop() + 132, textW, 108)
     m.wifiSsidLabel.vertAlign = "top"
     m.wifiSsidLabel.maxLines = 3
-    AddLabel(pane, "Password", "font:SmallSystemFont", MuteColor(), textX, ContentTop() + 248, textW, 36)
-    m.wifiPasswordLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), textX, ContentTop() + 284, textW, 108)
+    m.wifiPasswordHeading = AddLabel(pane, "Password", "font:SmallSystemFont", MuteColor(), textX, ContentTop() + 248, textW, 36)
+    m.wifiPasswordLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), textX, ContentTop() + 284, textW, 156)
     m.wifiPasswordLabel.vertAlign = "top"
-    m.wifiPasswordLabel.maxLines = 3
-    m.wifiHint = AddLabel(pane, "Point your phone camera at the code and tap the banner to join.", "font:SmallSystemFont", MuteColor(), textX, ContentTop() + 400, textW, 140)
+    m.wifiPasswordLabel.maxLines = 6
+    m.wifiHint = AddLabel(pane, "Point your phone camera at the code and tap the banner to join.", "font:SmallSystemFont", MuteColor(), textX, ContentTop() + 460, textW, 110)
     m.wifiHint.vertAlign = "top"
     m.wifiHint.maxLines = 4
-    m.wifiRouter = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), 672, ContentWidth(), 200)
+    m.wifiRouter = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), 710, ContentWidth(), 180)
     m.wifiRouter.vertAlign = "top"
     m.wifiRouter.maxLines = 6
     m.wifiShown = ""
@@ -264,14 +279,20 @@ function BuildDetailPane(parent as object) as object
     pane.appendChild(m.detailPhoto)
     m.detailPhoto.observeField("loadStatus", "onDetailPhotoStatus")
     m.detailQrCard = AddRect(pane, "0xFFFFFFF2", ContentLeft() + 740, ContentTop() + 140, 280, 280)
+    m.detailQrCard.visible = false
     place = AddLabel(pane, "This place", "font:SmallBoldSystemFont", "0x1C1408FF", ContentLeft() + 756, ContentTop() + 146, 248, 36)
     place.horizAlign = "center"
+    place.visible = false
+    m.detailPlace = place
     site = AddLabel(pane, "Website / menu", "font:SmallSystemFont", "0x1C1408FF", ContentLeft() + 756, ContentTop() + 182, 248, 32)
     site.horizAlign = "center"
+    site.visible = false
+    m.detailSite = site
     m.detailQr = CreateObject("roSGNode", "Poster")
     m.detailQr.translation = [ContentLeft() + 780, ContentTop() + 216]
     m.detailQr.width = 200
     m.detailQr.height = 172
+    m.detailQr.visible = false
     m.detailQr.loadWidth = 280
     m.detailQr.loadHeight = 280
     m.detailQr.loadDisplayMode = "scaleToFit"
@@ -279,7 +300,9 @@ function BuildDetailPane(parent as object) as object
     m.detailQr.observeField("loadStatus", "onDetailQrStatus")
     m.detailQrCaption = AddLabel(pane, "", "font:SmallestSystemFont", "0x1C1408FF", ContentLeft() + 756, ContentTop() + 392, 248, 28)
     m.detailQrCaption.horizAlign = "center"
+    m.detailQrCaption.visible = false
     m.detailQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", "0x1C1408FF", ContentLeft() + 780, ContentTop() + 274, 200, 80)
+    m.detailQrMissing.visible = false
     m.detailQrMissing.horizAlign = "center"
     m.detailQrMissing.vertAlign = "center"
     m.detailQrMissing.maxLines = 3
@@ -306,7 +329,6 @@ sub PaintPhase2()
     PaintWifi()
     if ActivitySection(m.section) then PaintActivity()
     PaintBadge()
-    EnsureQrJobs()
 end sub
 
 sub PaintPrompt()
@@ -350,16 +372,17 @@ end function
 sub PaintBadge()
     if m.badgePoster = invalid or m.badgeGroup = invalid then return
     uri = ""
-    if IsAssoc(m.book) then uri = GuideLimitedText(m.book.Lookup("bookingQrImageUrl"), 240)
+    if IsAssoc(m.book) then uri = GuideLimitedText(m.book.Lookup("bookingQrImageUrl"), 320)
     if not PosterKindOk(uri) then uri = ""
+    uri = WithQrVersion(uri)
     if uri <> m.badgeRemote
         m.badgeRemote = uri
         m.badgeUri = uri
         m.badgeReady = false
         m.badgeFailed = false
-        m.badgePoster.uri = ""
-        m.badgePoster.visible = false
+        m.badgeLocal = false
         if m.badgeMissing <> invalid then m.badgeMissing.text = ""
+        AssignDirectQr(m.badgePoster, uri, "badge")
     end if
     if m.badgeDomain <> invalid then m.badgeDomain.text = DisplayDomain()
     UpdateBadgeVisible()
@@ -373,11 +396,18 @@ sub onBadgeStatus()
         m.badgeReady = true
         m.badgeFailed = false
         if m.badgeMissing <> invalid then m.badgeMissing.text = ""
-    else if status = "failed" or status = "error"
-        m.badgeReady = false
-        m.badgeFailed = true
-        if m.badgeMissing <> invalid then m.badgeMissing.text = "Link unavailable offline."
+        UpdateBadgeVisible()
+        return
     end if
+    if status <> "failed" and status <> "error" then return
+    if m.badgeLocal <> true and m.badgeRemote <> ""
+        m.badgeLocal = true
+        print "Eaglewood: qr badge fallback"
+        StartQrFallback("badge")
+        return
+    end if
+    m.badgeReady = false
+    m.badgeFailed = true
     UpdateBadgeVisible()
 end sub
 
@@ -386,11 +416,15 @@ sub UpdateBadgeVisible()
     remote = ""
     if m.badgeRemote <> invalid then remote = m.badgeRemote
     show = (remote <> "" and m.section <> "book")
+    ready = (show and m.badgeReady = true)
     m.badgeGroup.visible = show
-    if m.badgePoster <> invalid then m.badgePoster.visible = (show and m.badgeReady = true)
-    if m.badgeMissing <> invalid then m.badgeMissing.visible = (show and m.badgeFailed = true)
+    if m.badgeCard <> invalid then m.badgeCard.visible = ready
+    if m.badgeLabel <> invalid then m.badgeLabel.visible = ready
+    if m.badgeDomain <> invalid then m.badgeDomain.visible = ready
+    if m.badgePoster <> invalid then m.badgePoster.visible = (show and m.badgePoster.uri <> "")
+    if m.badgeMissing <> invalid then m.badgeMissing.visible = false
     if m.badgeHint = invalid then return
-    if show and m.zone = "item" and m.badgeReady = true
+    if ready and m.zone = "item"
         m.badgeHint.text = "Always available"
         m.badgeHint.visible = true
     else
@@ -425,13 +459,14 @@ sub PaintBook()
         m.bookPhoto.loadHeight = 360
         m.bookPhoto.uri = photo
     end if
-    qr = GuideLimitedText(m.book.Lookup("qrImageUrl"), 240)
+    qr = WithQrVersion(GuideLimitedText(m.book.Lookup("qrImageUrl"), 320))
     if qr <> m.bookQrUri and m.bookQr <> invalid
         m.bookQrUri = qr
         m.bookQrTried = false
-        m.bookQr.uri = ""
-        m.bookQr.visible = false
+        m.bookLocal = false
         if m.bookQrMissing <> invalid then m.bookQrMissing.text = ""
+        ShowBookQr(false)
+        AssignDirectQr(m.bookQr, qr, "book")
     end if
 end sub
 
@@ -495,18 +530,43 @@ sub onBookPhotoStatus()
     end if
 end sub
 
+sub ShowBookQr(ready as boolean)
+    if m.bookQrCard <> invalid then m.bookQrCard.visible = ready
+    if m.bookScan <> invalid then m.bookScan.visible = ready
+    if m.bookDomain <> invalid then m.bookDomain.visible = ready
+    if m.bookQrMissing <> invalid then m.bookQrMissing.visible = false
+end sub
+
+sub AssignDirectQr(poster as object, url as string, slot as string)
+    if poster = invalid then return
+    if url = invalid or url = ""
+        poster.uri = ""
+        poster.visible = false
+        print "Eaglewood: qr "; slot; " direct uri=none"
+        return
+    end if
+    poster.visible = true
+    poster.uri = url
+    print "Eaglewood: qr "; slot; " direct uri="; SafeUri(url)
+end sub
+
 sub onBookQrStatus()
-    if m.bookQr = invalid or m.bookQrMissing = invalid then return
+    if m.bookQr = invalid then return
     status = m.bookQr.loadStatus
     LogPoster("book", m.bookQr, m.bookQrUri)
     if status = "ready"
         m.bookQr.visible = true
-        m.bookQrMissing.text = ""
+        ShowBookQr(true)
         return
     end if
     if status <> "failed" and status <> "error" then return
-    m.bookQr.visible = false
-    m.bookQrMissing.text = "Link unavailable offline."
+    if m.bookLocal <> true and m.bookQrUri <> ""
+        m.bookLocal = true
+        print "Eaglewood: qr book fallback"
+        StartQrFallback("book")
+        return
+    end if
+    ShowBookQr(false)
 end sub
 
 sub PaintWifi()
@@ -519,7 +579,13 @@ sub PaintWifi()
     if m.wifiPassword <> invalid then password = m.wifiPassword
     lines = WifiLines(notice, ssid, password)
     m.wifiSsidLabel.text = lines.network
-    if m.wifiPasswordLabel <> invalid then m.wifiPasswordLabel.text = lines.password
+    if m.wifiPasswordLabel <> invalid
+        m.wifiPasswordLabel.text = lines.password
+        if lines.mode = "fallback" then m.wifiPasswordLabel.font = "font:SmallSystemFont"
+        else m.wifiPasswordLabel.font = "font:SmallBoldSystemFont"
+    end if
+    if m.wifiPasswordHeading <> invalid then m.wifiPasswordHeading.visible = (lines.mode = "show")
+    if m.wifiHint <> invalid then m.wifiHint.visible = (lines.mode = "show")
     if m.wifiPaintToken <> lines.mode
         m.wifiPaintToken = lines.mode
         print "Eaglewood: wifi screen mode="; lines.mode
@@ -555,31 +621,25 @@ function WifiLines(notice as string, ssid as string, password as string) as obje
         return { mode: "coming-soon", network: ComingSoonWifi(), password: "" }
     end if
     if ssid = ""
-        return { mode: "fallback", network: WifiFallbackText(), password: WifiNoteText() }
+        return { mode: "fallback", network: NetworkValue(WifiFallbackText()), password: WifiFallbackMessage() }
     end if
     return { mode: "show", network: ssid, password: password }
 end function
 
-function WifiNoteText() as string
-    if not IsList(m.issues) then return ""
-    last = m.issues.Count() - 1
-    if last < 0 then return ""
-    for index = 0 to last
-        issue = m.issues[index]
-        if WifiIssueText(issue)
-            steps = issue.Lookup("steps")
-            if IsList(steps)
-                stepLast = steps.Count() - 1
-                if stepLast >= 0
-                    for stepAt = 0 to stepLast
-                        text = GuideLimitedText(steps[stepAt], 180)
-                        if Instr(1, LCase(text), "note") > 0 then return text
-                    end for
-                end if
-            end if
-        end if
-    end for
-    return ""
+function NetworkValue(text as string) as string
+    if text = invalid then return ""
+    prefix = "network name:"
+    if Len(text) < Len(prefix) then return text
+    if LCase(Left(text, Len(prefix))) <> prefix then return text
+    rest = Mid(text, Len(prefix) + 1)
+    if rest = invalid then return ""
+    rest = rest.Trim()
+    if rest = "" then return text
+    return rest
+end function
+
+function WifiFallbackMessage() as string
+    return "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Help)."
 end function
 
 sub onWifiPosterStatus()
@@ -776,26 +836,39 @@ sub PaintDetail()
         m.detailPhoto.loadHeight = 360
         m.detailPhoto.uri = photo
     end if
-    qr = ItemText(item, "qrUri")
-    showQr = (qr <> "")
-    ready = false
-    if m.detailQr <> invalid and m.detailQr.uri <> "" and m.detailQr.loadStatus = "ready" then ready = true
-    if m.detailQrCard <> invalid then m.detailQrCard.visible = showQr
-    if m.detailQr <> invalid then m.detailQr.visible = (showQr and ready)
-    if m.detailQrCaption <> invalid then m.detailQrCaption.visible = showQr
-    if m.detailQrMissing <> invalid then m.detailQrMissing.visible = (showQr and m.detailQrFailed = true)
-    if not showQr then return
+    qr = WithQrVersion(ItemText(item, "qrUri"))
     if m.detailQrCaption <> invalid
         if m.section = "dining" then m.detailQrCaption.text = "Scan for this restaurant"
         else m.detailQrCaption.text = "Scan for this place"
     end if
+    if qr = ""
+        if m.detailQrUri <> ""
+            m.detailQrUri = ""
+            m.detailLocal = false
+            ShowDetailQr(false)
+            AssignDirectQr(m.detailQr, "", "detail")
+        end if
+        return
+    end if
     if m.detailQr <> invalid and qr <> m.detailQrUri
         m.detailQrUri = qr
         m.detailQrFailed = false
-        m.detailQr.uri = ""
-        m.detailQr.visible = false
+        m.detailLocal = false
         if m.detailQrMissing <> invalid then m.detailQrMissing.text = ""
+        ShowDetailQr(false)
+        AssignDirectQr(m.detailQr, qr, "detail")
     end if
+    ready = false
+    if m.detailQr <> invalid and m.detailQr.uri <> "" and m.detailQr.loadStatus = "ready" then ready = true
+    ShowDetailQr(ready)
+end sub
+
+sub ShowDetailQr(ready as boolean)
+    if m.detailQrCard <> invalid then m.detailQrCard.visible = ready
+    if m.detailPlace <> invalid then m.detailPlace.visible = ready
+    if m.detailSite <> invalid then m.detailSite.visible = ready
+    if m.detailQrCaption <> invalid then m.detailQrCaption.visible = ready
+    if m.detailQrMissing <> invalid then m.detailQrMissing.visible = false
 end sub
 
 function DetailMeta(item as object) as string
@@ -862,17 +935,22 @@ sub onDetailPhotoStatus()
 end sub
 
 sub onDetailQrStatus()
-    if m.detailQr = invalid or m.detailQrMissing = invalid then return
+    if m.detailQr = invalid then return
     status = m.detailQr.loadStatus
     LogPoster("detail", m.detailQr, m.detailQrUri)
     if status = "ready"
-        m.detailQrMissing.text = ""
         m.detailQr.visible = true
+        ShowDetailQr(true)
         return
     end if
     if status <> "failed" and status <> "error" then return
-    m.detailQr.visible = false
-    m.detailQrMissing.text = "Link unavailable offline."
+    if m.detailLocal <> true and m.detailQrUri <> ""
+        m.detailLocal = true
+        print "Eaglewood: qr detail fallback"
+        StartQrFallback("detail")
+        return
+    end if
+    ShowDetailQr(false)
 end sub
 
 sub ApplyWifiResult(result as object)

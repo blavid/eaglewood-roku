@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "10",
+    "build_version": "11",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -489,12 +489,24 @@ def check_phase2() -> None:
         fail("a 503 with no cache must show the coming-soon line")
     if "Book your next stay direct and save!" not in phase2:
         fail("the home strip needs the direct-booking headline")
+    if "Wi-Fi details couldn't load right now." not in phase2:
+        fail("Wi-Fi fallback needs the host message")
+    if "function NetworkValue(" not in phase2:
+        fail("the Wi-Fi network value must drop a Network name prefix")
     if "function HomePromptTitle(" not in phase2:
         fail("the home strip title must come from HomePromptTitle")
     png = (ROOT / "channel" / "components" / "PngRgb.brs").read_text(encoding="utf-8")
     wifi = (ROOT / "channel" / "components" / "WifiTask.brs").read_text(encoding="utf-8")
     if "function ExpandPngBytes(" not in png or "function SafeUri(" not in png:
         fail("QR PNGs need the indexed rewrite and a redacted URI")
+    if "function StorePngBytes(" not in png or "tmp:/" not in png:
+        fail("QR saves must try cachefs and then tmp")
+    if "function WithQrVersion(" not in season or "?v=rgb2" not in season or "&v=rgb2" not in season:
+        fail("public QR URLs must add v=rgb2")
+    if "sub ClearStaleQrCache(" not in png or "qrCacheVersion" not in png:
+        fail("startup must clear stale QR cache once per version")
+    if "ClearStaleQrCache()" not in scene:
+        fail("startup must clear the stale QR cache")
     if "wifi png format bitdepth=" not in wifi:
         fail("wifi png format must be logged")
     if 'print "Eaglewood: poster ' not in phase2 or 'print "Eaglewood: qr ' not in phase2:

@@ -15,24 +15,31 @@ sub FetchQr(slot as string, url as string, generation as integer)
     dest = QrPngPath(slot)
     if dest = "" then return
     if url = "" then return
+    code = 0
+    prepared = invalid
     if CachedQr(slot, url)
         prepared = ExpandPngFile(dest, dest)
-        LogQrFormat(slot, prepared)
-        PublishQr(slot, generation, url, 0, prepared, dest)
-        return
+    else
+        print "Eaglewood: qr "; slot; " request sent"
+        code = DownloadQr(url, "cachefs:/eaglewood/qr-next.png")
+        print "Eaglewood: qr "; slot; " response code="; code
+        if code <> 200
+            PublishQr(slot, generation, url, code, FailQr("http"), "")
+            print "Eaglewood: qr "; slot; " final uri=none"
+            return
+        end if
+        prepared = ExpandPngFile("cachefs:/eaglewood/qr-next.png", dest)
+        DeleteQrFile("cachefs:/eaglewood/qr-next.png")
     end if
-    print "Eaglewood: qr "; slot; " request sent"
-    code = DownloadQr(url, "cachefs:/eaglewood/qr-next.png")
-    print "Eaglewood: qr "; slot; " response code="; code
-    if code <> 200
-        PublishQr(slot, generation, url, code, FailQr("http"), "")
-        return
-    end if
-    prepared = ExpandPngFile("cachefs:/eaglewood/qr-next.png", dest)
-    DeleteQrFile("cachefs:/eaglewood/qr-next.png")
     LogQrFormat(slot, prepared)
-    if prepared.ok = true then WriteAsciiFile(QrNotePath(slot), url)
-    PublishQr(slot, generation, url, code, prepared, dest)
+    finalUri = ""
+    if prepared <> invalid and prepared.path <> invalid then finalUri = prepared.path
+    if finalUri = "" then finalUri = url
+    if prepared <> invalid and prepared.ok = true and Instr(1, finalUri, "cachefs:") = 1
+        WriteAsciiFile(QrNotePath(slot), url)
+    end if
+    print "Eaglewood: qr "; slot; " final uri="; SafeUri(finalUri)
+    PublishQr(slot, generation, url, code, prepared, finalUri)
 end sub
 
 function CachedQr(slot as string, url as string) as boolean
@@ -93,8 +100,9 @@ sub PublishQr(slot as string, generation as integer, url as string, code as inte
         if prepared.interlace <> invalid then interlace = prepared.interlace
         if prepared.converted = true or color = 3 then indexed = "yes"
     end if
-    uri = ""
-    if ok = "yes" then uri = path
+    uri = path
+    if uri = invalid then uri = ""
+    if uri <> "" then ok = "yes"
     m.top.result = {
         generation: generation,
         generationText: generation.ToStr(),
