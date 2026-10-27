@@ -456,7 +456,7 @@ def stage_live(stage: Path, snapshot_dir: Path | None) -> None:
         print("activities snapshot: live")
     except (OSError, urllib.error.URLError, RuntimeError, json.JSONDecodeError, UnicodeError) as exc:
         print(
-            f"activities snapshot: kept packaged v4 ({exc.__class__.__name__})",
+            f"activities snapshot: kept packaged v4 ({exc})",
             file=sys.stderr,
         )
     if snapshot_dir is not None:
