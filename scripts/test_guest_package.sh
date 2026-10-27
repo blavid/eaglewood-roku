@@ -23,6 +23,7 @@ fi
 
 python3 "$ROOT/scripts/check_tracked_guest_key.py" >"$TMP/check.out"
 echo "ok tracked files have no guest path key"
+python3 "$ROOT/scripts/test_tracked_guest_key.py"
 
 env -u GUEST_PATH_KEY "$ROOT/scripts/package.sh" >"$TMP/missing.out" 2>&1 && {
     echo "FAIL package without a key exited 0"

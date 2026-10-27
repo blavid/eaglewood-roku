@@ -116,7 +116,7 @@ $env:ROKUPASS = 'the-password-set-on-the-tv'
 
 Do not leave the key in a PowerShell profile or a committed script. `scripts/package.ps1` builds the zip on its own if you only want the archive.
 
-`scripts/check_tracked_guest_key.py` runs from packaging and from `scripts/validate.py`. It uses `git grep` and fails if a tracked file contains a concrete `sunrivertownhome.com/tv/<segment>/guest.json` URL, a key-like string returned from channel code, or a tracked `secrets.brs`. A short word of only letters is not treated as a key. The documentation form with angle brackets is not a match. The check prints file names, not the matching line.
+`scripts/check_tracked_guest_key.py` runs from packaging and from `scripts/validate.py`. It uses `git grep` and fails if a tracked file contains a concrete `sunrivertownhome.com/tv/<segment>/guest.json` URL, a key-like string returned from channel code, or a tracked `secrets.brs`. A short word of only letters is not treated as a key. A Roku color constant (`0x` plus eight hex digits, and nothing else) is not treated as a key. Hex without that prefix, a longer token, or any other mix of letters, digits, and `.` `_` `~` `-` still is. The documentation form with angle brackets is not a match. The check prints file names, not the matching line.
 
 ## Check-in launch
 

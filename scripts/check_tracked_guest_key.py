@@ -17,9 +17,12 @@ ROOT = Path(__file__).resolve().parents[1]
 # A real /tv/<segment>/guest.json. The placeholder uses <GUEST_PATH_KEY>.
 URL_PATTERN = r"sunrivertownhome\.com/tv/[A-Za-z0-9._~-]+/guest\.json"
 # A returned token with the shape of a path key. A short word of only letters
-# (for example a checkout decision) is not a key. The matching line is not printed.
+# (for example a checkout decision) is not a key. A Roku color is 0x plus
+# eight hex digits and nothing else. Any other shape, including hex without
+# that prefix or a longer token, is still a key. The matching line is not printed.
 LITERAL_PATTERN = r'return "[A-Za-z0-9._~-]{8,}"'
 LITERAL_TOKEN = re.compile(r'return "([A-Za-z0-9._~-]{8,})"')
+ROKU_COLOR = re.compile(r"0x[0-9A-Fa-f]{8}")
 
 
 def git(*args: str) -> subprocess.CompletedProcess[str]:
@@ -50,9 +53,23 @@ def require_clean(pattern: str, description: str, *paths: str) -> None:
 
 
 def token_is_key_like(token: str) -> bool:
+    if ROKU_COLOR.fullmatch(token):
+        return False
     if re.fullmatch(r"[A-Za-z]+", token) and len(token) < 16:
         return False
     return True
+
+
+def offending_paths(grep_output: str) -> list[str]:
+    files: list[str] = []
+    for line in grep_output.splitlines():
+        match = LITERAL_TOKEN.search(line)
+        if match is None or not token_is_key_like(match.group(1)):
+            continue
+        path = line.split(":", 1)[0]
+        if path not in files:
+            files.append(path)
+    return files
 
 
 def require_no_key_literal() -> None:
@@ -62,14 +79,7 @@ def require_no_key_literal() -> None:
     if result.returncode != 0:
         detail = result.stderr.strip() or f"git grep exited {result.returncode}"
         fail(detail)
-    files: list[str] = []
-    for line in result.stdout.splitlines():
-        match = LITERAL_TOKEN.search(line)
-        if match is None or not token_is_key_like(match.group(1)):
-            continue
-        path = line.split(":", 1)[0]
-        if path not in files:
-            files.append(path)
+    files = offending_paths(result.stdout)
     if files:
         fail(
             "A tracked channel file returns a key-like literal. Keep that value out of git.",
