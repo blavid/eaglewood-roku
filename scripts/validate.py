@@ -21,8 +21,21 @@ RULES_BRS = ROOT / "channel" / "components" / "GuestRules.brs"
 GUIDE_UI_BRS = ROOT / "channel" / "components" / "GuideUi.brs"
 GUIDE_FORMAT_BRS = ROOT / "channel" / "components" / "GuideFormat.brs"
 GUIDE_MODEL_BRS = ROOT / "channel" / "components" / "GuideModel.brs"
+SEASON_BRS = ROOT / "channel" / "components" / "Season.brs"
+PHASE2_BRS = ROOT / "channel" / "components" / "Phase2Ui.brs"
+CARD_BRS = ROOT / "channel" / "components" / "ActivityCard.brs"
 # These files run on the render thread. The scene includes the guide scripts.
-RENDER_THREAD_FILES = (SCENE_BRS, SCENE_XML, RULES_BRS, GUIDE_UI_BRS, GUIDE_FORMAT_BRS, GUIDE_MODEL_BRS)
+RENDER_THREAD_FILES = (
+    SCENE_BRS,
+    SCENE_XML,
+    RULES_BRS,
+    GUIDE_UI_BRS,
+    GUIDE_FORMAT_BRS,
+    GUIDE_MODEL_BRS,
+    SEASON_BRS,
+    PHASE2_BRS,
+    CARD_BRS,
+)
 # roDateTime and roDeviceInfo are usable there. roSGNode is how the scene is built.
 RENDER_THREAD_CREATE = {"roSGNode", "roDeviceInfo", "roDateTime"}
 # Creating these logs "MAIN|TASK-only component failed on RENDER thread".
@@ -62,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "8",
+    "build_version": "9",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -440,14 +453,53 @@ def check_zip() -> None:
         fail("zip is missing manifest at the archive root")
     if "components/secrets.brs" not in names:
         fail("zip is missing components/secrets.brs")
-    for name in ("data/guide.json", "data/checkout.json"):
+    for name in ("data/guide.json", "data/checkout.json", "data/activities.json"):
         if name not in names:
             fail(f"zip is missing {name}")
+    if "data/wifi.json" in names or "data/wifi.png" in names:
+        fail("zip includes Wi-Fi secrets")
     if any(name.startswith("/") or name.startswith("\\") or ".." in name.split("/") for name in names):
         fail(f"zip has unsafe entry names: {names}")
     if any(name.startswith("channel/") for name in names):
         fail("zip wraps the channel in an extra folder")
     print(f"zip {size} bytes, {len(names)} entries")
+
+
+def check_phase2() -> None:
+    season = SEASON_BRS.read_text(encoding="utf-8")
+    phase2 = PHASE2_BRS.read_text(encoding="utf-8")
+    scene = SCENE_BRS.read_text(encoding="utf-8")
+    xml = SCENE_XML.read_text(encoding="utf-8")
+    config = CONFIG_BRS.read_text(encoding="utf-8")
+    if "function ResolveContentUrl(" not in season or "function ContentOrigin(" not in season:
+        fail("relative activity URLs must resolve against the site origin")
+    if "function WifiScreenMode(" not in season:
+        fail("Wi-Fi responses need a screen mode")
+    if 'return "pkg:/images/tv-placeholder.jpg"' not in season:
+        fail("the channel must bundle its own TV placeholder")
+    placeholder = IMAGES / "tv-placeholder.jpg"
+    if not placeholder.is_file():
+        fail("missing channel/images/tv-placeholder.jpg")
+    from PIL import Image
+
+    with Image.open(placeholder) as image:
+        if image.size != (64, 64):
+            fail(f"tv-placeholder.jpg is {image.size}, expected 64x64")
+    if "Wi-Fi details coming soon" not in phase2:
+        fail("a 503 with no cache must show the coming-soon line")
+    if 'duration="21600"' not in xml or "duration = 21600" not in scene:
+        fail("guide and Wi-Fi refresh must be 21600 seconds")
+    if "zone=prompt" not in scene:
+        fail("Home must open on the Book Direct strip")
+    if "function WifiJsonUrl(" not in config or "function WifiPngUrl(" not in config:
+        fail("Wi-Fi URLs must be built beside the guest URL")
+    if 'bookingUrl: "https://book.sunrivertownhome.com"' not in season:
+        fail("the corner badge must target the booking host")
+    for path in channel_text_files():
+        if 'return "sunrivertownhome.com"' in path.read_text(encoding="utf-8", errors="replace"):
+            fail(f"{path.relative_to(ROOT)} returns the site domain as a bare literal")
+    if (ROOT / "channel" / "data" / "wifi.json").exists() or (ROOT / "channel" / "data" / "wifi.png").exists():
+        fail("Wi-Fi credentials must not sit in channel/data")
 
 
 def main() -> None:
@@ -458,6 +510,7 @@ def main() -> None:
     check_greeting_draws()
     check_guest_fetch()
     check_guide()
+    check_phase2()
     check_secret_file_is_untracked()
     check_no_secrets()
     check_zip()

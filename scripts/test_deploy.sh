@@ -203,8 +203,8 @@ if ! unzip -p "$ROOT/dist/eaglewood.zip" components/GuestTask.xml | grep -F -q "
     echo "FAIL deploy.sh zip does not reference secrets.brs from the task"
     exit 1
 fi
-if ! unzip -p "$ROOT/dist/eaglewood.zip" manifest | grep -q "build_version=8"; then
-    echo "FAIL deploy.sh zip is not build 8"
+if ! unzip -p "$ROOT/dist/eaglewood.zip" manifest | grep -q "build_version=9"; then
+    echo "FAIL deploy.sh zip is not build 9"
     exit 1
 fi
 echo "ok deploy.sh packages the path key"

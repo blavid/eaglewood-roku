@@ -9,6 +9,8 @@
     <script type="text/brightscript" uri="pkg:/components/GuideModel.brs" />
     <script type="text/brightscript" uri="pkg:/components/GuideFormat.brs" />
     <script type="text/brightscript" uri="pkg:/components/GuideUi.brs" />
+    <script type="text/brightscript" uri="pkg:/components/Season.brs" />
+    <script type="text/brightscript" uri="pkg:/components/Phase2Ui.brs" />
     <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
 
     <children>
@@ -51,5 +53,7 @@
             font="font:LargeBoldSystemFont" />
         <!-- 600 seconds. A keypress stops and starts it again. -->
         <Timer id="idleTimer" repeat="false" duration="600" />
+        <!-- Six hours. Repeats on its own; a keypress does not reset it. -->
+        <Timer id="refreshTimer" repeat="true" duration="21600" />
     </children>
 </component>

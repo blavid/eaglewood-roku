@@ -1,0 +1,354 @@
+sub init()
+    m.top.functionName = "fetchWifi"
+end sub
+
+' Worker /tv/<key>/wifi.json and wifi.png. The path key and the password are never printed.
+' A 503 with an empty body means the worker secrets are unset.
+sub fetchWifi()
+    generation = ReadWifiGeneration()
+    cached = ReadWifiCache()
+    if WifiCacheOk(cached)
+        PublishWifi(cached, generation)
+    else
+        PublishWifi(EmptyWifi("builtin", ""), generation)
+    end if
+    jsonUrl = WifiJsonUrl()
+    pngUrl = WifiPngUrl()
+    if jsonUrl = "" or pngUrl = ""
+        print "Eaglewood: wifi skip reason=no-key"
+        return
+    end if
+    print "Eaglewood: wifi request sent"
+    remote = WifiHttp(jsonUrl, RememberedWifiEtag("wifiJson"), WifiJsonPath(), true)
+    print "Eaglewood: wifi response code="; remote.code
+    mode = WifiScreenMode(remote.code, WifiCacheOk(cached))
+    if mode = "show" and remote.reason = "ok"
+        cached = { ssid: remote.ssid, password: remote.password, png: "no", pngBytes: 0, source: "network", notice: "" }
+        if remote.etag <> "" then print "Eaglewood: wifi etag stored"
+        RememberWifiFetch("wifiJson", remote.etag)
+    else if mode = "show" and remote.reason = "not-modified"
+        print "Eaglewood: wifi etag match"
+        if not WifiCacheOk(cached) then cached = ReadWifiCache()
+        if WifiCacheOk(cached) then cached.source = "network"
+    else if remote.code = 503
+        print "Eaglewood: wifi kept cache="; YesNo(WifiCacheOk(cached))
+    end if
+    if WifiCacheOk(cached) and mode <> "coming-soon"
+        print "Eaglewood: wifi png request sent"
+        png = WifiHttp(pngUrl, RememberedWifiEtag("wifiPng"), WifiPngPath(), false)
+        print "Eaglewood: wifi png response code="; png.code
+        if png.reason = "ok" or png.reason = "not-modified"
+            size = PngFileBytes(WifiPngPath())
+            if size > 0
+                cached.png = "yes"
+                cached.pngBytes = size
+                if png.etag <> "" and png.reason = "ok" then print "Eaglewood: wifi etag stored"
+                if png.reason = "not-modified" then print "Eaglewood: wifi etag match"
+                RememberWifiFetch("wifiPng", png.etag)
+            end if
+        else
+            size = PngFileBytes(WifiPngPath())
+            if size > 0
+                cached.png = "yes"
+                cached.pngBytes = size
+            end if
+        end if
+        cached.notice = ""
+        if cached.source <> "network" then cached.source = "cachefs"
+        PublishWifi(cached, generation)
+    else if mode = "coming-soon"
+        PublishWifi(EmptyWifi("unavailable", "coming-soon"), generation)
+    end if
+    shown = cached
+    if not WifiCacheOk(shown) then shown = EmptyWifi("builtin", "")
+    print "Eaglewood: wifi ssid len="; Len(shown.ssid)
+    print "Eaglewood: wifi png bytes="; shown.pngBytes
+end sub
+
+function EmptyWifi(source as string, notice as string) as object
+    return { ssid: "", password: "", png: "no", pngBytes: 0, source: source, notice: notice }
+end function
+
+function WifiCacheOk(cached as object) as boolean
+    if cached = invalid then return false
+    if cached.ssid = invalid or cached.ssid = "" then return false
+    return true
+end function
+
+function YesNo(flag as boolean) as string
+    if flag then return "yes"
+    return "no"
+end function
+
+function WifiJsonPath() as string
+    return "cachefs:/eaglewood/wifi.json"
+end function
+
+function WifiPngPath() as string
+    return "cachefs:/eaglewood/wifi.png"
+end function
+
+function WifiPngTempPath() as string
+    return "cachefs:/eaglewood/wifi-next.png"
+end function
+
+function ReadWifiCache() as object
+    EnsureWifiDir()
+    text = ReadAsciiFile(WifiJsonPath())
+    parsed = ParseWifiDocument(text)
+    if parsed = invalid then return invalid
+    png = "no"
+    size = PngFileBytes(WifiPngPath())
+    if size > 0 then png = "yes"
+    return {
+        ssid: parsed.ssid,
+        password: parsed.password,
+        png: png,
+        pngBytes: size,
+        source: "cachefs",
+        notice: ""
+    }
+end function
+
+function ParseWifiDocument(body as object) as object
+    if body = invalid then return invalid
+    kind = type(body)
+    if kind <> "String" and kind <> "roString" then return invalid
+    if body = "" or Len(body) > 2048 then return invalid
+    parsed = ParseJson(body)
+    if parsed = invalid or type(parsed) <> "roAssociativeArray" then return invalid
+    ssid = GuideLimitedText(parsed.Lookup("ssid"), 64)
+    password = GuideLimitedText(parsed.Lookup("password"), 64)
+    if ssid = "" or password = "" then return invalid
+    return { ssid: ssid, password: password }
+end function
+
+function WifiHttp(url as string, etag as string, dest as string, wantJson as boolean) as object
+    result = { code: 0, etag: "", reason: "no-transfer", ssid: "", password: "", bytes: 0 }
+    transfer = CreateObject("roUrlTransfer")
+    port = CreateObject("roMessagePort")
+    if transfer = invalid or port = invalid then return result
+    transfer.SetMessagePort(port)
+    transfer.SetCertificatesFile("common:/certs/ca-bundle.crt")
+    transfer.InitClientCertificates()
+    transfer.RetainBodyOnError(true)
+    transfer.SetUrl(url)
+    if etag <> "" then transfer.AddHeader("If-None-Match", etag)
+    if wantJson
+        transfer.AddHeader("Accept", "application/json")
+        started = transfer.AsyncGetToString()
+    else
+        EnsureWifiDir()
+        transfer.AddHeader("Accept", "image/png")
+        started = transfer.AsyncGetToFile(WifiPngTempPath())
+    end if
+    if started = false or started = invalid
+        result.reason = "async-failed"
+        return result
+    end if
+    event = wait(8000, port)
+    if type(event) <> "roUrlEvent"
+        transfer.AsyncCancel()
+        result.reason = "timeout"
+        return result
+    end if
+    result.code = event.GetResponseCode()
+    result.etag = WifiHeader(event.GetResponseHeaders(), "ETag")
+    if Len(result.etag) > 180 then result.etag = Left(result.etag, 180)
+    if result.code = 304
+        result.reason = "not-modified"
+        return result
+    end if
+    if result.code = 503
+        result.reason = "unavailable"
+        return result
+    end if
+    if result.code = 404
+        result.reason = "missing"
+        return result
+    end if
+    if result.code <> 200
+        result.reason = "http"
+        print "Eaglewood: wifi failure reason="; MaskWifiSecret(OneLineWifi(event.GetFailureReason()))
+        return result
+    end if
+    if wantJson
+        body = event.GetString()
+        parsed = ParseWifiDocument(body)
+        if parsed = invalid
+            result.reason = "bad-json"
+            return result
+        end if
+        if WriteAsciiFile(dest, body) <> true
+            result.reason = "cache-write"
+            return result
+        end if
+        result.ssid = parsed.ssid
+        result.password = parsed.password
+        result.reason = "ok"
+        return result
+    end if
+    size = PngFileBytes(WifiPngTempPath())
+    if size < 1
+        DeleteWifiFile(WifiPngTempPath())
+        result.reason = "bad-png"
+        return result
+    end if
+    if not PromoteWifiPng()
+        result.reason = "cache-write"
+        return result
+    end if
+    result.bytes = size
+    result.reason = "ok"
+    return result
+end function
+
+function PromoteWifiPng() as boolean
+    data = CreateObject("roByteArray")
+    if data = invalid then return false
+    if data.ReadFile(WifiPngTempPath()) <> true then return false
+    if data.Count() < 8 then return false
+    wrote = data.WriteFile(WifiPngPath())
+    DeleteWifiFile(WifiPngTempPath())
+    if wrote = true then return true
+    return false
+end function
+
+function PngFileBytes(path as string) as integer
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return 0
+    stat = fs.Stat(path)
+    if stat = invalid then return 0
+    size = stat.size
+    if size = invalid then return 0
+    if size < 24 or size > 500000 then return 0
+    data = CreateObject("roByteArray")
+    if data = invalid then return 0
+    if data.ReadFile(path) <> true then return 0
+    if data.Count() < 8 then return 0
+    if data[0] <> 137 or data[1] <> 80 or data[2] <> 78 or data[3] <> 71 then return 0
+    return data.Count()
+end function
+
+sub EnsureWifiDir()
+    fs = CreateObject("roFileSystem")
+    if fs <> invalid then fs.CreateDirectory("cachefs:/eaglewood")
+end sub
+
+sub DeleteWifiFile(path as string)
+    fs = CreateObject("roFileSystem")
+    if fs <> invalid then fs.Delete(path)
+end sub
+
+function WifiHeader(headers as object, name as string) as string
+    if headers = invalid or type(headers) <> "roAssociativeArray" then return ""
+    wanted = LCase(name)
+    for each key in headers
+        if LCase(key) = wanted
+            return GuideLimitedText(headers.Lookup(key), 180)
+        end if
+    end for
+    return ""
+end function
+
+function RememberedWifiEtag(prefix as string) as string
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section = invalid then return ""
+    return GuideLimitedText(section.Read(prefix + "Etag"), 180)
+end function
+
+sub RememberWifiFetch(prefix as string, etag as string)
+    if etag = invalid or etag = "" then return
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section = invalid then return
+    section.Write(prefix + "Etag", etag)
+    clock = CreateObject("roDateTime")
+    stamp = "0"
+    if clock <> invalid then stamp = clock.AsSeconds().ToStr()
+    section.Write(prefix + "FetchedAt", stamp)
+    section.Flush()
+end sub
+
+function MaskWifiSecret(text as string) as string
+    if text = invalid or text = "" then return "none"
+    key = GuestPathKey()
+    if key = invalid or key = "" then return text
+    return WifiReplace(text, key, "***")
+end function
+
+function WifiReplace(text as string, find as string, replacement as string) as string
+    if find = invalid or find = "" then return text
+    out = ""
+    remaining = text
+    guard = 0
+    while guard < 8
+        guard = guard + 1
+        at = Instr(1, remaining, find)
+        if at = 0 then return out + remaining
+        if at > 1 then out = out + Left(remaining, at - 1)
+        out = out + replacement
+        if at + Len(find) - 1 >= Len(remaining) then return out
+        remaining = Right(remaining, Len(remaining) - (at + Len(find) - 1))
+    end while
+    return out + remaining
+end function
+
+function OneLineWifi(text as object) as string
+    if text = invalid or text = "" then return "none"
+    kind = type(text)
+    if kind <> "String" and kind <> "roString" then return "none"
+    out = ""
+    index = 1
+    while index <= Len(text)
+        ch = Mid(text, index, 1)
+        code = Asc(ch)
+        if code = 10 or code = 13
+            out = out + " "
+        else
+            out = out + ch
+        end if
+        index = index + 1
+    end while
+    return out
+end function
+
+sub PublishWifi(info as object, generation as integer)
+    if info = invalid then info = EmptyWifi("builtin", "")
+    ssid = info.ssid
+    if ssid = invalid then ssid = ""
+    password = info.password
+    if password = invalid then password = ""
+    notice = info.notice
+    if notice = invalid then notice = ""
+    png = info.png
+    if png = invalid or png = "" then png = "no"
+    pngBytes = 0
+    if info.pngBytes <> invalid then pngBytes = info.pngBytes
+    source = info.source
+    if source = invalid or source = "" then source = "builtin"
+    m.top.result = {
+        generation: generation,
+        generationText: generation.ToStr(),
+        source: source,
+        ssid: ssid,
+        password: password,
+        png: png,
+        pngBytes: pngBytes,
+        ssidLen: Len(ssid),
+        notice: notice
+    }
+end sub
+
+function ReadWifiGeneration() as integer
+    generation = m.top.generation
+    if generation <> invalid and generation <> 0 then return generation
+    spins = 0
+    while spins < 30
+        Sleep(10)
+        generation = m.top.generation
+        if generation <> invalid and generation <> 0 then return generation
+        spins = spins + 1
+    end while
+    if generation = invalid then return 0
+    return generation
+end function
