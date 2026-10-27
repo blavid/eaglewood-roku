@@ -115,13 +115,15 @@ function FetchRemote(kind as string) as object
     response = HttpGet(url, etag)
     print "Eaglewood: "; kind; " response code="; response.code
     if response.reason = "not-modified"
-        parsed = ParseObjectText(ReadText(cachePath))
+        cachedText = ReadText(cachePath)
+        parsed = ParseObjectText(cachedText)
         if parsed = invalid
             print "Eaglewood: "; kind; " failure reason=cache-miss"
             return invalid
         end if
         print "Eaglewood: "; kind; " etag match"
         RememberFetch(prefix, etag, GuideInt(parsed.Lookup("version")))
+        if kind = "activities" then return ActivitiesFromText(cachedText, "not-modified", "304")
         return FinishRemote(kind, parsed, "not-modified", "304")
     end if
     if response.reason <> "ok"
@@ -142,7 +144,19 @@ function FetchRemote(kind as string) as object
         print "Eaglewood: "; kind; " etag missing"
     end if
     RememberFetch(prefix, stored, GuideInt(parsed.Lookup("version")))
+    if kind = "activities" then return ActivitiesFromText(response.body, "network", "200")
     return FinishRemote(kind, parsed, "network", "200")
+end function
+
+' The 304 cache file is the same raw JSON body a 200 wrote. Both go through
+' ActivitiesFromFetch. A cache with no qrUrl falls back to the pkg snapshot.
+function ActivitiesFromText(text as string, source as string, code as string) as object
+    bundled = FinishActivities(ParseObjectText(ReadText("pkg:/data/activities.json")), "pkg", "0")
+    chosen = ActivitiesFromFetch(ParseObjectText(text), source, code, bundled)
+    if source = "not-modified" and chosen <> invalid and chosen.activitiesSource = "pkg"
+        print "Eaglewood: activities cache missing qrUrl"
+    end if
+    return chosen
 end function
 
 function FinishRemote(kind as string, parsed as object, source as string, code as string) as object
@@ -163,14 +177,13 @@ function FinishRemote(kind as string, parsed as object, source as string, code a
 end function
 
 function LoadActivitiesLocal() as object
-    cached = FinishActivities(ParseObjectText(ReadText("cachefs:/eaglewood/activities.json")), "cachefs", "0")
     bundled = FinishActivities(ParseObjectText(ReadText("pkg:/data/activities.json")), "pkg", "0")
-    if cached <> invalid and bundled <> invalid
-        if ActivitiesQrCount(cached.items) = 0 and ActivitiesQrCount(bundled.items) > 0
-            print "Eaglewood: activities cache missing qrUrl"
-        end if
+    cachedText = ReadText("cachefs:/eaglewood/activities.json")
+    cachedParsed = ParseObjectText(cachedText)
+    chosen = ActivitiesFromFetch(cachedParsed, "cachefs", "0", bundled)
+    if cachedParsed <> invalid and chosen <> invalid and chosen.activitiesSource = "pkg"
+        print "Eaglewood: activities cache missing qrUrl"
     end if
-    chosen = ChooseActivities(cached, bundled)
     if chosen <> invalid then return chosen
     return EmptyActivities()
 end function

@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 16 "; BuildCommit()
+    print "Eaglewood: build 17 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -18,6 +18,7 @@ sub init()
     m.qrAssigning = false
     m.qrJobs = {}
     m.qrTasks = {}
+    m.qrPaths = {}
     m.qrRetries = {}
     m.qrBytes = {}
     m.qrFormats = {}
@@ -824,13 +825,14 @@ sub StartQrFetch(slot as string)
     if m.qrTasks = invalid then m.qrTasks = {}
     running = m.qrTasks.Lookup(slot)
     if m.qrJobs[slot] = url and running <> invalid
-        ApplyTaskResult(running)
+        DeliverQrPath(slot)
         return
     end if
     m.qrJobs[slot] = url
     if running <> invalid
-        running.unobserveField("result")
+        running.unobserveField("finalUri")
         running.control = "STOP"
+        m.top.removeChild(running)
     end if
     m.qrGeneration = m.qrGeneration + 1
     task = CreateObject("roSGNode", "QrTask")
@@ -839,6 +841,7 @@ sub StartQrFetch(slot as string)
         m.qrJobs[slot] = ""
         return
     end if
+    task.id = "qrTask" + slot
     task.generation = m.qrGeneration
     task.badgeUrl = ""
     task.bookUrl = ""
@@ -852,82 +855,44 @@ sub StartQrFetch(slot as string)
         task.doCleanup = true
         m.qrCleanupDone = true
     end if
-    task.observeField("result", "onQrReady")
     m.qrTasks[slot] = task
+    m.top.appendChild(task)
+    if slot = "badge" then task.observeField("finalUri", "onBadgeQrUri")
+    if slot = "book" then task.observeField("finalUri", "onBookQrUri")
+    if slot = "detail" then task.observeField("finalUri", "onDetailQrUri")
     task.control = "RUN"
 end sub
 
-sub onQrReady()
+sub onBadgeQrUri()
+    DeliverQrPath("badge")
+end sub
+
+sub onBookQrUri()
+    DeliverQrPath("book")
+end sub
+
+sub onDetailQrUri()
+    DeliverQrPath("detail")
+end sub
+
+' The callback is the one attached to this slot's task before RUN.
+sub DeliverQrPath(slot as string)
     if m.qrTasks = invalid then return
-    ApplyTaskResult(m.qrTasks.Lookup("badge"))
-    ApplyTaskResult(m.qrTasks.Lookup("book"))
-    ApplyTaskResult(m.qrTasks.Lookup("detail"))
-end sub
-
-sub ApplyTaskResult(task as object)
+    task = m.qrTasks.Lookup(slot)
     if task = invalid then return
-    result = task.result
-    if result = invalid then return
-    if result.slot = invalid or result.uri = invalid then return
-    if result.generationText <> invalid and result.generationText <> "" and result.generationText <> task.generation.ToStr() then return
-    ApplyQrResult(result)
-end sub
-
-sub ApplyQrResult(result as object)
-    slot = AsText(result.slot)
-    remote = AsText(result.remote)
-    uri = AsText(result.uri)
-    if Left(uri, 8) <> "cachefs:" and Left(uri, 4) <> "tmp:" then uri = ""
-    if slot = "badge"
-        if remote <> m.badgeRemote then return
-        if uri <> ""
-            m.badgeFailed = false
-            m.badgeFile = uri
-            NoteQrBytes("badge", ResultNumber(result, "bytes"))
-            UpdateBadgeVisible()
-            try
-                MountQrPoster(PosterForSlot("badge"), uri, "badge")
-            catch err
-                print "Eaglewood: qr badge error="; LayoutErrorText(err)
-            end try
-        else
-            m.badgeFailed = true
-            LogQrState("badge", PosterForSlot("badge"))
-        end if
-        RememberQrFormat(slot, result)
-    else if slot = "book"
-        if remote <> m.bookQrUri then return
-        if uri <> ""
-            m.bookFile = uri
-            NoteQrBytes("book", ResultNumber(result, "bytes"))
-            ShowBookQr(true)
-            try
-                MountQrPoster(PosterForSlot("book"), uri, "book")
-            catch err
-                print "Eaglewood: qr book error="; LayoutErrorText(err)
-            end try
-        else
-            LogQrState("book", PosterForSlot("book"))
-        end if
-        RememberQrFormat(slot, result)
-    else if slot = "detail"
-        if remote <> m.detailQrUri then return
-        if uri <> ""
-            m.detailQrFailed = false
-            m.detailFile = uri
-            NoteQrBytes("detail", ResultNumber(result, "bytes"))
-            ShowDetailQr(true)
-            try
-                MountQrPoster(PosterForSlot("detail"), uri, "detail")
-            catch err
-                print "Eaglewood: qr detail error="; LayoutErrorText(err)
-            end try
-        else
-            m.detailQrFailed = true
-            LogQrState("detail", PosterForSlot("detail"))
-        end if
-        RememberQrFormat(slot, result)
+    uri = task.finalUri
+    if uri = invalid or uri = "" then return
+    if Left(uri, 8) <> "cachefs:" and Left(uri, 4) <> "tmp:" then return
+    if task.result <> invalid
+        NoteQrBytes(slot, ResultNumber(task.result, "bytes"))
+        RememberQrFormat(slot, task.result)
     end if
+    if slot = "badge" then m.badgeFailed = false
+    if slot = "detail" then m.detailQrFailed = false
+    if slot = "book" then ShowBookQr(true)
+    if slot = "detail" then ShowDetailQr(true)
+    if slot = "badge" then UpdateBadgeVisible()
+    AssignQrPoster(slot, uri)
 end sub
 
 sub RememberQrFormat(slot as string, result as object)

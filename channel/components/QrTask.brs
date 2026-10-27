@@ -290,6 +290,7 @@ sub PublishQr(slot as string, generation as integer, url as string, code as inte
         indexed: indexed,
         bytes: bytes
     }
+    if uri <> "" then m.top.finalUri = uri
 end sub
 
 function FailQr(reason as string) as object

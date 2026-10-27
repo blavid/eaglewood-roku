@@ -398,13 +398,14 @@ sub PaintBadge()
         m.badgeFile = ""
         m.badgeReady = false
         m.badgeFailed = false
+        ClearStoredQr("badge")
         ClearQrAssign("badge")
         if m.badgeMissing <> invalid then m.badgeMissing.text = ""
         if uri <> "" then StartQrFetch("badge")
     end if
     if m.badgeDomain <> invalid then m.badgeDomain.text = DisplayDomain()
     UpdateBadgeVisible()
-    if m.badgeFile <> "" then GuardMountQrPoster(PosterForSlot("badge"), m.badgeFile, "badge")
+    ApplyStoredQr("badge")
 end sub
 
 sub onBadgeStatus()
@@ -467,12 +468,13 @@ sub PaintBook()
         m.bookQrUri = qr
         m.bookQrTried = false
         m.bookFile = ""
+        ClearStoredQr("book")
         ClearQrAssign("book")
         if m.bookQrMissing <> invalid then m.bookQrMissing.text = ""
         if qr <> "" then StartQrFetch("book")
     end if
     ShowBookQr(qr <> "")
-    if m.bookFile <> "" then GuardMountQrPoster(PosterForSlot("book"), m.bookFile, "book")
+    ApplyStoredQr("book")
 end sub
 
 function BookHeadline(book as object) as object
@@ -823,8 +825,7 @@ sub ReleaseCardImages()
 end sub
 
 sub PaintDetail()
-    item = invalid
-    if m.cardIndex >= 0 and m.cardIndex < CardCount() then item = m.sortedCards[m.cardIndex]
+    item = ActivityAt(m.sortedCards, m.cardIndex)
     if m.detailName <> invalid then m.detailName.text = ItemText(item, "name")
     if m.detailMeta <> invalid then m.detailMeta.text = DetailMeta(item)
     if m.detailBody <> invalid then m.detailBody.text = ItemText(item, "description")
@@ -854,25 +855,27 @@ sub PaintDetail()
         if m.detailQrUri <> ""
             m.detailQrUri = ""
             m.detailFile = ""
+            ClearStoredQr("detail")
             ClearQrAssign("detail")
         end if
         ShowDetailQr(false)
         source = "none"
         if m.activitiesSource <> invalid and m.activitiesSource <> "" then source = m.activitiesSource
-        print "Eaglewood: qr detail skip reason=no-url id="; ItemText(item, "id"); " source="; source
+        print "Eaglewood: qr detail skip reason=no-url id="; ItemText(item, "id"); " index="; m.cardIndex; " source="; source
         return
     end if
     if qr <> m.detailQrUri
         m.detailQrUri = qr
         m.detailQrFailed = false
         m.detailFile = ""
+        ClearStoredQr("detail")
         ClearQrAssign("detail")
         if m.detailQrMissing <> invalid then m.detailQrMissing.text = ""
         print "Eaglewood: qr detail open url="; SafeUri(qr)
     end if
     ShowDetailQr(true)
     StartQrFetch("detail")
-    if m.detailFile <> "" then GuardMountQrPoster(PosterForSlot("detail"), m.detailFile, "detail")
+    ApplyStoredQr("detail")
 end sub
 
 sub ShowDetailQr(show as boolean)
@@ -933,8 +936,7 @@ sub onDetailPhotoStatus()
         return
     end if
     m.detailPhotoTried = true
-    item = invalid
-    if m.cardIndex >= 0 and m.cardIndex < CardCount() then item = m.sortedCards[m.cardIndex]
+    item = ActivityAt(m.sortedCards, m.cardIndex)
     fallback = ItemText(item, "posterFallback")
     if fallback <> "" and fallback <> m.detailPhotoUri
         m.detailPhotoUri = fallback
@@ -1102,9 +1104,46 @@ sub NoteQrBytes(slot as string, bytes as integer)
 end sub
 
 sub ReassignStoredQrs()
-    if m.badgeFile <> invalid and m.badgeFile <> "" then GuardMountQrPoster(PosterForSlot("badge"), m.badgeFile, "badge")
-    if m.bookFile <> invalid and m.bookFile <> "" then GuardMountQrPoster(PosterForSlot("book"), m.bookFile, "book")
-    if m.detailFile <> invalid and m.detailFile <> "" then GuardMountQrPoster(PosterForSlot("detail"), m.detailFile, "detail")
+    ApplyStoredQr("badge")
+    ApplyStoredQr("book")
+    ApplyStoredQr("detail")
+end sub
+
+function StoredQrPath(slot as string) as string
+    if m.qrPaths = invalid then return ""
+    value = m.qrPaths.Lookup(slot)
+    if value = invalid then return ""
+    return value
+end function
+
+sub ClearStoredQr(slot as string)
+    if m.qrPaths = invalid then m.qrPaths = {}
+    m.qrPaths[slot] = ""
+end sub
+
+sub ApplyStoredQr(slot as string)
+    path = StoredQrPath(slot)
+    if path = "" then return
+    AssignQrPoster(slot, path)
+end sub
+
+sub AssignQrPoster(slot as string, uri as string)
+    if uri = invalid or uri = "" then return
+    if m.qrPaths = invalid then m.qrPaths = {}
+    m.qrPaths[slot] = uri
+    if slot = "badge" then m.badgeFile = uri
+    if slot = "book" then m.bookFile = uri
+    if slot = "detail" then m.detailFile = uri
+    poster = PosterForSlot(slot)
+    nodeId = "none"
+    found = "false"
+    if poster <> invalid
+        found = "true"
+        if poster.id <> invalid and poster.id <> "" then nodeId = poster.id
+    end if
+    print "Eaglewood: qr "; slot; " deliver uri="; uri; " node="; nodeId; " found="; found
+    if poster = invalid then return
+    MountQrPoster(poster, uri, slot)
 end sub
 
 sub LogQrState(name as string, poster as object)

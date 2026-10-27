@@ -167,6 +167,46 @@ sub Main()
         print "FAIL a cache with qrUrl was discarded"
         failed = failed + 1
     end if
+    raw304 = {
+        version: 4,
+        activitySections: [{
+            id: "guided-tours-and-activities",
+            activities: [
+                { id: "viator-ebike-tour", name: "First tour", url: "https://example.com/a", qrUrl: "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png" },
+                { id: "viator-ebike-tour", name: "Second tour", url: "https://example.com/b", qrUrl: "https://sunrivertownhome.com/data/qr/viator-ebike-tour-b.png" }
+            ]
+        }]
+    }
+    stale304 = {
+        version: 4,
+        activitySections: [{
+            id: "guided-tours-and-activities",
+            activities: [
+                { id: "viator-ebike-tour", name: "First tour", url: "https://example.com/a" },
+                { id: "viator-ebike-tour", name: "Second tour", url: "https://example.com/b" }
+            ]
+        }]
+    }
+    bundled304 = ActivitiesFromFetch(raw304, "pkg", "0", invalid)
+    from304 = ActivitiesFromFetch(stale304, "not-modified", "304", bundled304)
+    first304 = ActivityAt(from304.items, 0)
+    second304 = ActivityAt(from304.items, 1)
+    firstQr = "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png?v=rgb2"
+    secondQr = "https://sunrivertownhome.com/data/qr/viator-ebike-tour-b.png?v=rgb2"
+    if first304 = invalid or second304 = invalid or first304.qrUrl <> firstQr or second304.qrUrl <> secondQr
+        print "FAIL a 304 cache without qrUrl dropped the packaged QR links"
+        failed = failed + 1
+    else if first304.id <> "viator-ebike-tour" or second304.id <> "viator-ebike-tour" or first304.qrUrl = second304.qrUrl
+        print "FAIL duplicate activity ids were collapsed"
+        failed = failed + 1
+    else
+        kept304 = ActivitiesFromFetch(raw304, "not-modified", "304", { items: [{ id: "other", qrUrl: "https://sunrivertownhome.com/data/qr/other.png?v=rgb2" }] })
+        round304 = ParseJson(EncodeJson(kept304.items))
+        if ActivityAt(kept304.items, 0).qrUrl <> firstQr or ActivityAt(round304, 1).qrUrl <> secondQr
+            print "FAIL a 304 document with qrUrl did not keep both cards"
+            failed = failed + 1
+        end if
+    end if
     if BookQrFits(BookQrSlot()) <> true
         print "FAIL the Scan me slot falls outside its card or the screen"
         failed = failed + 1

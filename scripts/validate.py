@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "16",
+    "build_version": "17",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -532,10 +532,24 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 16 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 17 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 16 "' not in scene:
-        fail("startup must log build 16 and the commit")
+    if 'print "Eaglewood: build 17 "' not in scene:
+        fail("startup must log build 17 and the commit")
+    qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
+    if 'id="finalUri"' not in qr_xml or "alwaysNotify" not in qr_xml:
+        fail("each QR task needs a finalUri field")
+    fetch = scene[scene.find("sub StartQrFetch("):scene.find("sub onBadgeQrUri(")]
+    observed = fetch.find('observeField("finalUri"')
+    started = fetch.find('control = "RUN"')
+    if observed < 0 or started < 0 or observed > started:
+        fail("finalUri must be observed on the task before it runs")
+    if "m.qrPaths" not in scene or "deliver uri=" not in phase2:
+        fail("a finished QR path must be stored and assigned to the poster")
+    if "function ActivitiesFromFetch(" not in season or "function ActivityAt(" not in season:
+        fail("a 304 activities document must keep qrUrl and be read by index")
+    if "ActivitiesFromText(" not in (ROOT / "channel" / "components" / "GuideTask.brs").read_text(encoding="utf-8"):
+        fail("304 and 200 activities must share one parse path")
     if "RetainBodyOnError(true)" not in qr_task or "InitClientCertificates()" not in qr_task:
         fail("public QR downloads must use the Wi-Fi certificate setup")
     if "raw.WriteFile(path)" not in qr_task or "fs.Exists(path)" not in qr_task:

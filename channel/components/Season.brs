@@ -212,6 +212,28 @@ function ChooseActivities(cached as object, bundled as object) as object
     return bundled
 end function
 
+' 200 and 304 both normalize the raw activities document, then keep qrUrl.
+' A cached copy that parses but has no qrUrl yields the packaged snapshot.
+' Cards that share an id stay distinct: callers read them with ActivityAt.
+function ActivitiesFromFetch(parsed as object, source as string, code as string, bundled as object) as object
+    found = invalid
+    if IsAssoc(parsed)
+        norm = NormalizeActivities(parsed)
+        if IsAssoc(norm)
+            norm.activitiesSource = source
+            norm.activitiesCode = code
+            found = norm
+        end if
+    end if
+    return ChooseActivities(found, bundled)
+end function
+
+function ActivityAt(items as object, index as integer) as object
+    if not IsList(items) then return invalid
+    if index < 0 or index >= items.Count() then return invalid
+    return items[index]
+end function
+
 function ActivitySection(section as string) as boolean
     if section = "dining" or section = "hiking" or section = "todo" then return true
     return false
