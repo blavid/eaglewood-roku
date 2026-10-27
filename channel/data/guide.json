@@ -1,5 +1,5 @@
 {
-  "version": 2,
+  "version": 3,
   "siteConfig": {
     "name": "Sunriver Townhome",
     "tagline": "Eaglewood · Sunriver, Oregon",
@@ -197,5 +197,52 @@
       "label": "Emergency",
       "value": "Call or text Blake"
     }
-  ]
+  ],
+  "bookDirect": {
+    "version": 1,
+    "headline": [
+      "Love our home?",
+      "Want to come back?",
+      "Like saving money?"
+    ],
+    "banner": "Book direct and save!",
+    "body": "Our website has lots of great information about the house, local activities, dining, outdoor adventures and more!",
+    "savingsText": "Book direct and pay up to about 10% less than Airbnb or Vrbo, plus no booking-site service fees.",
+    "siteUrl": "https://sunrivertownhome.com",
+    "bookingUrl": "https://book.sunrivertownhome.com",
+    "qrImageUrl": "https://sunrivertownhome.com/data/qr/book-direct-site.png",
+    "bookingQrImageUrl": "https://sunrivertownhome.com/data/qr/book-direct-booking.png",
+    "photoUrl": "https://sunrivertownhome.com/images/photos/house/living-room-1.jpg",
+    "photoTvUrl": "https://sunrivertownhome.com/images/tv/book-direct-living.jpg",
+    "perks": [
+      {
+        "id": "house",
+        "label": "House info",
+        "icon": "house"
+      },
+      {
+        "id": "activities",
+        "label": "Local activities",
+        "icon": "mountain"
+      },
+      {
+        "id": "dining",
+        "label": "Dining",
+        "icon": "dining"
+      },
+      {
+        "id": "outdoors",
+        "label": "Outdoor adventures",
+        "icon": "pines"
+      },
+      {
+        "id": "more",
+        "label": "And more!",
+        "icon": "more"
+      }
+    ],
+    "signOff": "Thanks for staying!",
+    "homePromptTitle": "Book direct & save",
+    "homePromptSub": "Up to about 10% less than Airbnb or Vrbo"
+  }
 }

@@ -8,13 +8,16 @@ sub fetchGuideBundle()
     generation = ReadGuideGeneration()
     guide = LoadGuideLocal()
     checkout = LoadCheckoutLocal()
+    activities = LoadActivitiesLocal()
     FillTimes(guide, checkout)
     LogGuideChoice(guide)
     LogCheckoutChoice(checkout)
-    PublishBundle(guide, checkout, generation)
+    LogActivitiesChoice(activities)
+    PublishBundle(guide, checkout, activities, generation)
 
     remoteGuide = FetchRemote("guide")
     remoteCheckout = FetchRemote("checkout")
+    remoteActivities = FetchRemote("activities")
     changed = false
     if remoteGuide <> invalid
         guide = remoteGuide
@@ -26,9 +29,14 @@ sub fetchGuideBundle()
         changed = true
         LogCheckoutChoice(checkout)
     end if
+    if remoteActivities <> invalid
+        activities = remoteActivities
+        changed = true
+        LogActivitiesChoice(activities)
+    end if
     if changed
         FillTimes(guide, checkout)
-        PublishBundle(guide, checkout, generation)
+        PublishBundle(guide, checkout, activities, generation)
     end if
 end sub
 
@@ -40,22 +48,29 @@ function CheckoutDataUrl() as string
     return "https://sunrivertownhome.com/data/checkout.json"
 end function
 
+function ActivitiesDataUrl() as string
+    return "https://sunrivertownhome.com/data/activities.json"
+end function
+
 function LoadGuideLocal() as object
     parsed = ParseObjectText(ReadText("cachefs:/eaglewood/guide.json"))
-    guide = NormalizeGuide(parsed)
-    if guide <> invalid
-        guide.guideSource = "cachefs"
-        guide.guideCode = "0"
-        return guide
-    end if
+    guide = AttachGuideBook(parsed, "cachefs")
+    if guide <> invalid then return guide
     parsed = ParseObjectText(ReadText("pkg:/data/guide.json"))
+    guide = AttachGuideBook(parsed, "pkg")
+    if guide <> invalid then return guide
+    guide = FallbackGuide()
+    guide.book = DefaultBookDirect()
+    return guide
+end function
+
+function AttachGuideBook(parsed as object, source as string) as object
     guide = NormalizeGuide(parsed)
-    if guide <> invalid
-        guide.guideSource = "pkg"
-        guide.guideCode = "0"
-        return guide
-    end if
-    return FallbackGuide()
+    if guide = invalid then return invalid
+    guide.book = NormalizeBookDirect(parsed)
+    guide.guideSource = source
+    guide.guideCode = "0"
+    return guide
 end function
 
 function LoadCheckoutLocal() as object
@@ -90,6 +105,10 @@ function FetchRemote(kind as string) as object
         url = CheckoutDataUrl()
         cachePath = "cachefs:/eaglewood/checkout.json"
         prefix = "checkout"
+    else if kind = "activities"
+        url = ActivitiesDataUrl()
+        cachePath = "cachefs:/eaglewood/activities.json"
+        prefix = "activities"
     end if
     etag = RememberedEtag(prefix)
     print "Eaglewood: "; kind; " request sent"
@@ -134,12 +153,46 @@ function FinishRemote(kind as string, parsed as object, source as string, code a
         checkout.checkoutCode = code
         return checkout
     end if
+    if kind = "activities" then return FinishActivities(parsed, source, code)
     guide = NormalizeGuide(parsed)
     if guide = invalid then return invalid
+    guide.book = NormalizeBookDirect(parsed)
     guide.guideSource = source
     guide.guideCode = code
     return guide
 end function
+
+function LoadActivitiesLocal() as object
+    parsed = ParseObjectText(ReadText("cachefs:/eaglewood/activities.json"))
+    found = FinishActivities(parsed, "cachefs", "0")
+    if found <> invalid then return found
+    parsed = ParseObjectText(ReadText("pkg:/data/activities.json"))
+    found = FinishActivities(parsed, "pkg", "0")
+    if found <> invalid then return found
+    return EmptyActivities()
+end function
+
+function FinishActivities(parsed as object, source as string, code as string) as object
+    norm = NormalizeActivities(parsed)
+    if norm = invalid then return invalid
+    norm.activitiesSource = source
+    norm.activitiesCode = code
+    return norm
+end function
+
+function EmptyActivities() as object
+    return {
+        activitiesVersion: 0,
+        items: [],
+        activitiesSource: "builtin",
+        activitiesCode: "0"
+    }
+end function
+
+sub LogActivitiesChoice(activities as object)
+    if activities = invalid then return
+    print "Eaglewood: activities version="; VersionText(activities.activitiesVersion); " source="; activities.activitiesSource; " code="; activities.activitiesCode
+end sub
 
 function HttpGet(url as string, etag as string) as object
     result = { code: 0, body: "", etag: "", reason: "no-transfer" }
@@ -253,9 +306,14 @@ sub LogCheckoutChoice(checkout as object)
     print "Eaglewood: checkout decision="; checkout.checkoutSource; " version="; VersionText(checkout.checkoutVersion); " code="; checkout.checkoutCode
 end sub
 
-sub PublishBundle(guide as object, checkout as object, generation as integer)
+sub PublishBundle(guide as object, checkout as object, activities as object, generation as integer)
     if guide = invalid then guide = FallbackGuide()
     if checkout = invalid then checkout = FallbackCheckout()
+    if activities = invalid then activities = EmptyActivities()
+    book = guide.book
+    if book = invalid then book = DefaultBookDirect()
+    items = activities.items
+    if items = invalid then items = []
     phone = GuideLimitedText(guide.hostPhone, 40)
     present = "no"
     if phone <> "" then present = "yes"
@@ -269,6 +327,11 @@ sub PublishBundle(guide as object, checkout as object, generation as integer)
         checkoutCode: checkout.checkoutCode,
         checkoutVersion: VersionText(checkout.checkoutVersion),
         hostPhonePresent: present,
+        activitiesSource: activities.activitiesSource,
+        activitiesCode: activities.activitiesCode,
+        activitiesVersion: VersionText(activities.activitiesVersion),
+        activitiesJson: EncodeJson(items),
+        bookJson: EncodeJson(book),
         brand: guide.brand,
         place: guide.place,
         domain: guide.domain,

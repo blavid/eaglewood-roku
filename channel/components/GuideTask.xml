@@ -7,5 +7,7 @@
     </interface>
 
     <script type="text/brightscript" uri="pkg:/components/GuideModel.brs" />
+    <script type="text/brightscript" uri="pkg:/components/GuestRules.brs" />
+    <script type="text/brightscript" uri="pkg:/components/Season.brs" />
     <script type="text/brightscript" uri="pkg:/components/GuideTask.brs" />
 </component>

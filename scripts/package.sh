@@ -76,7 +76,7 @@ import zipfile
 import json
 
 path = sys.argv[1]
-required = ("manifest", "components/secrets.brs", "data/guide.json", "data/checkout.json")
+required = ("manifest", "components/secrets.brs", "data/guide.json", "data/checkout.json", "data/activities.json")
 with zipfile.ZipFile(path) as archive:
     names = archive.namelist()
     missing = [name for name in required if name not in names]
@@ -86,7 +86,10 @@ with zipfile.ZipFile(path) as archive:
     if any(name.startswith("channel/") for name in names):
         sys.stderr.write("Package wraps the channel in an extra folder.\n")
         sys.exit(1)
-    for name in ("data/guide.json", "data/checkout.json"):
+    if "data/wifi.json" in names or "data/wifi.png" in names:
+        sys.stderr.write("Package must not include Wi-Fi secrets.\n")
+        sys.exit(1)
+    for name in ("data/guide.json", "data/checkout.json", "data/activities.json"):
         try:
             payload = json.loads(archive.read(name).decode("utf-8"))
         except (UnicodeError, json.JSONDecodeError):
@@ -95,6 +98,10 @@ with zipfile.ZipFile(path) as archive:
         if not isinstance(payload, dict):
             sys.stderr.write(name + " is not a JSON object.\n")
             sys.exit(1)
+    activities = json.loads(archive.read("data/activities.json").decode("utf-8"))
+    if not isinstance(activities.get("activitySections"), list):
+        sys.stderr.write("data/activities.json is missing activitySections.\n")
+        sys.exit(1)
 PY
 
 bytes="$(wc -c < "$ZIP" | tr -d ' ')"

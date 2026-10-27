@@ -3,7 +3,7 @@
 
 function ParseObjectText(text as string) as object
     if text = invalid or text = "" then return invalid
-    if Len(text) > 200000 then return invalid
+    if Len(text) > 400000 then return invalid
     parsed = ParseJson(text)
     if parsed = invalid then return invalid
     if type(parsed) <> "roAssociativeArray" then return invalid
@@ -30,9 +30,11 @@ end function
 function GuideInt(value as object) as integer
     if value = invalid then return 0
     kind = type(value)
-    if kind = "Integer" or kind = "roInteger" or kind = "LongInteger" or kind = "roLongInteger" then return value
-    if kind = "Float" or kind = "roFloat" or kind = "Double" or kind = "roDouble" then return Int(value)
-    if kind = "String" or kind = "roString" then return Int(Val(value))
+    ' Parentheses matter: otherwise `or` can swallow the comparisons.
+    ' roInt is the boxed integer type the brs interpreter reports.
+    if (kind = "Integer") or (kind = "roInteger") or (kind = "roInt") or (kind = "LongInteger") or (kind = "roLongInteger") then return Int(value)
+    if (kind = "Float") or (kind = "roFloat") or (kind = "Double") or (kind = "roDouble") then return Int(value)
+    if (kind = "String") or (kind = "roString") then return Int(Val(value))
     return 0
 end function
 

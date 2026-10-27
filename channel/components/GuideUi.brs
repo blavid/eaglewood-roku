@@ -69,7 +69,7 @@ function TileColor() as string
 end function
 
 function RailSections() as object
-    return ["home", "rules", "fixes", "todo", "dining", "hiking", "checkout", "wifi", "help"]
+    return ["home", "rules", "fixes", "todo", "dining", "hiking", "book", "checkout", "wifi"]
 end function
 
 function TileSections() as object
@@ -79,13 +79,13 @@ end function
 function RailLabel(section as string) as string
     if section = "home" then return "Home"
     if section = "rules" then return "House Rules"
-    if section = "fixes" then return "Troubleshooting"
+    if section = "fixes" then return "Quick Fixes"
     if section = "todo" then return "Things to Do"
     if section = "dining" then return "Dining"
     if section = "hiking" then return "Hiking"
+    if section = "book" then return "Book Direct"
     if section = "checkout" then return "Checkout"
     if section = "wifi" then return "Wi-Fi"
-    if section = "help" then return "Help"
     return "Home"
 end function
 
@@ -95,8 +95,7 @@ function TileTitle(section as string) as string
 end function
 
 function SoonSection(section as string) as boolean
-    if section = "todo" or section = "dining" or section = "hiking" or section = "wifi" then return true
-    return false
+    return section = "soon"
 end function
 
 function RailIndexOf(section as string) as integer
@@ -122,13 +121,21 @@ function OrText(value as object, fallback as string) as string
 end function
 
 function DecodeList(text as object) as object
-    raw = AsText(text)
-    if raw = "" then return []
-    parsed = ParseJson(raw)
-    if parsed = invalid then return []
-    kind = type(parsed)
-    if kind <> "roArray" and kind <> "Array" then return []
+    parsed = DecodeJson(text)
+    if not IsList(parsed) then return []
     return parsed
+end function
+
+function DecodeAssoc(text as object) as object
+    parsed = DecodeJson(text)
+    if not IsAssoc(parsed) then return invalid
+    return parsed
+end function
+
+function DecodeJson(text as object) as object
+    raw = AsText(text)
+    if raw = "" then return invalid
+    return ParseJson(raw)
 end function
 
 sub BuildShell()
@@ -136,7 +143,6 @@ sub BuildShell()
     shell.translation = [0, 0]
 
     panel = AddRect(shell, GlassColor(), RailX(), RailY(), RailW(), RailH())
-    panel.cornerRadius = 28
     m.railBrand = AddLabel(shell, "Eaglewood", "font:MediumBoldSystemFont", InkColor(), RailX() + 24, RailY() + 18, RailW() - 48, 40)
     m.railPlace = AddLabel(shell, "Sunriver, Oregon", "font:SmallSystemFont", MuteColor(), RailX() + 24, RailY() + 58, RailW() - 48, 32)
 
@@ -147,7 +153,6 @@ sub BuildShell()
         group = CreateObject("roSGNode", "Group")
         group.translation = [RailX() + 12, RailY() + 112 + (index * 72)]
         bg = AddRect(group, "0x00000000", 0, 0, RailW() - 24, 64)
-        bg.cornerRadius = 16
         label = AddLabel(group, RailLabel(sections[index]), "font:MediumBoldSystemFont", InkColor(), 16, 0, RailW() - 56, 64)
         shell.appendChild(group)
         m.railItems.Push({ group: group, bg: bg, label: label })
@@ -155,7 +160,7 @@ sub BuildShell()
 
     m.homePane = CreateObject("roSGNode", "Group")
     shell.appendChild(m.homePane)
-    m.subtitle = AddLabel(m.homePane, "Checkout", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 138, ContentWidth(), 56)
+    m.subtitle = AddLabel(m.homePane, "Checkout", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 138, ContentWidth(), 44)
     m.subtitle.vertAlign = "top"
     m.subtitle.maxLines = 2
     BuildTiles(m.homePane)
@@ -165,6 +170,7 @@ sub BuildShell()
     m.checkoutPane = BuildCheckoutPane(shell)
     m.helpPane = BuildHelpPane(shell)
     m.soonPane = BuildSoonPane(shell)
+    BuildPhase2(shell)
 
     m.footer = AddLabel(shell, FooterLine(), "font:SmallSystemFont", MuteColor(), ContentLeft(), 928, ContentWidth() - 300, 36)
     m.offline = AddLabel(shell, "", "font:SmallSystemFont", AmberColor(), ContentLeft() + ContentWidth() - 280, 928, 280, 36)
@@ -179,8 +185,8 @@ sub BuildTiles(parent as object)
     m.tiles = []
     sections = TileSections()
     tileW = 362
-    tileH = 210
-    originY = ContentTop() + 210
+    tileH = 164
+    originY = 480
     last = sections.Count() - 1
     for index = 0 to last
         col = index mod 3
@@ -190,9 +196,7 @@ sub BuildTiles(parent as object)
         group = CreateObject("roSGNode", "Group")
         group.translation = [x, y]
         outer = AddRect(group, TileColor(), 0, 0, tileW, tileH)
-        outer.cornerRadius = 18
         inner = AddRect(group, TileColor(), 0, 0, tileW, tileH)
-        inner.cornerRadius = 18
         title = AddLabel(group, TileTitle(sections[index]), "font:MediumBoldSystemFont", InkColor(), 22, 48, tileW - 44, 64)
         title.vertAlign = "center"
         subLabel = AddLabel(group, "", "font:SmallSystemFont", MuteColor(), 22, 116, tileW - 44, 40)
@@ -231,7 +235,7 @@ function BuildFixesPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
     parent.appendChild(pane)
-    AddLabel(pane, "Troubleshooting", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
+    AddLabel(pane, "Quick Fixes", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
     listX = ContentLeft()
     listY = ContentTop() + 78
     m.issueRows = []
@@ -240,7 +244,6 @@ function BuildFixesPane(parent as object) as object
         group = CreateObject("roSGNode", "Group")
         group.translation = [listX, listY + (index * 66)]
         bg = AddRect(group, "0x00000000", 0, 0, 456, 60)
-        bg.cornerRadius = 14
         label = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 16, 0, 424, 60)
         label.maxLines = 2
         pane.appendChild(group)
@@ -248,7 +251,6 @@ function BuildFixesPane(parent as object) as object
     end for
 
     card = AddRect(pane, GlassColor(), ContentLeft() + 476, listY, 656, 528)
-    card.cornerRadius = 20
     m.detailTitle = AddLabel(pane, "", "font:MediumBoldSystemFont", InkColor(), ContentLeft() + 500, listY + 16, 608, 88)
     m.detailTitle.vertAlign = "top"
     m.detailTitle.maxLines = 2
@@ -258,7 +260,6 @@ function BuildFixesPane(parent as object) as object
         group = CreateObject("roSGNode", "Group")
         group.translation = [ContentLeft() + 500, listY + 112 + (index * 96)]
         badge = AddRect(group, AmberColor(), 0, 4, 36, 36)
-        badge.cornerRadius = 18
         numberLabel = AddLabel(group, "", "font:SmallBoldSystemFont", InkOnAmber(), 0, 4, 36, 36)
         numberLabel.horizAlign = "center"
         body = AddLabel(group, "", "font:SmallSystemFont", InkColor(), 48, 0, 560, 92)
@@ -286,7 +287,6 @@ function BuildCheckoutPane(parent as object) as object
         group = CreateObject("roSGNode", "Group")
         group.translation = [ContentLeft(), ContentTop() + 236 + (index * 72)]
         badge = AddRect(group, AmberColor(), 0, 8, 36, 36)
-        badge.cornerRadius = 18
         numberLabel = AddLabel(group, "", "font:SmallBoldSystemFont", InkOnAmber(), 0, 8, 36, 36)
         numberLabel.horizAlign = "center"
         body = AddLabel(group, "", "font:SmallSystemFont", InkColor(), 52, 0, ContentWidth() - 52, 68)
@@ -346,13 +346,23 @@ function AddLabel(parent as object, text as string, fontName as string, color as
 end function
 
 sub ShowSection(section as string)
-    if m.homePane <> invalid then m.homePane.visible = (section = "home")
-    if m.greeting <> invalid then m.greeting.visible = (section = "home")
+    home = (section = "home")
+    if m.homePane <> invalid then m.homePane.visible = home
+    if m.greeting <> invalid then m.greeting.visible = home
     if m.rulesPane <> invalid then m.rulesPane.visible = (section = "rules")
     if m.fixesPane <> invalid then m.fixesPane.visible = (section = "fixes")
     if m.checkoutPane <> invalid then m.checkoutPane.visible = (section = "checkout")
-    if m.helpPane <> invalid then m.helpPane.visible = (section = "help")
+    if m.helpPane <> invalid then m.helpPane.visible = false
     if m.soonPane <> invalid then m.soonPane.visible = SoonSection(section)
+    if m.bookPane <> invalid then m.bookPane.visible = (section = "book")
+    if m.wifiPane <> invalid then m.wifiPane.visible = (section = "wifi")
+    onActivity = ActivitySection(section)
+    if m.activityPane <> invalid then m.activityPane.visible = onActivity and m.zone <> "item"
+    if m.detailPane <> invalid then m.detailPane.visible = onActivity and m.zone = "item"
+    if m.footer <> invalid then m.footer.visible = (section <> "book")
+    if not onActivity then ReleaseCardImages()
+    UpdateBadgeVisible()
+    LogQrScreen()
 end sub
 
 sub PaintAll()
@@ -365,6 +375,7 @@ sub PaintAll()
     PaintCheckout()
     PaintHelp()
     PaintSoon()
+    PaintPhase2()
     RefreshHomeLine()
 end sub
 
@@ -441,10 +452,10 @@ end sub
 
 function TileSubtitle(section as string) as string
     if section = "wifi" then return "Scan to join"
-    if section = "todo" then return "9 categories"
+    if section = "todo" then return "Seasonal picks"
     if section = "dining" then return "Village & Bend"
-    if section = "hiking" then return "6 trails"
-    if section = "fixes" then return IssueCount().ToStr() + " how-tos"
+    if section = "hiking" then return "Trails nearby"
+    if section = "fixes" then return "How-tos"
     if section = "checkout"
         if m.checkOut <> invalid and m.checkOut <> "" then return "Before " + m.checkOut
         return "Before checkout"
@@ -452,9 +463,13 @@ function TileSubtitle(section as string) as string
     return ""
 end function
 
+function FixIssues() as object
+    if m.fixIssues = invalid then return []
+    return m.fixIssues
+end function
+
 function IssueCount() as integer
-    if m.issues = invalid then return 0
-    return m.issues.Count()
+    return FixIssues().Count()
 end function
 
 function RuleCount() as integer
@@ -468,9 +483,9 @@ function CheckoutStepCount() as integer
 end function
 
 function CurrentIssue() as object
-    if m.issues = invalid then return invalid
-    if m.issueIndex < 0 or m.issueIndex >= m.issues.Count() then return invalid
-    return m.issues[m.issueIndex]
+    issues = FixIssues()
+    if m.issueIndex < 0 or m.issueIndex >= issues.Count() then return invalid
+    return issues[m.issueIndex]
 end function
 
 function StepCount() as integer
@@ -522,7 +537,7 @@ sub PaintFixes()
             row.group.visible = false
         else
             row.group.visible = true
-            issue = m.issues[issueIndex]
+            issue = FixIssues()[issueIndex]
             row.label.text = AsText(issue.Lookup("issue"))
             selected = (issueIndex = m.issueIndex)
             focused = selected and m.zone = "list"
@@ -672,7 +687,12 @@ function BundleFromResult(result as object) as object
         checkoutVersion: AsText(result.checkoutVersion),
         rules: DecodeList(result.rulesJson),
         issues: DecodeList(result.issuesJson),
-        checkoutSteps: DecodeList(result.stepsJson)
+        checkoutSteps: DecodeList(result.stepsJson),
+        activities: DecodeList(result.activitiesJson),
+        book: DecodeAssoc(result.bookJson),
+        activitiesSource: AsText(result.activitiesSource),
+        activitiesCode: AsText(result.activitiesCode),
+        activitiesVersion: AsText(result.activitiesVersion)
     }
 end function
 
@@ -709,6 +729,22 @@ sub ApplyBundle(bundle as object)
     else
         m.checkoutSteps = []
     end if
+    if IsList(bundle.activities)
+        m.activities = bundle.activities
+    else
+        m.activities = []
+    end if
+    if IsAssoc(bundle.book)
+        m.book = bundle.book
+    else
+        m.book = DefaultBookDirect()
+    end if
+    m.activitiesSource = OrText(bundle.activitiesSource, "builtin")
+    m.activitiesCode = OrText(bundle.activitiesCode, "0")
+    m.activitiesVersion = OrText(bundle.activitiesVersion, "0")
+    if m.activitiesToken = invalid then m.activitiesToken = 0
+    m.activitiesToken = m.activitiesToken + 1
+    m.fixIssues = IssuesForFixes(m.issues)
     if IssueCount() = 0
         m.issueIndex = 0
     else if m.issueIndex >= IssueCount()
