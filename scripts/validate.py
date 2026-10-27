@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "12",
+    "build_version": "13",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -449,6 +449,12 @@ def check_zip() -> None:
         fail(f"zip is {size} bytes, over 4 MB")
     with zipfile.ZipFile(ZIP_PATH) as archive:
         names = archive.namelist()
+        if "components/BuildStamp.brs" not in names:
+            fail("zip is missing components/BuildStamp.brs")
+        else:
+            stamp = archive.read("components/BuildStamp.brs").decode("utf-8")
+            if 'return "unknown"' in stamp or not re.search(r'return "[0-9a-f]{7}"', stamp):
+                fail("package did not inject the short commit")
     if "manifest" not in names:
         fail("zip is missing manifest at the archive root")
     if "components/secrets.brs" not in names:
@@ -509,8 +515,20 @@ def check_phase2() -> None:
         fail("startup must clear the stale QR cache")
     if "wifi png format bitdepth=" not in wifi:
         fail("wifi png format must be logged")
-    if "sub MountQrPoster(" not in phase2:
+    if "sub MountQrPosterBody(" not in phase2:
         fail("public QR posters must use the Wi-Fi local-file mount")
+    diag = (ROOT / "channel" / "components" / "QrDiag.brs").read_text(encoding="utf-8")
+    if "sub MountQrPoster(" not in diag or "sub GuardMountQrPoster(" not in diag:
+        fail("QR mount must be wrapped in try/catch")
+    if 'print "Eaglewood: qr "; slot; " error="' not in diag:
+        fail("a caught QR error must be logged")
+    stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
+    if 'return "unknown"' not in stamp or "build 13 · " not in stamp:
+        fail("the build label must keep a package-time commit placeholder")
+    if 'print "Eaglewood: build 13 "' not in scene:
+        fail("startup must log build 13 and the commit")
+    if "0xFF00FFFF" not in phase2:
+        fail("QR slots need a visible magenta marker")
     if "function QrRectText(" not in phase2 or "rect=" not in phase2:
         fail("each QR must log its uri, loadStatus, and bounding rect")
     if 'print "Eaglewood: qr ' not in phase2:

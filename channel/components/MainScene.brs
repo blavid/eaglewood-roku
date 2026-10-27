@@ -1,4 +1,5 @@
 sub init()
+    print "Eaglewood: build 13 "; BuildCommit()
     ClearStaleQrCache()
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -845,7 +846,11 @@ sub ApplyQrResult(result as object)
             m.badgeFailed = false
             m.badgeFile = uri
             UpdateBadgeVisible()
-            MountQrPoster(m.badgePoster, uri, "badge")
+            try
+                MountQrPoster(m.badgePoster, uri, "badge")
+            catch err
+                print "Eaglewood: qr badge error="; LayoutErrorText(err)
+            end try
         else
             m.badgeFailed = true
             LogQrState("badge", m.badgePoster)
@@ -856,7 +861,11 @@ sub ApplyQrResult(result as object)
         if uri <> ""
             m.bookFile = uri
             ShowBookQr(true)
-            MountQrPoster(m.bookQr, uri, "book")
+            try
+                MountQrPoster(m.bookQr, uri, "book")
+            catch err
+                print "Eaglewood: qr book error="; LayoutErrorText(err)
+            end try
         else
             LogQrState("book", m.bookQr)
         end if
@@ -867,7 +876,11 @@ sub ApplyQrResult(result as object)
             m.detailQrFailed = false
             m.detailFile = uri
             ShowDetailQr(true)
-            MountQrPoster(m.detailQr, uri, "detail")
+            try
+                MountQrPoster(m.detailQr, uri, "detail")
+            catch err
+                print "Eaglewood: qr detail error="; LayoutErrorText(err)
+            end try
         else
             m.detailQrFailed = true
             LogQrState("detail", m.detailQr)

@@ -67,6 +67,9 @@ sub BuildBadge(parent as object)
     group = CreateObject("roSGNode", "Group")
     group.translation = [1496, 830]
     group.visible = false
+    ' Card translation is 0,0 inside this group, so the slot on screen is 1496,830 220x200.
+    ' The marker stays on the shell, behind the group, so it shows when the group is hidden.
+    AddRect(parent, DiagMagenta(), 1496, 830, 220, 200)
     card = AddRect(group, "0xFFFFFFF2", 0, 0, 220, 200)
     card.visible = false
     m.badgeCard = card
@@ -144,6 +147,7 @@ function BuildBookPane(parent as object) as object
     qrCard = AddRect(pane, "0x1B4D38FF", 1296, 292, 300, 280)
     qrCard.visible = false
     m.bookQrCard = qrCard
+    AddRect(pane, DiagMagenta(), 1296, 292, 300, 280)
     scan = AddLabel(pane, "Scan me!", "font:SmallBoldSystemFont", InkColor(), 1296, 296, 300, 40)
     scan.horizAlign = "center"
     scan.visible = false
@@ -282,6 +286,7 @@ function BuildDetailPane(parent as object) as object
     m.detailPhoto.observeField("loadStatus", "onDetailPhotoStatus")
     m.detailQrCard = AddRect(pane, "0xFFFFFFF2", ContentLeft() + 740, ContentTop() + 140, 280, 280)
     m.detailQrCard.visible = false
+    AddRect(pane, DiagMagenta(), ContentLeft() + 740, ContentTop() + 140, 280, 280)
     place = AddLabel(pane, "This place", "font:SmallBoldSystemFont", "0x1C1408FF", ContentLeft() + 756, ContentTop() + 146, 248, 36)
     place.horizAlign = "center"
     place.visible = false
@@ -390,7 +395,7 @@ sub PaintBadge()
     end if
     if m.badgeDomain <> invalid then m.badgeDomain.text = DisplayDomain()
     UpdateBadgeVisible()
-    if m.badgeFile <> "" then MountQrPoster(m.badgePoster, m.badgeFile, "badge")
+    if m.badgeFile <> "" then GuardMountQrPoster(m.badgePoster, m.badgeFile, "badge")
 end sub
 
 sub onBadgeStatus()
@@ -457,7 +462,7 @@ sub PaintBook()
         if qr <> "" then StartQrFetch("book")
     end if
     ShowBookQr(qr <> "")
-    if m.bookFile <> "" then MountQrPoster(m.bookQr, m.bookFile, "book")
+    if m.bookFile <> "" then GuardMountQrPoster(m.bookQr, m.bookFile, "book")
 end sub
 
 function BookHeadline(book as object) as object
@@ -531,7 +536,7 @@ end sub
 ' Wi-Fi draws because its Poster.uri is cachefs:/eaglewood/wifi.png, the node
 ' is already in the tree with a real width and height, and loadDisplayMode is
 ' scaleToFit. Public QR codes use this same assignment.
-sub MountQrPoster(poster as object, path as string, slot as string)
+sub MountQrPosterBody(poster as object, path as string, slot as string)
     if poster = invalid or path = invalid or path = "" then return
     if Left(path, 8) <> "cachefs:" and Left(path, 4) <> "tmp:" then return
     poster.visible = true
@@ -581,7 +586,7 @@ sub PaintWifi()
             m.wifiPoster.loadHeight = 480
             m.wifiPoster.uri = ""
         end if
-        MountQrPoster(m.wifiPoster, path, "wifi")
+        GuardMountQrPoster(m.wifiPoster, path, "wifi")
         if m.wifiPoster.loadStatus = "ready" and m.wifiMissing <> invalid then m.wifiMissing.text = ""
     else
         m.wifiPoster.visible = false
@@ -836,7 +841,7 @@ sub PaintDetail()
         StartQrFetch("detail")
     end if
     ShowDetailQr(true)
-    if m.detailFile <> "" then MountQrPoster(m.detailQr, m.detailFile, "detail")
+    if m.detailFile <> "" then GuardMountQrPoster(m.detailQr, m.detailFile, "detail")
 end sub
 
 sub ShowDetailQr(show as boolean)
@@ -940,6 +945,10 @@ end sub
 function ResultNumber(result as object, key as string) as integer
     if result = invalid then return 0
     return GuideInt(result.Lookup(key))
+end function
+
+function DiagMagenta() as string
+    return "0xFF00FFFF"
 end function
 
 sub LogQrState(name as string, poster as object)

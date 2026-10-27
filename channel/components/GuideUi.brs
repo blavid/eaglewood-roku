@@ -160,6 +160,8 @@ sub BuildShell()
 
     m.homePane = CreateObject("roSGNode", "Group")
     shell.appendChild(m.homePane)
+    m.buildLabel = AddLabel(m.homePane, BuildStampLine(), "font:SmallestSystemFont", "0xFF00FFFF", ContentLeft(), 988, 520, 32)
+    m.buildLabel.visible = true
     m.subtitle = AddLabel(m.homePane, "Checkout", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 138, ContentWidth(), 44)
     m.subtitle.vertAlign = "top"
     m.subtitle.maxLines = 2
