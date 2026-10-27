@@ -51,7 +51,7 @@
             maxLines="2"
             horizAlign="left"
             vertAlign="center"
-            text="Welcome to Eaglewood"
+            text="Welcome to Eaglewood 19"
             color="0xFFFFFFFF"
             font="font:LargeBoldSystemFont" />
         <!-- 600 seconds. A keypress stops and starts it again. -->

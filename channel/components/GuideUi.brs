@@ -68,8 +68,39 @@ function TileColor() as string
     return "0x243044C8"
 end function
 
+function TopMenu() as object
+    return ["todo", "home", "rules", "fixes", "book", "checkout", "wifi"]
+end function
+
+function TodoMenu() as object
+    return ["dining", "hiking", "winter", "summer", "fishing", "biking"]
+end function
+
 function RailSections() as object
-    return ["home", "rules", "fixes", "todo", "dining", "hiking", "book", "checkout", "wifi"]
+    return TopMenu()
+end function
+
+function HomeMenuIndex() as integer
+    return 1
+end function
+
+function MenuSlotCount() as integer
+    return 7
+end function
+
+function ActiveMenu(depth as string) as object
+    if depth = "todo" then return TodoMenu()
+    return TopMenu()
+end function
+
+function MenuIndex(menu as object, section as string) as integer
+    if menu = invalid then return 0
+    last = menu.Count() - 1
+    if last < 0 then return 0
+    for index = 0 to last
+        if menu[index] = section then return index
+    end for
+    return 0
 end function
 
 function TileSections() as object
@@ -83,10 +114,74 @@ function RailLabel(section as string) as string
     if section = "todo" then return "Things to Do"
     if section = "dining" then return "Dining"
     if section = "hiking" then return "Hiking"
+    if section = "winter" then return "Winter"
+    if section = "summer" then return "Summer"
+    if section = "fishing" then return "Fishing"
+    if section = "biking" then return "Biking"
     if section = "book" then return "Book Direct"
-    if section = "checkout" then return "Checkout"
+    if section = "checkout" then return "Checkout Instructions"
     if section = "wifi" then return "Wi-Fi"
     return "Home"
+end function
+
+function ShownBrand(brand as string) as string
+    text = AsText(brand)
+    if text = "" or text = "Eaglewood" then return "Eaglewood 19"
+    return text
+end function
+
+function RailLabelWidth() as integer
+    return RailW() - 56
+end function
+
+function RailRowHeight() as integer
+    return 64
+end function
+
+function NavFontSize() as integer
+    return 27
+end function
+
+function NavLineHeight() as integer
+    return 27
+end function
+
+function TileTitleBox() as object
+    return { x: 12, y: 28, w: 338, h: 80 }
+end function
+
+function LabelLinesFit(text as string, width as integer, charWidth as integer, maxLines as integer, lineHeight as integer, boxHeight as integer) as boolean
+    lines = WrapGreeting(text, width, invalid, charWidth)
+    count = lines.Count()
+    if count < 1 then return false
+    if count > maxLines then return false
+    if count * lineHeight > boxHeight then return false
+    last = count - 1
+    if last >= 0
+        for index = 0 to last
+            if lines[index] = "overflow" then return false
+        end for
+    end if
+    return true
+end function
+
+function CheckoutNavFits() as boolean
+    return LabelLinesFit(RailLabel("checkout"), RailLabelWidth(), FallbackCharWidth(NavFontSize()), 2, NavLineHeight(), RailRowHeight())
+end function
+
+function CheckoutTileFits() as boolean
+    tileBox = TileTitleBox()
+    return LabelLinesFit(TileTitle("checkout"), tileBox.w, FallbackCharWidth(36), 2, 36, tileBox.h)
+end function
+
+function CheckoutHeadingFits() as boolean
+    return LabelLinesFit(RailLabel("checkout"), ContentWidth(), FallbackCharWidth(54), 1, 54, 64)
+end function
+
+function RailClearsContent() as boolean
+    gap = ContentLeft() - (RailX() + RailW())
+    if gap < 8 then return false
+    return true
 end function
 
 function TileTitle(section as string) as string
@@ -96,15 +191,6 @@ end function
 
 function SoonSection(section as string) as boolean
     return section = "soon"
-end function
-
-function RailIndexOf(section as string) as integer
-    sections = RailSections()
-    last = sections.Count() - 1
-    for index = 0 to last
-        if sections[index] = section then return index
-    end for
-    return 0
 end function
 
 function AsText(value as object) as string
@@ -140,20 +226,25 @@ end function
 
 sub BuildShell()
     shell = CreateObject("roSGNode", "Group")
+    shell.id = "shell"
     shell.translation = [0, 0]
+    if m.menuDepth = invalid or m.menuDepth = "" then m.menuDepth = "top"
 
     panel = AddRect(shell, GlassColor(), RailX(), RailY(), RailW(), RailH())
-    m.railBrand = AddLabel(shell, "Eaglewood", "font:MediumBoldSystemFont", InkColor(), RailX() + 24, RailY() + 18, RailW() - 48, 40)
+    m.railBrand = AddLabel(shell, ShownBrand("Eaglewood"), "font:MediumBoldSystemFont", InkColor(), RailX() + 24, RailY() + 18, RailW() - 48, 40)
     m.railPlace = AddLabel(shell, "Sunriver, Oregon", "font:SmallSystemFont", MuteColor(), RailX() + 24, RailY() + 58, RailW() - 48, 32)
 
     m.railItems = []
-    sections = RailSections()
-    last = sections.Count() - 1
+    sections = TopMenu()
+    last = MenuSlotCount() - 1
     for index = 0 to last
         group = CreateObject("roSGNode", "Group")
         group.translation = [RailX() + 12, RailY() + 112 + (index * 72)]
-        bg = AddRect(group, "0x00000000", 0, 0, RailW() - 24, 64)
-        label = AddLabel(group, RailLabel(sections[index]), "font:MediumBoldSystemFont", InkColor(), 16, 0, RailW() - 56, 64)
+        bg = AddRect(group, "0x00000000", 0, 0, RailW() - 24, RailRowHeight())
+        text = ""
+        if index < sections.Count() then text = RailLabel(sections[index])
+        label = AddLabel(group, text, "font:SmallBoldSystemFont", InkColor(), 16, 0, RailLabelWidth(), RailRowHeight())
+        label.maxLines = 2
         shell.appendChild(group)
         m.railItems.Push({ group: group, bg: bg, label: label })
     end for
@@ -179,6 +270,7 @@ sub BuildShell()
 
     m.top.appendChild(shell)
     m.shell = shell
+    ' Once, before the first ShowSection, so the badge stays the last shell child.
     RaiseBadge()
 end sub
 
@@ -198,7 +290,9 @@ sub BuildTiles(parent as object)
         group.translation = [x, y]
         outer = AddRect(group, TileColor(), 0, 0, tileW, tileH)
         inner = AddRect(group, TileColor(), 0, 0, tileW, tileH)
-        title = AddLabel(group, TileTitle(sections[index]), "font:MediumBoldSystemFont", InkColor(), 22, 48, tileW - 44, 64)
+        titleBox = TileTitleBox()
+        title = AddLabel(group, TileTitle(sections[index]), "font:MediumBoldSystemFont", InkColor(), titleBox.x, titleBox.y, titleBox.w, titleBox.h)
+        title.maxLines = 2
         title.vertAlign = "center"
         subLabel = AddLabel(group, "", "font:SmallSystemFont", MuteColor(), 22, 116, tileW - 44, 40)
         parent.appendChild(group)
@@ -277,7 +371,7 @@ function BuildCheckoutPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
     parent.appendChild(pane)
-    AddLabel(pane, "Checkout", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
+    AddLabel(pane, RailLabel("checkout"), "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
     m.checkoutWhen = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 68, ContentWidth(), 36)
     m.checkoutSummary = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), ContentLeft(), ContentTop() + 112, ContentWidth(), 110)
     m.checkoutSummary.vertAlign = "top"
@@ -367,8 +461,7 @@ sub ShowSection(section as string)
     ShowQrFrame("detail", QrRemote("detail") <> "")
     ReassignStoredQrs()
     LogQrScreen()
-    ' Detail is a later shell child. Keep the Home badge above it.
-    RaiseBadge()
+    LogBadgePlacement()
 end sub
 
 sub PaintAll()
@@ -386,7 +479,7 @@ sub PaintAll()
 end sub
 
 sub PaintChrome()
-    if m.railBrand <> invalid then m.railBrand.text = OrText(m.brand, "Eaglewood")
+    if m.railBrand <> invalid then m.railBrand.text = ShownBrand(OrText(m.brand, "Eaglewood"))
     if m.railPlace <> invalid then m.railPlace.text = OrText(m.place, "Sunriver, Oregon")
     if m.footer <> invalid then m.footer.text = FooterLine()
     PaintOffline()
@@ -413,6 +506,7 @@ sub RefreshHomeLine()
 end sub
 
 sub PaintRail()
+    RefreshRail()
     if m.railItems = invalid then return
     last = m.railItems.Count() - 1
     if last < 0 then return
@@ -759,3 +853,136 @@ sub ApplyBundle(bundle as object)
     if m.issueIndex < 0 then m.issueIndex = 0
     PaintAll()
 end sub
+
+sub RefreshRail()
+    if m.railItems = invalid then return
+    depth = "top"
+    if m.menuDepth <> invalid and m.menuDepth <> "" then depth = m.menuDepth
+    menu = ActiveMenu(depth)
+    last = m.railItems.Count() - 1
+    if last < 0 then return
+    for index = 0 to last
+        row = m.railItems[index]
+        if index < menu.Count()
+            row.group.visible = true
+            row.label.text = RailLabel(menu[index])
+        else
+            row.group.visible = false
+            row.label.text = ""
+        end if
+    end for
+end sub
+
+function ZoneForSection(section as string) as string
+    if section = "home" then return "prompt"
+    if section = "fixes" then return "list"
+    if ActivitySection(section) then return "grid"
+    return "panel"
+end function
+
+function HomeRailState() as object
+    return { depth: "top", zone: "rail", section: "home", index: HomeMenuIndex(), handled: true, leave: false }
+end function
+
+function HomePromptState() as object
+    return { depth: "top", zone: "prompt", section: "home", index: HomeMenuIndex(), handled: true, leave: false }
+end function
+
+function SubmenuSection(section as string) as boolean
+    if section = "dining" then return true
+    if section = "hiking" then return true
+    if section = "winter" then return true
+    if section = "summer" then return true
+    if section = "fishing" then return true
+    if section = "biking" then return true
+    return false
+end function
+
+function OpenTarget(section as string) as object
+    if SubmenuSection(section) = true
+        return { depth: "todo", zone: "grid", section: section, index: MenuIndex(TodoMenu(), section), handled: true, leave: false }
+    end if
+    if section = "todo"
+        first = TodoMenu()[0]
+        return { depth: "todo", zone: "rail", section: first, index: 0, handled: true, leave: false }
+    end if
+    if section = "home" then return HomePromptState()
+    if section = "fixes"
+        return { depth: "top", zone: "list", section: "fixes", index: MenuIndex(TopMenu(), "fixes"), handled: true, leave: false }
+    end if
+    return { depth: "top", zone: "panel", section: section, index: MenuIndex(TopMenu(), section), handled: true, leave: false }
+end function
+
+function NavKeyKind(key as string) as string
+    if key = "up" then return "move"
+    if key = "down" then return "move"
+    if key = "OK" then return "open"
+    if key = "right" then return "open"
+    if key = "back" then return "back"
+    if key = "left" then return "back"
+    return ""
+end function
+
+' Rail, submenu, and detail transitions. Card arrows stay in MoveCards.
+function NextNav(depth as string, zone as string, section as string, index as integer, key as string) as object
+    menu = ActiveMenu(depth)
+    count = menu.Count()
+    nextDepth = depth
+    nextZone = zone
+    nextSection = section
+    nextIndex = index
+    leave = false
+    kind = NavKeyKind(key)
+    if kind = "move"
+        if zone = "rail"
+            moved = index + 1
+            if key = "up" then moved = index - 1
+            if moved >= 0
+                if moved < count
+                    nextIndex = moved
+                    nextSection = menu[moved]
+                end if
+            end if
+        end if
+    else if kind = "open"
+        if zone = "rail"
+            drill = false
+            if depth = "top"
+                if section = "todo" then drill = true
+            end if
+            if drill = true
+                nextDepth = "todo"
+                nextZone = "rail"
+                nextIndex = 0
+                nextSection = TodoMenu()[0]
+            else if depth = "todo"
+                nextZone = "grid"
+            else
+                nextZone = ZoneForSection(section)
+            end if
+        end if
+    else if kind = "back"
+        if zone = "item"
+            nextZone = "grid"
+        else if zone = "grid"
+            if key = "back" then nextZone = "rail"
+        else if zone = "rail"
+            if depth = "todo"
+                nextDepth = "top"
+                nextZone = "rail"
+                nextSection = "todo"
+                nextIndex = 0
+            else if depth = "top"
+                if section = "home"
+                    if key = "back" then leave = true
+                else
+                    nextDepth = "top"
+                    nextZone = "rail"
+                    nextSection = "home"
+                    nextIndex = HomeMenuIndex()
+                end if
+            end if
+        end if
+    end if
+    return { depth: nextDepth, zone: nextZone, section: nextSection, index: nextIndex, handled: true, leave: leave }
+end function

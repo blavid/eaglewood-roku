@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "21",
+    "build_version": "22",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -99,19 +99,19 @@ IMAGE_SPECS = {
 }
 
 GREETING_CASES = [
-    ("", "", "Welcome to Eaglewood"),
-    ("   ", "", "Welcome to Eaglewood"),
+    ("", "", "Welcome to Eaglewood 19"),
+    ("   ", "", "Welcome to Eaglewood 19"),
     ("Alex", "", "Welcome, Alex"),
     ("Alex", "Rivera", "Welcome, Alex Rivera"),
     ("Alex", "R2", "Welcome, Alex"),
-    ("R2", "Rivera", "Welcome to Eaglewood"),
+    ("R2", "Rivera", "Welcome to Eaglewood 19"),
     ("Mary-Jane", "O'Brien", "Welcome, Mary-Jane O'Brien"),
     ("José", "García", "Welcome, José García"),
     ("Ann  Marie", "van  Horn", "Welcome, Ann Marie van Horn"),
     ("St. James", "Park", "Welcome, St. James Park"),
-    ("Alex123", "Lee", "Welcome to Eaglewood"),
+    ("Alex123", "Lee", "Welcome to Eaglewood 19"),
     ("A" * 40, "Lee", "Welcome, " + ("A" * 32) + " Lee"),
-    (None, "Lee", "Welcome to Eaglewood"),
+    (None, "Lee", "Welcome to Eaglewood 19"),
 ]
 
 
@@ -207,7 +207,7 @@ def check_greeting_rules() -> None:
         actual = build_greeting(first, last)
         if actual != expected:
             fail(f"greeting {(first, last)!r} -> {actual!r}, expected {expected!r}")
-    if build_greeting("Alex", "Lee", current=False) != "Welcome to Eaglewood":
+    if build_greeting("Alex", "Lee", current=False) != "Welcome to Eaglewood 19":
         fail("a stay that is not current must use the fallback greeting")
     if sanitize_name_part("O\u2019Brien") != "O'Brien":
         fail("curly apostrophe was not normalized")
@@ -532,10 +532,10 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 21 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 22 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 21 "' not in scene:
-        fail("startup must log build 21 and the commit")
+    if 'print "Eaglewood: build 22 "' not in scene:
+        fail("startup must log build 22 and the commit")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
     if 'id="finalUri"' not in qr_xml or "alwaysNotify" not in qr_xml:
         fail("each QR task needs a finalUri field")
@@ -616,8 +616,28 @@ def check_phase2() -> None:
     if "m.buildLabel" in guide or "BuildStampLine()" in guide:
         fail("the build number stays in the startup log, not on Home")
     show = guide[guide.find("sub ShowSection("):guide.find("sub PaintAll(")]
-    if "RaiseBadge()" not in show or "sub RaiseBadge(" not in phase2:
-        fail("the corner badge must be raised above the detail pane")
+    shell = guide[guide.find("sub BuildShell("):guide.find("sub BuildTiles(")]
+    if "RaiseBadge()" not in shell:
+        fail("BuildShell must raise the corner badge once, before the first screen")
+    if "RaiseBadge()" in show:
+        fail("ShowSection must not reparent the corner badge")
+    if "LogBadgePlacement()" not in show:
+        fail("every screen change must log the corner badge placement")
+    if 'shell.id = "shell"' not in shell:
+        fail("the shell needs an id so the badge parent is logged")
+    detail_open = scene[scene.find("function OpenActivityDetail("):scene.find("function HandleBack(")]
+    if "RaiseBadge()" in detail_open:
+        fail("opening detail must not reparent the corner badge")
+    if "function BadgeNavigateReparents(" not in phase2 or "return false" not in phase2[phase2.find("function BadgeNavigateReparents("):phase2.find("function DetailQrUrl(")]:
+        fail("navigation must leave the corner badge on its build 20 node")
+    if "This place" in detail:
+        fail("the activity detail QR must not keep the This place label")
+    if "DetailQrPosterRect()" not in detail:
+        fail("the activity detail QR must use the shared poster rect")
+    if "function NextNav(" not in guide or "Checkout Instructions" not in guide:
+        fail("the rail needs the Things to Do submenu and Checkout Instructions")
+    if "font:SmallBoldSystemFont" not in shell:
+        fail("nav items need the smaller font so Checkout Instructions fits")
     if "function QrRectText(" not in phase2 or "caption badge rect=" not in phase2:
         fail("caption and Checkout rects must be logged")
     if 'print "Eaglewood: qr ' not in phase2:

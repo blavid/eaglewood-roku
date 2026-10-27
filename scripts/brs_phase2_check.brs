@@ -400,9 +400,244 @@ sub Main()
         print "FAIL the corner badge overlaps the detail photo, description, or QR card"
         failed = failed + 1
     end if
+    poster = DetailQrPosterRect()
+    site = DetailQrSiteRect()
+    caption = DetailQrCaptionRect()
+    print "Eaglewood: detail poster rect="; ScreenRectText(poster)
+    if poster.w <> 220 or poster.h <> 200
+        print "FAIL the detail QR poster did not grow into the label space"
+        failed = failed + 1
+    end if
+    if poster.x < card.x or poster.y < card.y or poster.x + poster.w > card.x + card.w or poster.y + poster.h > card.y + card.h
+        print "FAIL the detail QR poster leaves its card"
+        failed = failed + 1
+    end if
+    if RectsClear(poster, photo, 0) <> true or RectsClear(poster, body, 0) <> true
+        print "FAIL the larger detail QR overlaps the photo or description"
+        failed = failed + 1
+    end if
+    if site.y + site.h > poster.y or poster.y + poster.h > caption.y
+        print "FAIL the detail QR covers its website label or gold caption"
+        failed = failed + 1
+    end if
+    if BadgeShown("home") <> true or BadgeShown("dining") <> true or BadgeShown("book") <> false
+        print "FAIL the corner badge visibility does not match build 20"
+        failed = failed + 1
+    end if
+    if BadgeNavigateReparents() <> false
+        print "FAIL navigation still reparents the corner badge"
+        failed = failed + 1
+    end if
+    if frame.x <> 1496 or frame.y <> 830
+        print "FAIL the corner badge translation left build 20"
+        failed = failed + 1
+    end if
+
+    bookBody = BookBodyRect()
+    savings = BookSavingsRect()
+    perks = BookPerkRow()
+    slot = BookQrSlot()
+    qrCard = { x: slot.cardX, y: slot.cardY, w: slot.cardW, h: slot.cardH }
+    gold = { x: slot.domainX, y: slot.domainY, w: slot.domainW, h: slot.domainH }
+    liveBody = DefaultBookDirect().body
+    bodyLines = WrapGreeting(liveBody, bookBody.w, invalid, FallbackCharWidth(BookBodyFontSize()))
+    print "Eaglewood: book body lines="; bodyLines.Count(); " rect="; ScreenRectText(bookBody)
+    if bodyLines.Count() < 1 or bodyLines.Count() > 6
+        print "FAIL the Book Direct body does not fit its line budget"
+        failed = failed + 1
+    end if
+    if bodyLines.Count() * BookBodyLineHeight() > bookBody.h
+        print "FAIL the Book Direct body lines exceed the label height"
+        failed = failed + 1
+    end if
+    joined = ""
+    lineLast = bodyLines.Count() - 1
+    if lineLast >= 0
+        for lineAt = 0 to lineLast
+            if lineAt > 0 then joined = joined + " "
+            joined = joined + bodyLines[lineAt]
+        end for
+    end if
+    if joined <> liveBody
+        print "FAIL the Book Direct body was truncated"
+        failed = failed + 1
+    end if
+    if RectsClear(bookBody, perks, 0) <> true or RectsClear(savings, perks, 0) <> true
+        print "FAIL the Book Direct copy overlaps the buttons"
+        failed = failed + 1
+    end if
+    if RectsClear(bookBody, qrCard, 0) <> true or RectsClear(bookBody, gold, 0) <> true
+        print "FAIL the Book Direct body overlaps the QR card or gold caption"
+        failed = failed + 1
+    end if
+    if RectsClear(savings, qrCard, 0) <> true or RectsClear(savings, gold, 0) <> true
+        print "FAIL the Book Direct savings overlap the QR card or gold caption"
+        failed = failed + 1
+    end if
+    saveLines = WrapGreeting(DefaultSavingsText(), savings.w, invalid, FallbackCharWidth(BookBodyFontSize()))
+    if saveLines.Count() * BookBodyLineHeight() > savings.h
+        print "FAIL the Book Direct savings lines exceed the label height"
+        failed = failed + 1
+    end if
+
+    if CheckoutNavFits() <> true
+        print "FAIL Checkout Instructions does not fit the nav label"
+        failed = failed + 1
+    end if
+    if CheckoutTileFits() <> true
+        print "FAIL Checkout Instructions does not fit the home tile"
+        failed = failed + 1
+    end if
+    if CheckoutHeadingFits() <> true
+        print "FAIL Checkout Instructions does not fit the page heading"
+        failed = failed + 1
+    end if
+    if RailClearsContent() <> true
+        print "FAIL the nav overlaps the content column"
+        failed = failed + 1
+    end if
+    titleBox = TileTitleBox()
+    tile = CheckoutTileRect()
+    if titleBox.x < 0 or titleBox.y < 0 or titleBox.x + titleBox.w > tile.w or titleBox.y + titleBox.h > tile.h
+        print "FAIL the checkout tile title leaves the tile"
+        failed = failed + 1
+    end if
+    navLines = WrapGreeting(RailLabel("checkout"), RailLabelWidth(), invalid, FallbackCharWidth(NavFontSize()))
+    print "Eaglewood: checkout nav lines="; navLines.Count(); " rect=220,592 "; RailLabelWidth(); "x"; RailRowHeight()
+    tileLines = WrapGreeting(TileTitle("checkout"), titleBox.w, invalid, FallbackCharWidth(36))
+    print "Eaglewood: checkout tile lines="; tileLines.Count(); " rect="; titleBox.x; ","; titleBox.y; " "; titleBox.w; "x"; titleBox.h; " tile="; ScreenRectText(tile)
+
+    if ShownBrand("") <> "Eaglewood 19" or ShownBrand("Eaglewood") <> "Eaglewood 19"
+        print "FAIL the rail header still says Eaglewood"
+        failed = failed + 1
+    end if
+    if HomeMenuIndex() <> 1 or TopMenu()[0] <> "todo" or TodoMenu().Count() <> 6
+        print "FAIL the top menu does not start with Things to Do and keep Home second"
+        failed = failed + 1
+    end if
+    if RailLabel("checkout") <> "Checkout Instructions" or TileTitle("checkout") <> "Checkout Instructions"
+        print "FAIL Checkout was not renamed"
+        failed = failed + 1
+    end if
+    failed = failed + ExpectNav()
+    failed = failed + ExpectActivityMenus()
 
     if failed = 0 then print "brs phase2 checks passed"
 end sub
+
+function ExpectNav() as integer
+    missed = 0
+    home = NextNav("top", "rail", "home", HomeMenuIndex(), "up")
+    if home.section <> "todo" or home.index <> 0 or home.depth <> "top"
+        print "FAIL up from Home did not reach Things to Do"
+        missed = missed + 1
+    end if
+    opened = NextNav(home.depth, home.zone, home.section, home.index, "OK")
+    if opened.depth <> "todo" or opened.zone <> "rail" or opened.section <> "dining" or opened.index <> 0
+        print "FAIL OK on Things to Do did not open the submenu"
+        missed = missed + 1
+    end if
+    down = NextNav(opened.depth, opened.zone, opened.section, opened.index, "down")
+    if down.section <> "hiking" or down.index <> 1 or down.depth <> "todo"
+        print "FAIL down in the submenu did not reach Hiking"
+        missed = missed + 1
+    end if
+    cards = NextNav(down.depth, down.zone, down.section, down.index, "right")
+    if cards.zone <> "grid" or cards.section <> "hiking" or cards.depth <> "todo"
+        print "FAIL right on a submenu did not open its cards"
+        missed = missed + 1
+    end if
+    detail = { depth: cards.depth, zone: "item", section: cards.section, index: cards.index }
+    backDetail = NextNav(detail.depth, detail.zone, detail.section, detail.index, "back")
+    if backDetail.zone <> "grid" or backDetail.section <> "hiking" or backDetail.depth <> "todo"
+        print "FAIL back from detail left the submenu list"
+        missed = missed + 1
+    end if
+    leftDetail = NextNav(detail.depth, detail.zone, detail.section, detail.index, "left")
+    if leftDetail.zone <> "grid" or leftDetail.section <> "hiking"
+        print "FAIL left from detail left the submenu list"
+        missed = missed + 1
+    end if
+    backCards = NextNav(backDetail.depth, backDetail.zone, backDetail.section, backDetail.index, "back")
+    if backCards.zone <> "rail" or backCards.section <> "hiking" or backCards.depth <> "todo"
+        print "FAIL back from cards left the submenu"
+        missed = missed + 1
+    end if
+    backMenu = NextNav(backCards.depth, backCards.zone, backCards.section, backCards.index, "left")
+    if backMenu.depth <> "top" or backMenu.section <> "todo" or backMenu.index <> 0 or backMenu.zone <> "rail"
+        print "FAIL left from the submenu did not focus Things to Do"
+        missed = missed + 1
+    end if
+    idle = HomePromptState()
+    if idle.section <> "home" or idle.index <> HomeMenuIndex() or idle.zone <> "prompt" or idle.depth <> "top"
+        print "FAIL idle home is not Home on the top menu"
+        missed = missed + 1
+    end if
+    dining = OpenTarget("dining")
+    if dining.depth <> "todo" or dining.section <> "dining" or dining.zone <> "grid"
+        print "FAIL the Dining tile did not enter that submenu"
+        missed = missed + 1
+    end if
+    todoTile = OpenTarget("todo")
+    if todoTile.depth <> "todo" or todoTile.zone <> "rail" or todoTile.section <> "dining"
+        print "FAIL the Things to Do tile did not enter the submenu"
+        missed = missed + 1
+    end if
+    return missed
+end function
+
+function ExpectActivityMenus() as integer
+    missed = 0
+    mapped = NormalizeActivities({
+        version: 1,
+        activitySections: [
+            { id: "dining", title: "Dining", activities: [{ id: "cafe", name: "Cafe", season: ["year-round"] }] },
+            { id: "hiking", title: "Hiking", activities: [{ id: "trail", name: "Trail", season: ["summer"] }] },
+            { id: "mountain-biking", title: "Mountain biking", activities: [{ id: "mtb", name: "Phil's Trail", season: ["summer", "fall"] }] },
+            { id: "scenic-adventures", title: "Scenic", activities: [{ id: "fall-color", name: "Fall color drive", season: ["fall"] }] },
+            { id: "guided-tours-and-activities", title: "Guided tours", activities: [{ id: "ride", name: "River E-bike", season: ["spring"] }] }
+        ]
+    })
+    if mapped = invalid or mapped.items.Count() <> 5
+        print "FAIL submenu fixtures did not normalize"
+        return 1
+    end if
+    cafe = mapped.items[0]
+    trail = mapped.items[1]
+    mtb = mapped.items[2]
+    fallColor = mapped.items[3]
+    ride = mapped.items[4]
+    if ItemOnScreen(cafe, "dining") <> true or ItemOnScreen(cafe, "winter") <> true or ItemOnScreen(cafe, "summer") <> true
+        print "FAIL year-round dining missed dining, winter, or summer"
+        missed = missed + 1
+    end if
+    if ItemOnScreen(cafe, "biking") <> false or ItemOnScreen(cafe, "todo") <> false
+        print "FAIL dining leaked into biking or the parent menu"
+        missed = missed + 1
+    end if
+    if ItemOnScreen(trail, "hiking") <> true or ItemOnScreen(trail, "summer") <> true or ItemOnScreen(trail, "winter") <> false
+        print "FAIL the summer hike was filed wrong"
+        missed = missed + 1
+    end if
+    if ItemOnScreen(mtb, "biking") <> true or ItemOnScreen(mtb, "summer") <> true or ItemOnScreen(mtb, "winter") <> false
+        print "FAIL the mountain-biking section was filed wrong"
+        missed = missed + 1
+    end if
+    if ItemOnScreen(ride, "biking") <> true or ItemOnScreen(ride, "summer") <> false
+        print "FAIL an e-bike name was not filed under biking"
+        missed = missed + 1
+    end if
+    if ItemOnScreen(fallColor, "dining") <> false or ItemOnScreen(fallColor, "hiking") <> false or ItemOnScreen(fallColor, "biking") <> false or ItemOnScreen(fallColor, "fishing") <> false or ItemOnScreen(fallColor, "winter") <> false or ItemOnScreen(fallColor, "summer") <> false
+        print "FAIL a fall-only scenic stop was forced into a submenu"
+        missed = missed + 1
+    end if
+    copied = DecodeList(EncodeJson(mapped.items))
+    if copied.Count() <> 5 or ItemOnScreen(copied[0], "winter") <> true or copied[2].sectionTitle <> "Mountain biking"
+        print "FAIL season or sectionTitle was lost in the scene copy"
+        missed = missed + 1
+    end if
+    return missed
+end function
 
 function Sample(id as string, url as string) as object
     return {

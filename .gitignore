@@ -15,3 +15,4 @@ channel/data/wifi.json
 channel/data/wifi.png
 # Live activities download used only by the detail QR proof. Do not package it.
 channel/data/activities-live.json
+channel/data/guide-live.json

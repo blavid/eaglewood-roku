@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 21 "; BuildCommit()
+    print "Eaglewood: build 22 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -38,7 +38,8 @@ sub init()
     m.wifiNotice = ""
     m.wifiSource = "builtin"
     m.tileIndex = 0
-    m.railIndex = 0
+    m.menuDepth = "top"
+    m.railIndex = HomeMenuIndex()
     m.issueIndex = 0
     m.stepScroll = 0
     m.ruleScroll = 0
@@ -102,7 +103,8 @@ sub onRelaunch()
     ShowGreeting(FallbackGreeting())
     m.zone = "prompt"
     m.section = "home"
-    m.railIndex = 0
+    m.menuDepth = "top"
+    m.railIndex = HomeMenuIndex()
     m.tileIndex = 0
     m.cardIndex = 0
     m.issueIndex = 0
@@ -439,11 +441,10 @@ function MovePrompt(direction as integer) as boolean
 end function
 
 function MoveRail(direction as integer) as boolean
-    sections = RailSections()
-    nextIndex = m.railIndex + direction
-    if nextIndex < 0 or nextIndex >= sections.Count() then return true
-    m.railIndex = nextIndex
-    PreviewSection(sections[nextIndex])
+    key = "down"
+    if direction < 0 then key = "up"
+    state = NextNav(MenuDepth(), "rail", m.section, m.railIndex, key)
+    if NavChanged(state) then return FinishNav(state)
     return true
 end function
 
@@ -533,7 +534,14 @@ function MoveCheckoutScroll(direction as integer) as boolean
 end function
 
 function HandleLeft() as boolean
-    if m.zone = "item" then return CloseActivityDetail()
+    tracked = false
+    if m.zone = "item" then tracked = true
+    if m.zone = "rail" then tracked = true
+    if tracked = true
+        state = NextNav(MenuDepth(), m.zone, m.section, m.railIndex, "left")
+        if NavChanged(state) then return FinishNav(state)
+        return true
+    end if
     if m.zone = "prompt" then return FocusRail()
     if m.zone = "grid" then return MoveCards(-1, 0)
     if m.zone = "detail"
@@ -554,17 +562,12 @@ function HandleLeft() as boolean
         return FocusRail()
     end if
     if m.zone = "list" or m.zone = "panel" then return FocusRail()
-    if m.zone = "rail"
-        if m.section = "home" then return true
-        return GoHomeOnRail()
-    end if
     return true
 end function
 
 function HandleRight() as boolean
     if m.zone = "rail"
-        OpenSection(CurrentRailSection())
-        return true
+        return FinishNav(NextNav(MenuDepth(), m.zone, m.section, m.railIndex, "right"))
     end if
     if m.zone = "grid" then return MoveCards(1, 0)
     if m.zone = "tiles"
@@ -580,8 +583,7 @@ end function
 
 function HandleOk() as boolean
     if m.zone = "rail"
-        OpenSection(CurrentRailSection())
-        return true
+        return FinishNav(NextNav(MenuDepth(), m.zone, m.section, m.railIndex, "OK"))
     end if
     if m.zone = "prompt"
         OpenSection("book")
@@ -604,28 +606,26 @@ function OpenActivityDetail() as boolean
     PaintDetail()
     ShowSection(m.section)
     print "Eaglewood: screen="; m.section; " zone=item"
-    UpdateBadgeVisible()
-    RaiseBadge()
-    LogDetailBadge()
-    HoldFocus()
-    return true
-end function
-
-function CloseActivityDetail() as boolean
-    m.zone = "grid"
-    ShowSection(m.section)
-    print "Eaglewood: screen="; m.section; " zone=grid"
-    PaintActivity()
     HoldFocus()
     return true
 end function
 
 function HandleBack() as boolean
-    if m.zone = "item" then return CloseActivityDetail()
-    if m.zone <> "rail"
-        return FocusRail()
+    tracked = false
+    if m.zone = "item" then tracked = true
+    if m.zone = "grid" then tracked = true
+    if m.zone = "rail" then tracked = true
+    if tracked = true
+        state = NextNav(MenuDepth(), m.zone, m.section, m.railIndex, "back")
+        if state <> invalid
+            if state.leave = true
+                print "Eaglewood: back exit"
+                return false
+            end if
+        end if
+        if NavChanged(state) then return FinishNav(state)
     end if
-    if m.section <> "home" then return GoHomeOnRail()
+    if m.zone <> "rail" then return FocusRail()
     print "Eaglewood: back exit"
     return false
 end function
@@ -638,22 +638,32 @@ function FocusRail() as boolean
     return true
 end function
 
-function GoHomeOnRail() as boolean
-    m.zone = "rail"
-    m.section = "home"
-    m.railIndex = 0
-    m.tileIndex = 0
-    ShowSection("home")
-    print "Eaglewood: screen=home zone=rail"
+function MenuDepth() as string
+    if m.menuDepth = invalid or m.menuDepth = "" then return "top"
+    return m.menuDepth
+end function
+
+function NavChanged(state as object) as boolean
+    if state = invalid then return false
+    if state.depth <> MenuDepth() then return true
+    if state.zone <> m.zone then return true
+    if state.section <> m.section then return true
+    if state.index <> m.railIndex then return true
+    return false
+end function
+
+function FinishNav(state as object) as boolean
+    if state = invalid then return true
+    m.menuDepth = state.depth
+    m.zone = state.zone
+    m.section = state.section
+    m.railIndex = state.index
+    if state.section = "home" then m.tileIndex = 0
+    ShowSection(m.section)
+    print "Eaglewood: screen="; m.section; " zone="; m.zone
     PaintAll()
     HoldFocus()
     return true
-end function
-
-function CurrentRailSection() as string
-    sections = RailSections()
-    if m.railIndex < 0 or m.railIndex >= sections.Count() then return "home"
-    return sections[m.railIndex]
 end function
 
 function CurrentTileSection() as string
@@ -663,31 +673,8 @@ function CurrentTileSection() as string
 end function
 
 sub OpenSection(section as string)
-    m.section = section
-    m.railIndex = RailIndexOf(section)
-    if section = "home"
-        m.zone = "prompt"
-        m.tileIndex = 0
-    else if section = "fixes"
-        m.zone = "list"
-        m.stepScroll = 0
-    else if ActivitySection(section)
-        m.zone = "grid"
-    else
-        m.zone = "panel"
-    end if
-    ShowSection(section)
-    print "Eaglewood: screen="; section; " zone="; m.zone
-    PaintAll()
-    HoldFocus()
-end sub
-
-sub PreviewSection(section as string)
-    m.section = section
-    ShowSection(section)
-    print "Eaglewood: screen="; section; " zone="; m.zone
-    PaintAll()
-    HoldFocus()
+    if section = "fixes" then m.stepScroll = 0
+    FinishNav(OpenTarget(section))
 end sub
 
 function OpenStepScroll() as boolean
@@ -707,7 +694,8 @@ sub onIdle()
     try
         m.section = "home"
         m.zone = "prompt"
-        m.railIndex = 0
+        m.menuDepth = "top"
+        m.railIndex = HomeMenuIndex()
         m.tileIndex = 0
         m.cardIndex = 0
         m.issueIndex = 0

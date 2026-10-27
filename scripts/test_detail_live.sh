@@ -8,7 +8,7 @@ dest="$ROOT/channel/data/activities-live.json"
 cleanup() { rm -f "$dest"; }
 trap cleanup EXIT
 
-curl -fsSL -A "EaglewoodQrCheck/21" -o "$dest" "https://sunrivertownhome.com/data/activities.json"
+curl -fsSL -A "EaglewoodQrCheck/22" -o "$dest" "https://sunrivertownhome.com/data/activities.json"
 output="$(npx --yes brs@0.45.0 \
     --root "$ROOT/channel" \
     "$ROOT/channel/components/GuideModel.brs" \

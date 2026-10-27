@@ -170,16 +170,19 @@ function BuildBookPane(parent as object) as object
     m.bookQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", AmberColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
     m.bookQrMissing.horizAlign = "center"
     m.bookQrMissing.visible = false
-    m.bookBody = AddLabel(pane, "", "font:SmallSystemFont", "0x1C2A24FF", 588, 508, 680, 128)
+    bodyRect = BookBodyRect()
+    m.bookBody = AddLabel(pane, "", "font:SmallSystemFont", "0x1C2A24FF", bodyRect.x, bodyRect.y, bodyRect.w, bodyRect.h)
     m.bookBody.vertAlign = "top"
-    m.bookBody.maxLines = 4
-    m.bookSavings = AddLabel(pane, "", "font:SmallSystemFont", "0x1B4D38FF", 588, 640, 680, 140)
+    m.bookBody.maxLines = 6
+    saveRect = BookSavingsRect()
+    m.bookSavings = AddLabel(pane, "", "font:SmallSystemFont", "0x1B4D38FF", saveRect.x, saveRect.y, saveRect.w, saveRect.h)
     m.bookSavings.vertAlign = "top"
     m.bookSavings.maxLines = 4
     m.perkGroups = []
+    perkRow = BookPerkRow()
     for index = 0 to 4
         chip = CreateObject("roSGNode", "Group")
-        chip.translation = [ContentLeft() + (index * 226), 788]
+        chip.translation = [perkRow.x + (index * 226), perkRow.y]
         bg = AddRect(chip, "0x1B4D38FF", 0, 0, 214, 88)
         text = AddLabel(chip, "", "font:SmallestSystemFont", InkColor(), 8, 4, 198, 80)
         text.horizAlign = "center"
@@ -297,27 +300,27 @@ function BuildDetailPane(parent as object) as object
     m.detailQrCard = qrCard
     m.detailQrMark = AddRect(pane, QrMarkColor(), cardX, cardY, card.w, card.h)
     m.detailQrMark.visible = false
-    place = AddLabel(pane, "This place", "font:SmallBoldSystemFont", "0x1C1408FF", cardX + 16, cardY + 6, 248, 36)
-    place.horizAlign = "center"
-    place.visible = false
-    m.detailPlace = place
-    site = AddLabel(pane, "Website / menu", "font:SmallSystemFont", "0x1C1408FF", cardX + 16, cardY + 42, 248, 32)
+    m.detailPlace = invalid
+    siteRect = DetailQrSiteRect()
+    site = AddLabel(pane, "Website / menu", "font:SmallSystemFont", "0x1C1408FF", siteRect.x, siteRect.y, siteRect.w, siteRect.h)
     site.horizAlign = "center"
     site.visible = false
     m.detailSite = site
+    posterRect = DetailQrPosterRect()
     m.detailQr = CreateObject("roSGNode", "Poster")
     m.detailQr.id = "detailQr"
     m.detailQr.focusable = false
-    m.detailQr.translation = [cardX + 40, cardY + 76]
-    m.detailQr.width = 200
-    m.detailQr.height = 172
-    m.detailQr.loadWidth = 200
-    m.detailQr.loadHeight = 200
+    m.detailQr.translation = [posterRect.x, posterRect.y]
+    m.detailQr.width = posterRect.w
+    m.detailQr.height = posterRect.h
+    m.detailQr.loadWidth = posterRect.w
+    m.detailQr.loadHeight = posterRect.w
     m.detailQr.loadDisplayMode = "scaleToFit"
     m.detailQr.visible = false
     pane.appendChild(m.detailQr)
     m.detailQr.observeField("loadStatus", "onDetailQrStatus")
-    m.detailQrCaption = AddLabel(pane, "", QrCaptionFont(), QrCaptionColor(), cardX, cardY + card.h - 32, card.w, 28)
+    captionRect = DetailQrCaptionRect()
+    m.detailQrCaption = AddLabel(pane, "", QrCaptionFont(), QrCaptionColor(), captionRect.x, captionRect.y, captionRect.w, captionRect.h)
     m.detailQrCaption.horizAlign = "center"
     m.detailQrCaption.visible = false
     m.detailQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", "0x1C1408FF", cardX, cardY + card.h - 32, card.w, 28)
@@ -448,7 +451,7 @@ sub UpdateBadgeVisible()
 end sub
 
 sub ShowBadgeFrame(show as boolean)
-    if m.section = "book" then show = false
+    if BadgeShown(m.section) <> true then show = false
     if m.badgeGroup <> invalid then m.badgeGroup.visible = show
     if m.badgeCard <> invalid then m.badgeCard.visible = show
     if m.badgeLabel <> invalid then m.badgeLabel.visible = show
@@ -491,6 +494,7 @@ sub PaintBook()
     if m.bookBanner <> invalid then m.bookBanner.text = BookText(m.book, "banner", "Book direct and save!")
     if m.bookBody <> invalid then m.bookBody.text = BookText(m.book, "body", "")
     if m.bookSavings <> invalid then m.bookSavings.text = BookText(m.book, "savingsText", DefaultSavingsText())
+    if m.section = "book" then LogBookBody()
     if m.bookSign <> invalid then m.bookSign.text = BookText(m.book, "signOff", "Thanks for staying!")
     if m.bookDomain <> invalid then m.bookDomain.text = DisplayDomain()
     PaintPerks()
@@ -718,7 +722,11 @@ sub PaintActivity()
     if m.activitySub <> invalid then m.activitySub.text = ActivitySubtitle()
     EnsureActivityGrid()
     count = CardCount()
-    if m.activityEmpty <> invalid then m.activityEmpty.visible = (count = 0)
+    if m.activityEmpty <> invalid
+        if count = 0 and m.section = "todo" then m.activityEmpty.text = "OK for Dining, Hiking, and the seasons."
+        if count = 0 and m.section <> "todo" then m.activityEmpty.text = "Nothing to show yet."
+        m.activityEmpty.visible = (count = 0)
+    end if
     if m.activityGrid <> invalid then m.activityGrid.visible = (count > 0)
     if m.zone = "item"
         PaintDetail()
@@ -733,6 +741,11 @@ function ActivitySubtitle() as string
     extra = "Seasonal picks"
     if m.section = "dining" then extra = "Village & Bend"
     if m.section = "hiking" then extra = "Trails nearby"
+    if m.section = "winter" then extra = "Winter picks"
+    if m.section = "summer" then extra = "Summer picks"
+    if m.section = "fishing" then extra = "On the water"
+    if m.section = "biking" then extra = "Rides nearby"
+    if m.section = "todo" then extra = "OK to browse"
     return "Sorted for " + season + "  ·  " + extra
 end function
 
@@ -900,13 +913,93 @@ sub LogDetailOpen()
     print "Eaglewood: detail card rect="; ScreenRectText(DetailQrCardRect())
 end sub
 
-sub LogDetailBadge()
-    shown = "false"
-    if m.badgeGroup <> invalid
-        if m.badgeGroup.visible = true then shown = "true"
-    end if
-    print "Eaglewood: detail badge shown="; shown; " rect="; ScreenRectText(BadgeFrame())
+sub LogBookBody()
+    text = ""
+    if m.bookBody <> invalid then text = m.bookBody.text
+    rect = BookBodyRect()
+    lines = WrapGreeting(text, rect.w, invalid, FallbackCharWidth(BookBodyFontSize()))
+    print "Eaglewood: book body lines="; lines.Count(); " rect="; ScreenRectText(rect)
 end sub
+
+function BookBodyFontSize() as integer
+    return 27
+end function
+
+function BookBodyLineHeight() as integer
+    return 36
+end function
+
+sub LogBadgePlacement()
+    group = m.badgeGroup
+    if group = invalid then return
+    visible = "false"
+    if group.visible = true then visible = "true"
+    parentId = "none"
+    index = -1
+    parent = group.getParent()
+    if parent <> invalid
+        parentId = "shell"
+        if parent.id <> invalid and parent.id <> "" then parentId = parent.id
+        count = parent.getChildCount()
+        last = count - 1
+        if last >= 0
+            for at = 0 to last
+                child = parent.getChild(at)
+                same = false
+                if child <> invalid
+                    if child.isSameNode(group) = true then same = true
+                end if
+                if same = true then index = at
+            end for
+        end if
+    end if
+    opacity = 1
+    if group.opacity <> invalid then opacity = group.opacity
+    tx = 0
+    ty = 0
+    trans = group.translation
+    if trans <> invalid
+        tx = trans[0]
+        ty = trans[1]
+    end if
+    scene = BadgeSceneRect(group)
+    print "Eaglewood: badge visible="; visible; " parent="; parentId; " index="; index; " opacity="; opacity; " translation="; tx.ToStr(); ","; ty.ToStr(); " sceneRect="; ScreenRectText(scene)
+end sub
+
+function BadgeSceneRect(node as object) as object
+    frame = BadgeFrame()
+    x = frame.x
+    y = frame.y
+    wide = frame.w
+    tall = frame.h
+    if node = invalid then return { x: x, y: y, w: wide, h: tall }
+    bounds = node.boundingRect()
+    if bounds <> invalid
+        if bounds.x <> invalid then x = bounds.x
+        if bounds.y <> invalid then y = bounds.y
+        if bounds.width <> invalid and bounds.width > 0 then wide = bounds.width
+        if bounds.height <> invalid and bounds.height > 0 then tall = bounds.height
+    end if
+    parent = node.getParent()
+    while parent <> invalid
+        trans = parent.translation
+        if trans <> invalid
+            x = x + trans[0]
+            y = y + trans[1]
+        end if
+        parent = parent.getParent()
+    end while
+    return { x: x, y: y, w: wide, h: tall }
+end function
+
+function BadgeShown(section as string) as boolean
+    if section = "book" then return false
+    return true
+end function
+
+function BadgeNavigateReparents() as boolean
+    return false
+end function
 
 function DetailQrForItem(item as object) as string
     qr = DetailQrUrl(item)
@@ -1116,6 +1209,33 @@ end function
 
 function DetailBodyRect() as object
     return { x: ContentLeft(), y: ContentTop() + 472, w: ContentWidth(), h: 200 }
+end function
+
+function DetailQrPosterRect() as object
+    card = DetailQrCardRect()
+    return { x: card.x + 30, y: card.y + 36, w: 220, h: 200 }
+end function
+
+function DetailQrSiteRect() as object
+    card = DetailQrCardRect()
+    return { x: card.x + 16, y: card.y + 4, w: 248, h: 28 }
+end function
+
+function DetailQrCaptionRect() as object
+    card = DetailQrCardRect()
+    return { x: card.x, y: card.y + card.h - 32, w: card.w, h: 28 }
+end function
+
+function BookBodyRect() as object
+    return { x: 588, y: 500, w: 680, h: 160 }
+end function
+
+function BookSavingsRect() as object
+    return { x: 588, y: 668, w: 680, h: 112 }
+end function
+
+function BookPerkRow() as object
+    return { x: ContentLeft(), y: 788, w: 1132, h: 88 }
 end function
 
 function RectOnScreen(rect as object) as boolean

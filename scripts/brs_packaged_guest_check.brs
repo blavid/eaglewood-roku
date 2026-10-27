@@ -56,7 +56,7 @@ sub Main()
         print "FAIL packaged decision"
         failed = failed + 1
     end if
-    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793174400) <> "Welcome to Eaglewood"
+    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793174400) <> "Welcome to Eaglewood 19"
         print "FAIL packaged after midnight"
         failed = failed + 1
     end if

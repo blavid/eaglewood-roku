@@ -34,11 +34,13 @@ sub Main()
     end if
     print "Eaglewood: scene activities count="; items.Count(); " qr="; ActivitiesQrCount(items)
     m.activities = items
-    m.section = "todo"
+    m.section = "biking"
     m.zone = "item"
     season = CurrentSeason()
-    m.sortedCards = SortActivities(ActivitiesForScreen(items, "todo"), season)
-    print "Eaglewood: todo cards="; m.sortedCards.Count(); " season="; season
+    m.sortedCards = SortActivities(ActivitiesForScreen(items, "biking"), season)
+    print "Eaglewood: biking cards="; m.sortedCards.Count(); " season="; season
+    poster = DetailQrPosterRect()
+    print "Eaglewood: detail poster rect="; ScreenRectText(poster)
     failed = failed + ProveDetailId("viator-ebike-tour")
     failed = failed + ProveDetailId("ride-the-river-ebike")
     card = DetailQrCardRect()
@@ -69,6 +71,14 @@ sub Main()
         print "FAIL corner badge intersects the detail photo, description, or QR card"
         failed = failed + 1
     end if
+    if RectsClear(poster, photo, 0) <> true or RectsClear(poster, body, 0) <> true
+        print "FAIL the larger detail QR intersects the photo or description"
+        failed = failed + 1
+    end if
+    if poster.x < card.x or poster.y < card.y or poster.x + poster.w > card.x + card.w or poster.y + poster.h > card.y + card.h
+        print "FAIL the detail QR poster leaves its card"
+        failed = failed + 1
+    end if
     folded = ParseJson("{""id"":""ride-the-river-ebike"",""qrurl"":""https://sunrivertownhome.com/data/qr/ride-the-river-ebike.png?v=rgb2""}")
     foldedQr = DetailQrUrl(folded)
     print "Eaglewood: folded qrurl="; foldedQr
@@ -85,7 +95,7 @@ function ProveDetailId(id as string) as integer
     last = m.sortedCards.Count() - 1
     found = 0
     if last < 0
-        print "FAIL "; id; " todo list was empty"
+        print "FAIL "; id; " biking list was empty"
         return 1
     end if
     for index = 0 to last
@@ -102,7 +112,7 @@ function ProveDetailId(id as string) as integer
         end if
     end for
     if found < 1
-        print "FAIL "; id; " was not on the todo detail list"
+        print "FAIL "; id; " was not on the biking detail list"
         return 1
     end if
     print "Eaglewood: "; id; " cards="; found

@@ -177,14 +177,69 @@ end function
 
 function ItemOnScreen(item as object, screen as string) as boolean
     if not IsAssoc(item) then return false
+    if screen = "todo" then return false
     section = GuideLimitedText(AaField(item, "sectionId"), 80)
     if screen = "dining" then return section = "dining"
     if screen = "hiking" then return section = "hiking"
-    if screen = "todo"
-        if section = "dining" or section = "hiking" then return false
-        return true
-    end if
+    if screen = "biking" then return ItemMatchesBiking(item, section)
+    if screen = "fishing" then return ItemMatchesFishing(item, section)
+    if screen = "winter" then return ItemInSeason(item, "winter")
+    if screen = "summer" then return ItemInSeason(item, "summer")
     return false
+end function
+
+function ItemSearchText(item as object, section as string) as string
+    id = GuideLimitedText(AaField(item, "id"), 80)
+    name = GuideLimitedText(AaField(item, "name"), 120)
+    title = GuideLimitedText(AaField(item, "sectionTitle"), 80)
+    return LCase(id + " " + name + " " + section + " " + title)
+end function
+
+function TextHas(text as string, needle as string) as boolean
+    if text = invalid then return false
+    if needle = invalid or needle = "" then return false
+    if Instr(1, text, needle) > 0 then return true
+    return false
+end function
+
+function ItemMatchesBiking(item as object, section as string) as boolean
+    if section = "mountain-biking" then return true
+    blob = ItemSearchText(item, section)
+    if TextHas(blob, "biking") then return true
+    if TextHas(blob, "bike") then return true
+    return false
+end function
+
+function ItemMatchesFishing(item as object, section as string) as boolean
+    blob = ItemSearchText(item, section)
+    if TextHas(blob, "fish") then return true
+    return false
+end function
+
+function ItemInSeason(item as object, season as string) as boolean
+    raw = AaField(item, "season")
+    if not IsList(raw) then return false
+    last = raw.Count() - 1
+    if last < 0 then return false
+    wanted = LCase(season)
+    for index = 0 to last
+        value = LCase(GuideLimitedText(raw[index], 40))
+        if value = wanted then return true
+        if value = "year-round" then return true
+    end for
+    return false
+end function
+
+function SeasonNames(raw as object) as object
+    names = []
+    if not IsList(raw) then return names
+    last = raw.Count() - 1
+    if last < 0 then return names
+    for index = 0 to last
+        text = GuideLimitedText(raw[index], 40)
+        if text <> "" then names.Push(text)
+    end for
+    return names
 end function
 
 function ActivitiesQrCount(items as object) as integer
@@ -340,7 +395,13 @@ function ActivityHasQr(item as object) as boolean
 end function
 
 function ActivitySection(section as string) as boolean
-    if section = "dining" or section = "hiking" or section = "todo" then return true
+    if section = "dining" then return true
+    if section = "hiking" then return true
+    if section = "todo" then return true
+    if section = "winter" then return true
+    if section = "summer" then return true
+    if section = "fishing" then return true
+    if section = "biking" then return true
     return false
 end function
 
@@ -461,13 +522,14 @@ function NormalizeActivities(parsed as object) as object
             section = sections[sectionAt]
             if IsAssoc(section)
                 sectionId = GuideLimitedText(section.Lookup("id"), 80)
+                sectionTitle = GuideLimitedText(section.Lookup("title"), 80)
                 rows = section.Lookup("activities")
                 if IsList(rows)
                     rowLast = rows.Count() - 1
                     if rowLast >= 0
                         for rowAt = 0 to rowLast
                             if items.Count() >= 240 then exit for
-                            item = SlimActivity(rows[rowAt], sectionId, sourceIndex)
+                            item = SlimActivity(rows[rowAt], sectionId, sectionTitle, sourceIndex)
                             sourceIndex = sourceIndex + 1
                             if item <> invalid then items.Push(item)
                         end for
@@ -491,7 +553,7 @@ function SeasonRankRecord(ranks as object) as object
     return record
 end function
 
-function SlimActivity(raw as object, sectionId as string, sourceIndex as integer) as object
+function SlimActivity(raw as object, sectionId as string, sectionTitle as string, sourceIndex as integer) as object
     if not IsAssoc(raw) then return invalid
     name = GuideLimitedText(AaField(raw, "name"), 120)
     if name = "" then name = "Untitled"
@@ -518,6 +580,8 @@ function SlimActivity(raw as object, sectionId as string, sourceIndex as integer
     item["posterFallback"] = poster.posterFallback
     item["credit"] = CreditLine(AaField(raw, "imageCredit"))
     item["sectionId"] = sectionId
+    item["sectionTitle"] = sectionTitle
+    item["season"] = SeasonNames(AaField(raw, "season"))
     item["sourceIndex"] = sourceIndex
     item["seasonRank"] = SeasonRankRecord(ranks)
     return item
