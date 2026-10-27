@@ -46,15 +46,27 @@ sub FetchQrBody(slot as string, url as string, generation as integer)
     print "Eaglewood: qr "; slot; " url="; QrExactUrl(url)
     code = 0
     prepared = invalid
-    finalUri = CachedContentPath(slot, url)
+    finalUri = ""
     busy = ""
     if m.top.busyPaths <> invalid then busy = m.top.busyPaths
-    if finalUri <> ""
+    cached = CachedContentPath(slot, url)
+    cachedBytes = 0
+    if cached <> "" then cachedBytes = QrReadLength(cached)
+    if QrCacheHit(cached, cachedBytes)
         print "Eaglewood: qr "; slot; " response code=cache"
-        prepared = ExpandPngBytes(ReadFileBytes(finalUri))
-        if prepared <> invalid then prepared.path = finalUri
-        LogQrFile(slot, "cached", FsExists(finalUri), QrReadLength(finalUri))
-    else
+        prepared = ExpandPngBytes(ReadFileBytes(cached))
+        readAgain = QrReadLength(cached)
+        if prepared <> invalid and prepared.ok = true and QrCacheHit(cached, readAgain)
+            prepared.path = cached
+            finalUri = cached
+            LogQrFile(slot, "cached", FsExists(cached), readAgain)
+        else
+            print "Eaglewood: qr "; slot; " cache unreadable bytes="; readAgain
+            prepared = invalid
+            finalUri = ""
+        end if
+    end if
+    if finalUri = ""
         print "Eaglewood: qr "; slot; " request sent"
         fetched = DownloadQrBytes(slot, url)
         code = fetched.code
@@ -84,12 +96,48 @@ sub FetchQrBody(slot as string, url as string, generation as integer)
     LogQrFormat(slot, prepared)
     if LocalPosterPath(finalUri) <> true then finalUri = ""
     byteCount = 0
-    if finalUri <> ""
-        byteCount = QrReadLength(finalUri)
-        if prepared <> invalid and prepared.ok = true
-            WriteAsciiFile(QrNotePath(slot), url)
-            WriteAsciiFile(QrPathNote(slot), finalUri)
+    if finalUri <> "" then byteCount = QrReadLength(finalUri)
+    if QrCacheHit(finalUri, byteCount) <> true and code = 0
+        print "Eaglewood: qr "; slot; " cache unreadable bytes="; byteCount
+        prepared = invalid
+        finalUri = ""
+        byteCount = 0
+        print "Eaglewood: qr "; slot; " request sent"
+        fetched = DownloadQrBytes(slot, url)
+        code = fetched.code
+        print "Eaglewood: qr "; slot; " response code="; code
+        if code <> 200 or fetched.bytes = invalid
+            if fetched.reason <> invalid and fetched.reason <> "" and fetched.reason <> "ok"
+                print "Eaglewood: qr "; slot; " failure reason="; fetched.reason
+            end if
+            PublishQr(slot, generation, url, code, FailQr("http"), "", 0)
+            print "Eaglewood: qr "; slot; " final uri=none"
+            return
         end if
+        raw = fetched.bytes
+        prepared = ExpandPngBytes(AsBuf(raw))
+        bytes = raw
+        if prepared <> invalid and prepared.converted = true
+            bytes = CopyToByteArray(prepared.bytes)
+        end if
+        if prepared = invalid or prepared.ok <> true or bytes = invalid
+            PublishQr(slot, generation, url, code, prepared, "", 0)
+            print "Eaglewood: qr "; slot; " final uri=none"
+            return
+        end if
+        finalUri = SaveQrBytes(slot, bytes, busy)
+        if prepared <> invalid then prepared.path = finalUri
+        LogQrFormat(slot, prepared)
+        if LocalPosterPath(finalUri) <> true then finalUri = ""
+        byteCount = 0
+        if finalUri <> "" then byteCount = QrReadLength(finalUri)
+    end if
+    if finalUri <> "" and prepared <> invalid and prepared.ok = true and QrCacheHit(finalUri, byteCount)
+        WriteAsciiFile(QrNotePath(slot), url)
+        WriteAsciiFile(QrPathNote(slot), finalUri)
+    else if finalUri <> "" and QrCacheHit(finalUri, byteCount) <> true
+        finalUri = ""
+        byteCount = 0
     end if
     if finalUri = ""
         print "Eaglewood: qr "; slot; " final uri=none"
@@ -114,7 +162,7 @@ function CachedContentPath(slot as string, url as string) as string
     if note = invalid or note <> url then return ""
     path = ReadAsciiFile(pathNote)
     if path = invalid or LocalPosterPath(path) <> true then return ""
-    if QrReadLength(path) < 8 then return ""
+    if QrCacheHit(path, QrReadLength(path)) <> true then return ""
     return path
 end function
 
@@ -220,7 +268,13 @@ function SaveQrBytes(slot as string, raw as object, busy as string) as string
         LogQrFile(slot, "unchanged", true, existing)
         return path
     end if
-    if fs.Exists(path) = true and PathIsBusy(path, busy) <> true then fs.Delete(path)
+    if PathIsBusy(path, busy) = true and existing > 0
+        LogQrFile(slot, "busy", true, existing)
+        return path
+    end if
+    if ProtectedCacheFile(path) <> true and fs.Exists(path) = true and PathIsBusy(path, busy) <> true
+        fs.Delete(path)
+    end if
     wrote = raw.WriteFile(path)
     found = fs.Exists(path)
     readBack = QrReadLength(path)
@@ -313,6 +367,7 @@ sub EnsureQrDir()
 end sub
 
 sub DeleteQrFile(path as string)
+    if ProtectedCacheFile(path) then return
     fs = CreateObject("roFileSystem")
     if fs <> invalid then fs.Delete(path)
 end sub

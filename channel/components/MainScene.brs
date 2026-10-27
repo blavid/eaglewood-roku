@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 19 "; BuildCommit()
+    print "Eaglewood: build 20 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -598,6 +598,7 @@ end function
 
 function OpenActivityDetail() as boolean
     if CardCount() < 1 then return true
+    LogDetailOpen()
     m.zone = "item"
     ReleaseCardImages()
     PaintDetail()

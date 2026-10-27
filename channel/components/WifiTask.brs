@@ -318,6 +318,7 @@ sub EnsureWifiDir()
 end sub
 
 sub DeleteWifiFile(path as string)
+    if ProtectedCacheFile(path) then return
     fs = CreateObject("roFileSystem")
     if fs <> invalid then fs.Delete(path)
 end sub

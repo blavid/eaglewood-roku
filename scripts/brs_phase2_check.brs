@@ -248,8 +248,33 @@ sub Main()
         print "FAIL the QR captions do not share the gold caption style"
         failed = failed + 1
     end if
-    if RectsClear(BadgeFrame(), CheckoutTileRect(), 24) <> true
-        print "FAIL the corner badge crowds the Checkout tile"
+    frame = BadgeFrame()
+    if frame.x <> 1496 or frame.y <> 830 or frame.qrX <> 46 or frame.qrY <> 42 or frame.qr <> 128
+        print "FAIL the corner badge left the build 18 size and position"
+        failed = failed + 1
+    end if
+    if frame.captionY <> 172 or frame.captionH <> 28 or frame.captionY < frame.qrY + frame.qr
+        print "FAIL the gold caption is not directly under the corner QR"
+        failed = failed + 1
+    end if
+    if RectsClear(BadgeCaptionRect(), CheckoutTileRect(), 24) <> true
+        print "FAIL the badge caption overlaps the Checkout tile"
+        failed = failed + 1
+    end if
+    if ActivitiesCacheShouldDiscard("not-modified", raw304) <> true
+        print "FAIL a 304 activities response was kept"
+        failed = failed + 1
+    end if
+    if ActivitiesCacheShouldDiscard("ok", raw304) <> false
+        print "FAIL a 200 activities document was discarded"
+        failed = failed + 1
+    end if
+    if ActivitiesCacheShouldDiscard("http", stale304) <> true
+        print "FAIL a 304 cache missing qrUrl was kept"
+        failed = failed + 1
+    end if
+    if ActivitiesCacheShouldDiscard("timeout", invalid) <> false
+        print "FAIL a failed fetch with no cache was treated as a wipe"
         failed = failed + 1
     end if
 

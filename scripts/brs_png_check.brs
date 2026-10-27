@@ -48,8 +48,32 @@ sub Main()
         print "FAIL a non-QR cache file was selected"
         failed = failed + 1
     end if
-    if StaleQrCacheName("wifi-next.png") <> false or StaleQrCacheName("qr-badge-abcdef12.png") <> true
+    if StaleQrCacheName("wifi-next.png") <> false or StaleQrCacheName("qr-badge-abcdef12.png") <> false
         print "FAIL content-named QR cleanup picked the wrong file"
+        failed = failed + 1
+    end if
+    if StaleQrCacheName("qr-book-5d41402a.png") <> false or StaleQrCacheName("qr-detail-8423281c.png") <> false
+        print "FAIL a hashed QR file was selected for cleanup"
+        failed = failed + 1
+    end if
+    if ProtectedCacheFile("cachefs:/eaglewood/qr-badge-8423281c.png") <> true
+        print "FAIL a hashed badge QR can be deleted"
+        failed = failed + 1
+    end if
+    if ProtectedCacheFile("tmp:/eaglewood/wifi.png") <> true
+        print "FAIL wifi.png can be deleted"
+        failed = failed + 1
+    end if
+    if ProtectedCacheFile("cachefs:/eaglewood/qr-badge.png") <> false or ProtectedCacheFile("cachefs:/eaglewood/qr-fetch-badge.png") <> false
+        print "FAIL an old QR name was treated as hashed content"
+        failed = failed + 1
+    end if
+    if ProtectedCacheFile("cachefs:/eaglewood/activities.json") <> false or ProtectedCacheFile("cachefs:/eaglewood/wifi-next.png") <> false
+        print "FAIL the activities wipe was blocked"
+        failed = failed + 1
+    end if
+    if QrCacheHit("cachefs:/eaglewood/qr-badge-8423281c.png", 6270) <> true or QrCacheHit("cachefs:/eaglewood/qr-badge-8423281c.png", 0) <> false or QrCacheHit("cachefs:/eaglewood/qr-badge-8423281c.png", -1) <> false or QrCacheHit("", 6270) <> false
+        print "FAIL the QR cache shortcut accepted an empty file"
         failed = failed + 1
     end if
     if QrContentFileName("badge", "abcdef123456") <> "qr-badge-abcdef12.png"

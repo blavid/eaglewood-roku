@@ -239,6 +239,14 @@ function ActivitiesCacheGeneration() as string
     return "qr3"
 end function
 
+' A 304, or a cache whose activities dropped qrUrl, is thrown away.
+' The wipe itself is only activities.json and its etag.
+function ActivitiesCacheShouldDiscard(reason as string, cached as object) as boolean
+    if reason = "not-modified" then return true
+    if cached <> invalid and ActivitiesCacheDropsQr(cached) = true then return true
+    return false
+end function
+
 ' True when a cached activities document is missing qrUrl on any activity.
 function ActivitiesCacheDropsQr(parsed as object) as boolean
     if not IsAssoc(parsed) then return true

@@ -223,7 +223,7 @@ function WriteRawPng(raw as object, path as string) as string
     if raw = invalid or path = invalid or path = "" then return ""
     if EnsureParentDir(path) <> true then return ""
     fs = CreateObject("roFileSystem")
-    if fs <> invalid then fs.Delete(path)
+    if fs <> invalid and ProtectedCacheFile(path) <> true then fs.Delete(path)
     wrote = raw.WriteFile(path)
     print "Eaglewood: file write path="; path; " result="; WriteResultText(wrote); " bytes="; raw.Count()
     if wrote <> true then return ""
@@ -240,7 +240,7 @@ function WriteBufToFile(path as string, buf as object) as boolean
         return false
     end if
     fs = CreateObject("roFileSystem")
-    if fs <> invalid then fs.Delete(path)
+    if fs <> invalid and ProtectedCacheFile(path) <> true then fs.Delete(path)
     wrote = out.WriteFile(path)
     print "Eaglewood: file write path="; path; " result="; WriteResultText(wrote); " bytes="; out.Count()
     if wrote <> true then return false
@@ -325,6 +325,74 @@ function FileSize(path as string) as integer
     stat = fs.Stat(path)
     if stat = invalid or stat.size = invalid then return -1
     return stat.size
+end function
+
+function CacheBaseName(path as string) as string
+    if path = invalid or path = "" then return ""
+    name = path
+    slash = 0
+    index = Len(name)
+    while index > 0
+        if Mid(name, index, 1) = "/"
+            slash = index
+            exit while
+        end if
+        index = index - 1
+    end while
+    if slash > 0 then name = Mid(name, slash + 1)
+    return LCase(name)
+end function
+
+' qr-<slot>-<8 hex>.png. Old names such as qr-badge.png do not match.
+function HashedQrPngName(name as string) as boolean
+    if name = invalid then return false
+    lower = LCase(name)
+    if Right(lower, 4) <> ".png" then return false
+    if Left(lower, 3) <> "qr-" then return false
+    stem = Left(lower, Len(lower) - 4)
+    dash = 0
+    index = Len(stem)
+    while index > 0
+        if Mid(stem, index, 1) = "-"
+            dash = index
+            exit while
+        end if
+        index = index - 1
+    end while
+    if dash < 5 then return false
+    tag = Mid(stem, dash + 1)
+    if HexTagOk(tag) <> true then return false
+    slot = Mid(stem, 4, dash - 4)
+    if slot = invalid or slot = "" then return false
+    if Instr(1, slot, "-") > 0 or Instr(1, slot, ".") > 0 then return false
+    return true
+end function
+
+function HexTagOk(tag as string) as boolean
+    if tag = invalid or Len(tag) <> 8 then return false
+    digits = "0123456789abcdef"
+    index = 1
+    while index <= 8
+        ch = Mid(tag, index, 1)
+        if Instr(1, digits, ch) < 1 then return false
+        index = index + 1
+    end while
+    return true
+end function
+
+' Hashed content PNGs and wifi.png are never a wipe target.
+function ProtectedCacheFile(path as string) as boolean
+    base = CacheBaseName(path)
+    if base = "wifi.png" then return true
+    if HashedQrPngName(base) then return true
+    return false
+end function
+
+function QrCacheHit(path as string, bytes as integer) as boolean
+    if path = invalid or path = "" then return false
+    if bytes = invalid then return false
+    if bytes <= 0 then return false
+    return true
 end function
 
 function QrContentFileName(slot as string, tag as string) as string
@@ -548,6 +616,11 @@ function PlaceNewPng(raw as object, finalPath as string, tmpPath as string, busy
     end if
     if existing > 0
         if PathIsBusy(finalPath, busy) then return ""
+        if ProtectedCacheFile(finalPath)
+            wrote = raw.WriteFile(finalPath)
+            if wrote = true and QrReadLength(finalPath) = count then return finalPath
+            return ""
+        end if
         fs = CreateObject("roFileSystem")
         if fs <> invalid then fs.Delete(finalPath)
     end if
@@ -621,6 +694,7 @@ function StaleQrCacheName(name as object) as boolean
     lower = LCase(name)
     if Left(lower, 4) = "wifi" then return false
     if Left(lower, 8) = "qr-fetch" then return false
+    if HashedQrPngName(lower) then return false
     if Instr(1, lower, "qr") < 1 then return false
     if Right(lower, 4) = ".png" then return true
     if Right(lower, 4) = ".url" then return true
@@ -631,6 +705,7 @@ end function
 
 sub DeleteOneQrFile(fs as object, path as string, busy as string)
     if fs = invalid or path = invalid or path = "" then return
+    if ProtectedCacheFile(path) then return
     if fs.Stat(path) = invalid then return
     if PathIsBusy(path, busy) then return
     removed = fs.Delete(path)

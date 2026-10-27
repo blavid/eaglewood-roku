@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "19",
+    "build_version": "20",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -532,10 +532,10 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 19 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 20 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 19 "' not in scene:
-        fail("startup must log build 19 and the commit")
+    if 'print "Eaglewood: build 20 "' not in scene:
+        fail("startup must log build 20 and the commit")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
     if 'id="finalUri"' not in qr_xml or "alwaysNotify" not in qr_xml:
         fail("each QR task needs a finalUri field")
@@ -555,8 +555,8 @@ def check_phase2() -> None:
         fail("a 304 or a cache missing qrUrl must be deleted and fetched again")
     if "activitiesCacheKey" not in guide_task or "DeleteActivitiesCache()" not in guide_task:
         fail("the activities cache generation must discard the stale file and etag")
-    if 'print "Eaglewood: detail qrUrl="' not in phase2:
-        fail("opening detail must log detail qrUrl")
+    if 'print "Eaglewood: detail open id="' not in phase2:
+        fail("opening detail must log detail open id and qrUrl")
     if "ActivitiesFromText(" not in (ROOT / "channel" / "components" / "GuideTask.brs").read_text(encoding="utf-8"):
         fail("304 and 200 activities must share one parse path")
     if "RetainBodyOnError(true)" not in qr_task or "InitClientCertificates()" not in qr_task:
@@ -600,6 +600,14 @@ def check_phase2() -> None:
     detail = phase2[phase2.find("function BuildDetailPane("):phase2.find("sub PaintPhase2(")]
     if "m.detailQrMark" not in detail or detail.find("m.detailQrMark") > detail.find("pane.appendChild(m.detailQr)"):
         fail("the detail poster must be appended after its placeholder")
+    if "group.translation = [1496, 830]" not in badge:
+        fail("the badge group must stay at the build 18 corner")
+    if "m.badgePoster.translation = [46, 42]" not in badge or "m.badgePoster.width = 128" not in badge:
+        fail("the badge QR must stay 128 by 128 at 46,42")
+    if "QrCaptionFont()" not in badge or "QrCaptionColor()" not in badge:
+        fail("the badge caption must use the gold caption style")
+    if "Book direct" in badge:
+        fail("the Book direct label stays off the corner badge")
     guide = GUIDE_UI_BRS.read_text(encoding="utf-8")
     if "m.buildLabel" in guide or "BuildStampLine()" in guide:
         fail("the build number stays in the startup log, not on Home")

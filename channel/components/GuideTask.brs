@@ -300,10 +300,9 @@ end function
 function ActivitiesResponse(url as string, cachePath as string, response as object) as object
     if response <> invalid and response.reason = "ok" then return response
     cached = ParseObjectText(ReadText(cachePath))
-    discard = false
-    if response <> invalid and response.reason = "not-modified" then discard = true
-    if cached <> invalid and ActivitiesCacheDropsQr(cached) then discard = true
-    if discard = false then return response
+    reason = ""
+    if response <> invalid and response.reason <> invalid then reason = response.reason
+    if ActivitiesCacheShouldDiscard(reason, cached) <> true then return response
     print "Eaglewood: activities cache discarded"
     DeleteActivitiesCache()
     return HttpGet(url, "")
