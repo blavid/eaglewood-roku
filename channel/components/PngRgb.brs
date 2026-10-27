@@ -193,6 +193,44 @@ function StorePngBytes(buf as object, cachePath as string, tmpPath as string) as
     return ""
 end function
 
+' RGB files stay as the bytes roUrlTransfer wrote. ReadFile then WriteFile is the
+' copy that already works for wifi.png. A grayscale file is still rewritten.
+function PlacePngFile(srcPath as string, destPath as string) as object
+    raw = CreateObject("roByteArray")
+    failed = PngResult()
+    failed.reason = "bad-png"
+    if raw = invalid or raw.ReadFile(srcPath) <> true or raw.Count() < 24 then return failed
+    parsed = ExpandPngBytes(AsBuf(raw))
+    if parsed.ok <> true then return parsed
+    stored = ""
+    if parsed.converted = true
+        stored = StorePngBytes(parsed.bytes, destPath, TmpFallbackPath(destPath))
+    else
+        stored = WriteRawPng(raw, destPath)
+        if stored = "" then stored = WriteRawPng(raw, TmpFallbackPath(destPath))
+    end if
+    if stored = ""
+        parsed.ok = false
+        parsed.reason = "cache-write"
+        parsed.path = ""
+        return parsed
+    end if
+    parsed.path = stored
+    return parsed
+end function
+
+function WriteRawPng(raw as object, path as string) as string
+    if raw = invalid or path = invalid or path = "" then return ""
+    if EnsureParentDir(path) <> true then return ""
+    fs = CreateObject("roFileSystem")
+    if fs <> invalid then fs.Delete(path)
+    wrote = raw.WriteFile(path)
+    print "Eaglewood: file write path="; path; " result="; WriteResultText(wrote); " bytes="; raw.Count()
+    if wrote <> true then return ""
+    if FileSize(path) = 0 then return ""
+    return path
+end function
+
 function WriteBufToFile(path as string, buf as object) as boolean
     if buf = invalid or path = invalid or path = "" or buf.n < 8 then return false
     EnsureParentDir(path)

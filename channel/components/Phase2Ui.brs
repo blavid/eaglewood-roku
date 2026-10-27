@@ -96,6 +96,7 @@ sub BuildBadge(parent as object)
     m.badgeHint.visible = false
     m.badgeUri = ""
     m.badgeRemote = ""
+    m.badgeFile = ""
     m.badgeFailed = false
 end sub
 
@@ -193,6 +194,7 @@ function BuildBookPane(parent as object) as object
     pane.appendChild(ridges)
     m.bookPhotoUri = ""
     m.bookQrUri = ""
+    m.bookFile = ""
     return pane
 end function
 
@@ -320,6 +322,7 @@ function BuildDetailPane(parent as object) as object
     m.detailBack = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), 900, 400, 28)
     m.detailPhotoUri = ""
     m.detailQrUri = ""
+    m.detailFile = ""
     return pane
 end function
 
@@ -378,37 +381,22 @@ sub PaintBadge()
     if uri <> m.badgeRemote
         m.badgeRemote = uri
         m.badgeUri = uri
+        m.badgeFile = ""
         m.badgeReady = false
         m.badgeFailed = false
-        m.badgeLocal = false
         if m.badgeMissing <> invalid then m.badgeMissing.text = ""
-        AssignDirectQr(m.badgePoster, uri, "badge")
+        if m.badgePoster <> invalid then m.badgePoster.uri = ""
+        if uri <> "" then StartQrFetch("badge")
     end if
     if m.badgeDomain <> invalid then m.badgeDomain.text = DisplayDomain()
     UpdateBadgeVisible()
+    if m.badgeFile <> "" then MountQrPoster(m.badgePoster, m.badgeFile, "badge")
 end sub
 
 sub onBadgeStatus()
     if m.badgePoster = invalid then return
-    status = m.badgePoster.loadStatus
-    LogPoster("badge", m.badgePoster, m.badgeRemote)
-    if status = "ready"
-        m.badgeReady = true
-        m.badgeFailed = false
-        if m.badgeMissing <> invalid then m.badgeMissing.text = ""
-        UpdateBadgeVisible()
-        return
-    end if
-    if status <> "failed" and status <> "error" then return
-    if m.badgeLocal <> true and m.badgeRemote <> ""
-        m.badgeLocal = true
-        print "Eaglewood: qr badge fallback"
-        StartQrFallback("badge")
-        return
-    end if
-    m.badgeReady = false
-    m.badgeFailed = true
-    UpdateBadgeVisible()
+    LogQrState("badge", m.badgePoster)
+    if m.badgePoster.loadStatus = "ready" then m.badgeReady = true
 end sub
 
 sub UpdateBadgeVisible()
@@ -416,15 +404,14 @@ sub UpdateBadgeVisible()
     remote = ""
     if m.badgeRemote <> invalid then remote = m.badgeRemote
     show = (remote <> "" and m.section <> "book")
-    ready = (show and m.badgeReady = true)
     m.badgeGroup.visible = show
-    if m.badgeCard <> invalid then m.badgeCard.visible = ready
-    if m.badgeLabel <> invalid then m.badgeLabel.visible = ready
-    if m.badgeDomain <> invalid then m.badgeDomain.visible = ready
-    if m.badgePoster <> invalid then m.badgePoster.visible = (show and m.badgePoster.uri <> "")
+    if m.badgeCard <> invalid then m.badgeCard.visible = show
+    if m.badgeLabel <> invalid then m.badgeLabel.visible = show
+    if m.badgeDomain <> invalid then m.badgeDomain.visible = show
+    if m.badgePoster <> invalid then m.badgePoster.visible = show
     if m.badgeMissing <> invalid then m.badgeMissing.visible = false
     if m.badgeHint = invalid then return
-    if ready and m.zone = "item"
+    if show and m.zone = "item"
         m.badgeHint.text = "Always available"
         m.badgeHint.visible = true
     else
@@ -460,14 +447,17 @@ sub PaintBook()
         m.bookPhoto.uri = photo
     end if
     qr = WithQrVersion(GuideLimitedText(m.book.Lookup("qrImageUrl"), 320))
+    if not PosterKindOk(qr) then qr = ""
     if qr <> m.bookQrUri and m.bookQr <> invalid
         m.bookQrUri = qr
         m.bookQrTried = false
-        m.bookLocal = false
+        m.bookFile = ""
         if m.bookQrMissing <> invalid then m.bookQrMissing.text = ""
-        ShowBookQr(false)
-        AssignDirectQr(m.bookQr, qr, "book")
+        if m.bookQr <> invalid then m.bookQr.uri = ""
+        if qr <> "" then StartQrFetch("book")
     end if
+    ShowBookQr(qr <> "")
+    if m.bookFile <> "" then MountQrPoster(m.bookQr, m.bookFile, "book")
 end sub
 
 function BookHeadline(book as object) as object
@@ -530,43 +520,33 @@ sub onBookPhotoStatus()
     end if
 end sub
 
-sub ShowBookQr(ready as boolean)
-    if m.bookQrCard <> invalid then m.bookQrCard.visible = ready
-    if m.bookScan <> invalid then m.bookScan.visible = ready
-    if m.bookDomain <> invalid then m.bookDomain.visible = ready
+sub ShowBookQr(show as boolean)
+    if m.bookQrCard <> invalid then m.bookQrCard.visible = show
+    if m.bookScan <> invalid then m.bookScan.visible = show
+    if m.bookDomain <> invalid then m.bookDomain.visible = show
+    if m.bookQr <> invalid then m.bookQr.visible = show
     if m.bookQrMissing <> invalid then m.bookQrMissing.visible = false
 end sub
 
-sub AssignDirectQr(poster as object, url as string, slot as string)
-    if poster = invalid then return
-    if url = invalid or url = ""
-        poster.uri = ""
-        poster.visible = false
-        print "Eaglewood: qr "; slot; " direct uri=none"
-        return
-    end if
+' Wi-Fi draws because its Poster.uri is cachefs:/eaglewood/wifi.png, the node
+' is already in the tree with a real width and height, and loadDisplayMode is
+' scaleToFit. Public QR codes use this same assignment.
+sub MountQrPoster(poster as object, path as string, slot as string)
+    if poster = invalid or path = invalid or path = "" then return
+    if Left(path, 8) <> "cachefs:" and Left(path, 4) <> "tmp:" then return
     poster.visible = true
-    poster.uri = url
-    print "Eaglewood: qr "; slot; " direct uri="; SafeUri(url)
+    poster.loadDisplayMode = "scaleToFit"
+    status = poster.loadStatus
+    if poster.uri = path and (status = "ready" or status = "loading") then return
+    poster.uri = ""
+    poster.uri = path
+    LogQrState(slot, poster)
 end sub
 
 sub onBookQrStatus()
     if m.bookQr = invalid then return
-    status = m.bookQr.loadStatus
-    LogPoster("book", m.bookQr, m.bookQrUri)
-    if status = "ready"
-        m.bookQr.visible = true
-        ShowBookQr(true)
-        return
-    end if
-    if status <> "failed" and status <> "error" then return
-    if m.bookLocal <> true and m.bookQrUri <> ""
-        m.bookLocal = true
-        print "Eaglewood: qr book fallback"
-        StartQrFallback("book")
-        return
-    end if
-    ShowBookQr(false)
+    LogQrState("book", m.bookQr)
+    if m.bookQr.loadStatus = "ready" then m.bookQr.visible = true
 end sub
 
 sub PaintWifi()
@@ -600,12 +580,9 @@ sub PaintWifi()
             m.wifiPoster.loadWidth = 480
             m.wifiPoster.loadHeight = 480
             m.wifiPoster.uri = ""
-            m.wifiPoster.uri = path
         end if
-        if m.wifiPoster.loadStatus = "ready"
-            m.wifiPoster.visible = true
-            if m.wifiMissing <> invalid then m.wifiMissing.text = ""
-        end if
+        MountQrPoster(m.wifiPoster, path, "wifi")
+        if m.wifiPoster.loadStatus = "ready" and m.wifiMissing <> invalid then m.wifiMissing.text = ""
     else
         m.wifiPoster.visible = false
         m.wifiShown = ""
@@ -644,15 +621,14 @@ end function
 
 sub onWifiPosterStatus()
     if m.wifiPoster = invalid then return
+    LogQrState("wifi", m.wifiPoster)
     status = m.wifiPoster.loadStatus
-    LogPoster("wifi", m.wifiPoster, m.wifiRemoteSafe)
     if status = "ready"
         m.wifiPoster.visible = true
         if m.wifiMissing <> invalid then m.wifiMissing.text = ""
         return
     end if
     if status <> "failed" and status <> "error" then return
-    m.wifiPoster.visible = false
     if m.wifiMissing <> invalid then m.wifiMissing.text = "QR image could not be drawn"
 end sub
 
@@ -837,6 +813,7 @@ sub PaintDetail()
         m.detailPhoto.uri = photo
     end if
     qr = WithQrVersion(ItemText(item, "qrUri"))
+    if not PosterKindOk(qr) then qr = ""
     if m.detailQrCaption <> invalid
         if m.section = "dining" then m.detailQrCaption.text = "Scan for this restaurant"
         else m.detailQrCaption.text = "Scan for this place"
@@ -844,30 +821,30 @@ sub PaintDetail()
     if qr = ""
         if m.detailQrUri <> ""
             m.detailQrUri = ""
-            m.detailLocal = false
-            ShowDetailQr(false)
-            AssignDirectQr(m.detailQr, "", "detail")
+            m.detailFile = ""
+            if m.detailQr <> invalid then m.detailQr.uri = ""
         end if
+        ShowDetailQr(false)
         return
     end if
     if m.detailQr <> invalid and qr <> m.detailQrUri
         m.detailQrUri = qr
         m.detailQrFailed = false
-        m.detailLocal = false
+        m.detailFile = ""
         if m.detailQrMissing <> invalid then m.detailQrMissing.text = ""
-        ShowDetailQr(false)
-        AssignDirectQr(m.detailQr, qr, "detail")
+        if m.detailQr <> invalid then m.detailQr.uri = ""
+        StartQrFetch("detail")
     end if
-    ready = false
-    if m.detailQr <> invalid and m.detailQr.uri <> "" and m.detailQr.loadStatus = "ready" then ready = true
-    ShowDetailQr(ready)
+    ShowDetailQr(true)
+    if m.detailFile <> "" then MountQrPoster(m.detailQr, m.detailFile, "detail")
 end sub
 
-sub ShowDetailQr(ready as boolean)
-    if m.detailQrCard <> invalid then m.detailQrCard.visible = ready
-    if m.detailPlace <> invalid then m.detailPlace.visible = ready
-    if m.detailSite <> invalid then m.detailSite.visible = ready
-    if m.detailQrCaption <> invalid then m.detailQrCaption.visible = ready
+sub ShowDetailQr(show as boolean)
+    if m.detailQrCard <> invalid then m.detailQrCard.visible = show
+    if m.detailPlace <> invalid then m.detailPlace.visible = show
+    if m.detailSite <> invalid then m.detailSite.visible = show
+    if m.detailQrCaption <> invalid then m.detailQrCaption.visible = show
+    if m.detailQr <> invalid then m.detailQr.visible = show
     if m.detailQrMissing <> invalid then m.detailQrMissing.visible = false
 end sub
 
@@ -936,21 +913,8 @@ end sub
 
 sub onDetailQrStatus()
     if m.detailQr = invalid then return
-    status = m.detailQr.loadStatus
-    LogPoster("detail", m.detailQr, m.detailQrUri)
-    if status = "ready"
-        m.detailQr.visible = true
-        ShowDetailQr(true)
-        return
-    end if
-    if status <> "failed" and status <> "error" then return
-    if m.detailLocal <> true and m.detailQrUri <> ""
-        m.detailLocal = true
-        print "Eaglewood: qr detail fallback"
-        StartQrFallback("detail")
-        return
-    end if
-    ShowDetailQr(false)
+    LogQrState("detail", m.detailQr)
+    if m.detailQr.loadStatus = "ready" then m.detailQr.visible = true
 end sub
 
 sub ApplyWifiResult(result as object)
@@ -978,34 +942,42 @@ function ResultNumber(result as object, key as string) as integer
     return GuideInt(result.Lookup(key))
 end function
 
-sub LogPoster(name as string, poster as object, remote as string)
+sub LogQrState(name as string, poster as object)
     status = "none"
     shown = "none"
     if poster <> invalid
         if poster.loadStatus <> invalid and poster.loadStatus <> "" then status = poster.loadStatus
         if poster.uri <> invalid and poster.uri <> "" then shown = SafeUri(poster.uri)
     end if
-    print "Eaglewood: poster "; name; " status="; status; " uri="; shown
-    print "Eaglewood: qr "; name; " uri="; SafeUri(remote); " status="; status
+    print "Eaglewood: qr "; name; " uri="; shown; " status="; status; " rect="; QrRectText(poster)
 end sub
+
+function QrRectText(poster as object) as string
+    if poster = invalid then return "0,0 0x0"
+    bounds = poster.boundingRect()
+    if bounds = invalid or bounds.width = invalid or bounds.height = invalid then return "0,0 0x0"
+    x = 0
+    y = 0
+    if bounds.x <> invalid then x = bounds.x
+    if bounds.y <> invalid then y = bounds.y
+    return x.ToStr() + "," + y.ToStr() + " " + bounds.width.ToStr() + "x" + bounds.height.ToStr()
+end function
 
 sub LogQrScreen()
     if m.section = "wifi"
         print "Eaglewood: wifi response code="; m.wifiJsonCode
         print "Eaglewood: wifi png response code="; m.wifiPngCode
         print "Eaglewood: wifi png format bitdepth="; m.wifiPngBit; " colortype="; m.wifiPngColor; " interlace="; m.wifiPngInterlace; " indexed="; m.wifiIndexed
-        LogPoster("wifi", m.wifiPoster, m.wifiRemoteSafe)
+        LogQrState("wifi", m.wifiPoster)
     else if m.section = "book"
-        LogPoster("book", m.bookQr, m.bookQrUri)
+        LogQrState("book", m.bookQr)
         LogQrFormat("book")
     else if ActivitySection(m.section) and m.zone = "item"
-        LogPoster("detail", m.detailQr, m.detailQrUri)
+        LogQrState("detail", m.detailQr)
         LogQrFormat("detail")
-    else
-        return
     end if
     if m.section <> "book"
-        LogPoster("badge", m.badgePoster, m.badgeRemote)
+        LogQrState("badge", m.badgePoster)
         LogQrFormat("badge")
     end if
 end sub

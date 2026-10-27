@@ -783,7 +783,7 @@ sub onRefresh()
     startWifiFetch()
 end sub
 
-sub StartQrFallback(slot as string)
+sub StartQrFetch(slot as string)
     url = ""
     if slot = "badge" and m.badgeRemote <> invalid then url = m.badgeRemote
     if slot = "book" and m.bookQrUri <> invalid then url = m.bookQrUri
@@ -838,38 +838,39 @@ sub ApplyQrResult(result as object)
     slot = AsText(result.slot)
     remote = AsText(result.remote)
     uri = AsText(result.uri)
-    ok = AsText(result.ok)
-    if uri = "" or uri = remote then ok = "no"
+    if Left(uri, 8) <> "cachefs:" and Left(uri, 4) <> "tmp:" then uri = ""
     if slot = "badge"
         if remote <> m.badgeRemote then return
-        if ok = "yes" and m.badgePoster <> invalid
+        if uri <> ""
             m.badgeFailed = false
-            m.badgePoster.visible = true
-            m.badgePoster.uri = uri
+            m.badgeFile = uri
+            UpdateBadgeVisible()
+            MountQrPoster(m.badgePoster, uri, "badge")
         else
             m.badgeFailed = true
-            m.badgeReady = false
-            UpdateBadgeVisible()
+            LogQrState("badge", m.badgePoster)
         end if
         RememberQrFormat(slot, result)
     else if slot = "book"
         if remote <> m.bookQrUri then return
-        if ok = "yes" and m.bookQr <> invalid
-            m.bookQr.visible = true
-            m.bookQr.uri = uri
+        if uri <> ""
+            m.bookFile = uri
+            ShowBookQr(true)
+            MountQrPoster(m.bookQr, uri, "book")
         else
-            ShowBookQr(false)
+            LogQrState("book", m.bookQr)
         end if
         RememberQrFormat(slot, result)
     else if slot = "detail"
         if remote <> m.detailQrUri then return
-        if ok = "yes" and m.detailQr <> invalid
+        if uri <> ""
             m.detailQrFailed = false
-            m.detailQr.visible = true
-            m.detailQr.uri = uri
+            m.detailFile = uri
+            ShowDetailQr(true)
+            MountQrPoster(m.detailQr, uri, "detail")
         else
             m.detailQrFailed = true
-            ShowDetailQr(false)
+            LogQrState("detail", m.detailQr)
         end if
         RememberQrFormat(slot, result)
     end if

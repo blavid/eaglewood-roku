@@ -2,7 +2,7 @@ sub init()
     m.top.functionName = "fetchQrs"
 end sub
 
-' Public QR PNGs only. Grayscale files are rewritten to indexed PNGs before Poster.
+' Public QR PNGs. Same download as wifi.png: AsyncGetToFile, then a local file for Poster.
 sub fetchQrs()
     generation = ReadQrGeneration()
     FetchQr("badge", m.top.badgeUrl, generation)
@@ -28,19 +28,30 @@ sub FetchQr(slot as string, url as string, generation as integer)
             print "Eaglewood: qr "; slot; " final uri=none"
             return
         end if
-        prepared = ExpandPngFile("cachefs:/eaglewood/qr-next.png", dest)
+        prepared = PlacePngFile("cachefs:/eaglewood/qr-next.png", dest)
         DeleteQrFile("cachefs:/eaglewood/qr-next.png")
     end if
     LogQrFormat(slot, prepared)
     finalUri = ""
     if prepared <> invalid and prepared.path <> invalid then finalUri = prepared.path
-    if finalUri = "" then finalUri = url
+    if LocalPosterPath(finalUri) <> true then finalUri = ""
     if prepared <> invalid and prepared.ok = true and Instr(1, finalUri, "cachefs:") = 1
         WriteAsciiFile(QrNotePath(slot), url)
     end if
-    print "Eaglewood: qr "; slot; " final uri="; SafeUri(finalUri)
+    if finalUri = ""
+        print "Eaglewood: qr "; slot; " final uri=none"
+    else
+        print "Eaglewood: qr "; slot; " final uri="; finalUri
+    end if
     PublishQr(slot, generation, url, code, prepared, finalUri)
 end sub
+
+function LocalPosterPath(path as string) as boolean
+    if path = invalid or path = "" then return false
+    if Left(path, 8) = "cachefs:" then return true
+    if Left(path, 4) = "tmp:" then return true
+    return false
+end function
 
 function CachedQr(slot as string, url as string) as boolean
     note = ReadAsciiFile(QrNotePath(slot))
@@ -50,6 +61,7 @@ end function
 
 function DownloadQr(url as string, dest as string) as integer
     EnsureQrDir()
+    DeleteQrFile(dest)
     transfer = CreateObject("roUrlTransfer")
     port = CreateObject("roMessagePort")
     if transfer = invalid or port = invalid then return 0

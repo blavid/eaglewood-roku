@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "11",
+    "build_version": "12",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -509,7 +509,11 @@ def check_phase2() -> None:
         fail("startup must clear the stale QR cache")
     if "wifi png format bitdepth=" not in wifi:
         fail("wifi png format must be logged")
-    if 'print "Eaglewood: poster ' not in phase2 or 'print "Eaglewood: qr ' not in phase2:
+    if "sub MountQrPoster(" not in phase2:
+        fail("public QR posters must use the Wi-Fi local-file mount")
+    if "function QrRectText(" not in phase2 or "rect=" not in phase2:
+        fail("each QR must log its uri, loadStatus, and bounding rect")
+    if 'print "Eaglewood: qr ' not in phase2:
         fail("poster loadStatus must be logged for late debug consoles")
     for path in channel_text_files():
         if "cornerRadius" in path.read_text(encoding="utf-8", errors="replace"):
