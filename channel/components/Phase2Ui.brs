@@ -268,7 +268,9 @@ function BuildActivityPane(parent as object) as object
     grid.vertFocusAnimationStyle = "floatingFocus"
     pane.appendChild(grid)
     m.activityGrid = grid
-    m.activityEmpty = AddLabel(pane, "Nothing to show yet.", "font:MediumSystemFont", MuteColor(), ContentLeft(), ContentTop() + 180, ContentWidth(), 48)
+    m.activityEmpty = AddLabel(pane, ActivityEmptyText(""), "font:MediumSystemFont", MuteColor(), ContentLeft(), ContentTop() + 180, ContentWidth(), 72)
+    m.activityEmpty.vertAlign = "top"
+    m.activityEmpty.maxLines = 2
     m.activityEmpty.visible = false
     m.activityHint = AddLabel(pane, "Left menu    Arrows browse    OK open", "font:SmallSystemFont", MuteColor(), ContentLeft(), 752, 900, 32)
     return pane
@@ -355,8 +357,8 @@ end sub
 
 sub PaintPrompt()
     if m.promptTitle = invalid or m.book = invalid then return
-    m.promptTitle.text = HomePromptTitle(m.book)
-    m.promptSub.text = PromptSubline(BookText(m.book, "homePromptSub", "Up to about 10% less than Airbnb or Vrbo"))
+    m.promptTitle.text = GuestFacingText(HomePromptTitle(m.book))
+    m.promptSub.text = GuestFacingText(PromptSubline(BookText(m.book, "homePromptSub", "Up to about 10% less than Airbnb or Vrbo")))
     focused = (m.zone = "prompt" and m.section = "home")
     if m.promptInner = invalid then return
     if focused
@@ -487,15 +489,15 @@ sub PaintBook()
         for index = 0 to last
             text = ""
             if index < lines.Count() then text = lines[index]
-            m.bookLines[index].text = text
+            m.bookLines[index].text = GuestFacingText(text)
             m.bookLines[index].visible = (text <> "")
         end for
     end if
-    if m.bookBanner <> invalid then m.bookBanner.text = BookText(m.book, "banner", "Book direct and save!")
-    if m.bookBody <> invalid then m.bookBody.text = BookText(m.book, "body", "")
-    if m.bookSavings <> invalid then m.bookSavings.text = BookText(m.book, "savingsText", DefaultSavingsText())
+    if m.bookBanner <> invalid then m.bookBanner.text = GuestFacingText(BookText(m.book, "banner", "Book direct and save!"))
+    if m.bookBody <> invalid then m.bookBody.text = GuestFacingText(BookText(m.book, "body", ""))
+    if m.bookSavings <> invalid then m.bookSavings.text = GuestFacingText(BookText(m.book, "savingsText", DefaultSavingsText()))
     if m.section = "book" then LogBookBody()
-    if m.bookSign <> invalid then m.bookSign.text = BookText(m.book, "signOff", "Thanks for staying!")
+    if m.bookSign <> invalid then m.bookSign.text = GuestFacingText(BookText(m.book, "signOff", "Thanks for staying!"))
     if m.bookDomain <> invalid then m.bookDomain.text = DisplayDomain()
     PaintPerks()
     photo = GuideLimitedText(m.book.Lookup("photo"), 240)
@@ -549,7 +551,7 @@ sub PaintPerks()
             label = ""
             entry = perks[index]
             if IsAssoc(entry) then label = GuideLimitedText(entry.Lookup("label"), 40)
-            chip.text.text = label
+            chip.text.text = GuestFacingText(label)
             chip.bg.color = colors[index]
             chip.text.color = inks[index]
         end if
@@ -641,7 +643,7 @@ sub PaintWifi()
         m.wifiPaintToken = lines.mode
         print "Eaglewood: wifi screen mode="; lines.mode
     end if
-    if m.wifiRouter <> invalid then m.wifiRouter.text = RouterStep(m.issues)
+    if m.wifiRouter <> invalid then m.wifiRouter.text = GuestFacingText(RouterStep(m.issues))
     pngReady = (m.wifiPng = "yes")
     poster = PosterForSlot("wifi")
     if poster = invalid then return
@@ -723,8 +725,7 @@ sub PaintActivity()
     EnsureActivityGrid()
     count = CardCount()
     if m.activityEmpty <> invalid
-        if count = 0 and m.section = "todo" then m.activityEmpty.text = "OK for Dining, Hiking, and the seasons."
-        if count = 0 and m.section <> "todo" then m.activityEmpty.text = "Nothing to show yet."
+        if count = 0 then m.activityEmpty.text = ActivityEmptyText(m.section)
         m.activityEmpty.visible = (count = 0)
     end if
     if m.activityGrid <> invalid then m.activityGrid.visible = (count > 0)
@@ -784,9 +785,9 @@ sub RebuildActivityGrid()
             item = m.sortedCards[index]
             node = CreateObject("roSGNode", "ActivityContent")
             node.id = CardNodeId(item)
-            node.title = ItemText(item, "name")
-            node.distance = ItemText(item, "distance")
-            node.seasonLabel = ItemText(item, "seasonLabel")
+            node.title = GuestFacingText(ItemText(item, "name"))
+            node.distance = GuestFacingText(ItemText(item, "distance"))
+            node.seasonLabel = GuestFacingText(ItemText(item, "seasonLabel"))
             node.swatch = SwatchFor(SourceIndexOf(item))
             node.sourceIndex = SourceIndexOf(item)
             node.imageUri = ""
@@ -869,16 +870,16 @@ end sub
 sub PaintDetail()
     LogDetailOpen()
     item = ActivityAt(m.sortedCards, m.cardIndex)
-    if m.detailName <> invalid then m.detailName.text = ItemText(item, "name")
-    if m.detailMeta <> invalid then m.detailMeta.text = DetailMeta(item)
-    if m.detailBody <> invalid then m.detailBody.text = ItemText(item, "description")
+    if m.detailName <> invalid then m.detailName.text = GuestFacingText(ItemText(item, "name"))
+    if m.detailMeta <> invalid then m.detailMeta.text = GuestFacingText(DetailMeta(item))
+    if m.detailBody <> invalid then m.detailBody.text = GuestFacingText(ItemText(item, "description"))
     if m.detailTip <> invalid
         tip = ItemText(item, "tip")
         if tip = "" then m.detailTip.text = ""
-        else m.detailTip.text = "Tip: " + tip
+        else m.detailTip.text = GuestFacingText("Tip: " + tip)
     end if
-    if m.detailExtra <> invalid then m.detailExtra.text = DetailExtra(item)
-    if m.detailCredit <> invalid then m.detailCredit.text = ItemText(item, "credit")
+    if m.detailExtra <> invalid then m.detailExtra.text = GuestFacingText(DetailExtra(item))
+    if m.detailCredit <> invalid then m.detailCredit.text = GuestFacingText(ItemText(item, "credit"))
     if m.detailBack <> invalid then m.detailBack.text = "Back to " + RailLabel(m.section)
     photo = ItemText(item, "poster")
     if photo = "" then photo = PlaceholderPoster()

@@ -521,6 +521,8 @@ sub Main()
     end if
     failed = failed + ExpectNav()
     failed = failed + ExpectActivityMenus()
+    failed = failed + ExpectBrandCopy()
+    failed = failed + PrintNavTrace()
 
     if failed = 0 then print "brs phase2 checks passed"
 end sub
@@ -636,6 +638,253 @@ function ExpectActivityMenus() as integer
         print "FAIL season or sectionTitle was lost in the scene copy"
         missed = missed + 1
     end if
+    return missed
+end function
+
+function ExpectState(state as object, depth as string, zone as string, section as string, index as integer, label as string) as integer
+    print "NAV "; label; " depth="; state.depth; " zone="; state.zone; " section="; state.section; " index="; state.index
+    if state.depth <> depth then return 1
+    if state.zone <> zone then return 1
+    if state.section <> section then return 1
+    if state.index <> index then return 1
+    return 0
+end function
+
+function PrintNavTrace() as integer
+    missed = 0
+    menus = TopMenu()
+    last = menus.Count() - 1
+    order = ""
+    for index = 0 to last
+        if index > 0 then order = order + " | "
+        order = order + RailLabel(menus[index])
+    end for
+    print "NAV top "; order
+    subs = TodoMenu()
+    subOrder = ""
+    subLast = subs.Count() - 1
+    for index = 0 to subLast
+        if index > 0 then subOrder = subOrder + " | "
+        subOrder = subOrder + RailLabel(subs[index])
+    end for
+    print "NAV submenu "; subOrder
+    start = HomePromptState()
+    missed = missed + ExpectState(start, "top", "prompt", "home", 1, "start")
+    ' Left from the Home prompt focuses the Home rail row. Up from the prompt is ignored.
+    rail = { depth: "top", zone: "rail", section: "home", index: start.index }
+    missed = missed + ExpectState(rail, "top", "rail", "home", 1, "left-to-rail")
+    stayUp = NextNav("top", "rail", "todo", 0, "up")
+    missed = missed + ExpectState(stayUp, "top", "rail", "todo", 0, "up-todo-stays")
+    up = NextNav(rail.depth, rail.zone, rail.section, rail.index, "up")
+    missed = missed + ExpectState(up, "top", "rail", "todo", 0, "up")
+    down = NextNav(up.depth, up.zone, up.section, up.index, "down")
+    missed = missed + ExpectState(down, "top", "rail", "home", 1, "down")
+    rules = NextNav(down.depth, down.zone, down.section, down.index, "down")
+    missed = missed + ExpectState(rules, "top", "rail", "rules", 2, "down")
+    fixes = NextNav(rules.depth, rules.zone, rules.section, rules.index, "down")
+    missed = missed + ExpectState(fixes, "top", "rail", "fixes", 3, "down")
+    book = NextNav(fixes.depth, fixes.zone, fixes.section, fixes.index, "down")
+    missed = missed + ExpectState(book, "top", "rail", "book", 4, "down")
+    checkout = NextNav(book.depth, book.zone, book.section, book.index, "down")
+    missed = missed + ExpectState(checkout, "top", "rail", "checkout", 5, "down")
+    wifi = NextNav(checkout.depth, checkout.zone, checkout.section, checkout.index, "down")
+    missed = missed + ExpectState(wifi, "top", "rail", "wifi", 6, "down")
+    wifiStay = NextNav(wifi.depth, wifi.zone, wifi.section, wifi.index, "down")
+    missed = missed + ExpectState(wifiStay, "top", "rail", "wifi", 6, "down-wifi-stays")
+    homeLeft = NextNav("top", "rail", "home", 1, "left")
+    missed = missed + ExpectState(homeLeft, "top", "rail", "home", 1, "left-home")
+    if homeLeft.leave = true then missed = missed + 1
+    homeBack = NextNav("top", "rail", "home", 1, "back")
+    missed = missed + ExpectState(homeBack, "top", "rail", "home", 1, "back-home")
+    if homeBack.leave <> true then missed = missed + 1
+    homeOk = NextNav("top", "rail", "home", 1, "OK")
+    missed = missed + ExpectState(homeOk, "top", "prompt", "home", 1, "ok-home")
+    rulesBack = NextNav("top", "rail", "rules", 2, "back")
+    missed = missed + ExpectState(rulesBack, "top", "rail", "home", 1, "back-rules")
+    rulesOk = NextNav("top", "rail", "rules", 2, "OK")
+    missed = missed + ExpectState(rulesOk, "top", "panel", "rules", 2, "ok-rules")
+    fixesOk = NextNav("top", "rail", "fixes", 3, "right")
+    missed = missed + ExpectState(fixesOk, "top", "list", "fixes", 3, "right-fixes")
+    bookOk = NextNav("top", "rail", "book", 4, "OK")
+    missed = missed + ExpectState(bookOk, "top", "panel", "book", 4, "ok-book")
+    opened = NextNav(up.depth, up.zone, up.section, up.index, "OK")
+    missed = missed + ExpectState(opened, "todo", "rail", "dining", 0, "ok-todo")
+    openedRight = NextNav("top", "rail", "todo", 0, "right")
+    missed = missed + ExpectState(openedRight, "todo", "rail", "dining", 0, "right-todo")
+    diningStay = NextNav("todo", "rail", "dining", 0, "up")
+    missed = missed + ExpectState(diningStay, "todo", "rail", "dining", 0, "up-dining-stays")
+    hiking = NextNav(opened.depth, opened.zone, opened.section, opened.index, "down")
+    missed = missed + ExpectState(hiking, "todo", "rail", "hiking", 1, "down")
+    winter = NextNav(hiking.depth, hiking.zone, hiking.section, hiking.index, "down")
+    missed = missed + ExpectState(winter, "todo", "rail", "winter", 2, "down")
+    summer = NextNav(winter.depth, winter.zone, winter.section, winter.index, "down")
+    missed = missed + ExpectState(summer, "todo", "rail", "summer", 3, "down")
+    fishing = NextNav(summer.depth, summer.zone, summer.section, summer.index, "down")
+    missed = missed + ExpectState(fishing, "todo", "rail", "fishing", 4, "down")
+    biking = NextNav(fishing.depth, fishing.zone, fishing.section, fishing.index, "down")
+    missed = missed + ExpectState(biking, "todo", "rail", "biking", 5, "down")
+    bikingStay = NextNav(biking.depth, biking.zone, biking.section, biking.index, "down")
+    missed = missed + ExpectState(bikingStay, "todo", "rail", "biking", 5, "down-biking-stays")
+    cards = NextNav(fishing.depth, fishing.zone, fishing.section, fishing.index, "OK")
+    missed = missed + ExpectState(cards, "todo", "grid", "fishing", 4, "ok-fishing")
+    cardsRight = NextNav("todo", "rail", "fishing", 4, "right")
+    missed = missed + ExpectState(cardsRight, "todo", "grid", "fishing", 4, "right-fishing")
+    print "NAV fishing-empty title="; RailLabel("fishing"); " text="; ActivityEmptyText("fishing"); " grid=hidden"
+    if ActivityEmptyText("fishing") <> "No fishing spots listed right now." then missed = missed + 1
+    emptyLeft = GridNav(0, 0, "left")
+    print "NAV left-empty-grid zone="; emptyLeft.zone; " section=fishing railIndex=4"
+    if emptyLeft.zone <> "rail" then missed = missed + 1
+    emptyOk = GridNav(0, 0, "OK")
+    if emptyOk.zone <> "grid" then missed = missed + 1
+    populated = GridNav(4, 0, "left")
+    print "NAV left-grid-col0 zone="; populated.zone; " index="; populated.index
+    if populated.zone <> "rail" then missed = missed + 1
+    gridRight = GridNav(4, 0, "right")
+    print "NAV right-grid zone="; gridRight.zone; " index="; gridRight.index
+    if gridRight.zone <> "grid" then missed = missed + 1
+    if gridRight.index <> 1 then missed = missed + 1
+    gridDown = GridNav(4, 0, "down")
+    print "NAV down-grid zone="; gridDown.zone; " index="; gridDown.index
+    if gridDown.zone <> "grid" then missed = missed + 1
+    if gridDown.index <> 3 then missed = missed + 1
+    detail = { depth: cards.depth, zone: "item", section: cards.section, index: cards.index }
+    backDetail = NextNav(detail.depth, detail.zone, detail.section, detail.index, "back")
+    missed = missed + ExpectState(backDetail, "todo", "grid", "fishing", 4, "back-detail")
+    leftDetail = NextNav(detail.depth, detail.zone, detail.section, detail.index, "left")
+    missed = missed + ExpectState(leftDetail, "todo", "grid", "fishing", 4, "left-detail")
+    detailStay = NextNav(detail.depth, detail.zone, detail.section, detail.index, "down")
+    missed = missed + ExpectState(detailStay, "todo", "item", "fishing", 4, "down-detail-stays")
+    backGrid = NextNav(backDetail.depth, backDetail.zone, backDetail.section, backDetail.index, "back")
+    missed = missed + ExpectState(backGrid, "todo", "rail", "fishing", 4, "back-grid")
+    backSub = NextNav(backGrid.depth, backGrid.zone, backGrid.section, backGrid.index, "left")
+    missed = missed + ExpectState(backSub, "top", "rail", "todo", 0, "left-submenu")
+    backSubBack = NextNav("todo", "rail", "dining", 0, "back")
+    missed = missed + ExpectState(backSubBack, "top", "rail", "todo", 0, "back-submenu")
+    idle = HomePromptState()
+    missed = missed + ExpectState(idle, "top", "prompt", "home", 1, "idle")
+    print "NAV idle-seconds 600"
+    if missed <> 0 then print "FAIL nav trace"
+    return missed
+end function
+
+function HasBareEaglewood(text as string) as boolean
+    if text = invalid or text = "" then return false
+    needle = "Eaglewood"
+    index = 1
+    width = Len(needle)
+    limit = Len(text)
+    while index <= limit
+        room = limit - index + 1
+        if room < width then return false
+        if Mid(text, index, width) = needle
+            if room < width + 3 then return true
+            if Mid(text, index + width, 3) <> " 19" then return true
+            index = index + width
+        else
+            index = index + 1
+        end if
+    end while
+    return false
+end function
+
+function RejectBare(label as string, raw as string) as integer
+    if raw = invalid then return 0
+    if raw = "" then return 0
+    if KeepsNetworkName(raw) = true
+        print "NAV kept-network "; raw
+        return 0
+    end if
+    shown = GuestFacingText(raw)
+    if shown <> raw then print "NAV renamed "; label; " => "; shown
+    if HasBareEaglewood(shown) = true
+        print "FAIL bare Eaglewood remains in "; label
+        return 1
+    end if
+    return 0
+end function
+
+function ExpectBrandCopy() as integer
+    missed = 0
+    pool = GuestFacingText("Eaglewood Community Pool")
+    blurb = GuestFacingText("exclusive to Eaglewood guests and residents")
+    print "NAV shown-name "; pool
+    print "NAV shown-blurb "; blurb
+    if pool <> "Eaglewood 19 Community Pool" then missed = missed + 1
+    if blurb <> "exclusive to Eaglewood 19 guests and residents" then missed = missed + 1
+    if HasBareEaglewood(pool) = true then missed = missed + 1
+    if HasBareEaglewood(blurb) = true then missed = missed + 1
+    if GuestFacingText("Welcome to Eaglewood 19") <> "Welcome to Eaglewood 19" then missed = missed + 1
+    if GuestFacingText("Network name: Eaglewood Escape Guest") <> "Network name: Eaglewood Escape Guest" then missed = missed + 1
+    if FallbackGreeting() <> "Welcome to Eaglewood 19" then missed = missed + 1
+    if ShownBrand("Eaglewood") <> "Eaglewood 19" then missed = missed + 1
+    if ShownBrand("") <> "Eaglewood 19" then missed = missed + 1
+    text = ReadAsciiFile("pkg:/data/activities.json")
+    parsed = ParseObjectText(text)
+    norm = NormalizeActivities(parsed)
+    if norm = invalid
+        print "FAIL packaged activities did not normalize"
+        return missed + 1
+    end if
+    if not IsList(norm.items)
+        print "FAIL packaged activities did not normalize"
+        return missed + 1
+    end if
+    if norm <> invalid
+        if IsList(norm.items)
+            last = norm.items.Count() - 1
+            for index = 0 to last
+                item = norm.items[index]
+                id = ItemText(item, "id")
+                missed = missed + RejectBare(id + " name", ItemText(item, "name"))
+                missed = missed + RejectBare(id + " description", ItemText(item, "description"))
+                missed = missed + RejectBare(id + " distance", ItemText(item, "distance"))
+                missed = missed + RejectBare(id + " tip", ItemText(item, "tip"))
+                missed = missed + RejectBare(id + " credit", ItemText(item, "credit"))
+                missed = missed + RejectBare(id + " extra", DetailExtra(item))
+            end for
+        end if
+    end if
+    guideText = ReadAsciiFile("pkg:/data/guide.json")
+    guide = ParseObjectText(guideText)
+    if not IsAssoc(guide)
+        print "FAIL packaged guide did not parse"
+        return missed + 1
+    end if
+    rules = guide.Lookup("houseRules")
+    if IsList(rules)
+        ruleLast = rules.Count() - 1
+        for index = 0 to ruleLast
+            missed = missed + RejectBare("houseRules", AsText(rules[index]))
+        end for
+    end if
+    issues = guide.Lookup("troubleshooting")
+    if IsList(issues)
+        issueLast = issues.Count() - 1
+        for index = 0 to issueLast
+            issue = issues[index]
+            if IsAssoc(issue)
+                missed = missed + RejectBare("issue", AsText(issue.Lookup("issue")))
+                steps = issue.Lookup("steps")
+                if IsList(steps)
+                    stepLast = steps.Count() - 1
+                    for stepAt = 0 to stepLast
+                        missed = missed + RejectBare("step", AsText(steps[stepAt]))
+                    end for
+                end if
+            end if
+        end for
+    end if
+    book = guide.Lookup("bookDirect")
+    if IsAssoc(book)
+        missed = missed + RejectBare("banner", AsText(book.Lookup("banner")))
+        missed = missed + RejectBare("body", AsText(book.Lookup("body")))
+        missed = missed + RejectBare("savings", AsText(book.Lookup("savingsText")))
+        missed = missed + RejectBare("signOff", AsText(book.Lookup("signOff")))
+        missed = missed + RejectBare("prompt", AsText(book.Lookup("homePromptTitle")))
+        missed = missed + RejectBare("promptSub", AsText(book.Lookup("homePromptSub")))
+    end if
+    print "NAV offscreen guestGuideSections are not drawn"
+    if missed <> 0 then print "FAIL guest-facing Eaglewood copy"
     return missed
 end function
 

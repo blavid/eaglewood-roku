@@ -130,6 +130,57 @@ function ShownBrand(brand as string) as string
     return text
 end function
 
+function KeepsNetworkName(text as string) as boolean
+    if text = invalid then return false
+    if text = "" then return false
+    if Instr(1, text, "Escape Guest") > 0 then return true
+    if Instr(1, LCase(text), "network name:") > 0 then return true
+    return false
+end function
+
+' Guest copy says Eaglewood 19. The Wi-Fi network name stays exactly as stored.
+function GuestFacingText(value as object) as string
+    text = AsText(value)
+    if text = "" then return ""
+    if KeepsNetworkName(text) = true then return text
+    needle = "Eaglewood"
+    replacement = "Eaglewood 19"
+    out = ""
+    index = 1
+    width = Len(needle)
+    limit = Len(text)
+    while index <= limit
+        room = limit - index + 1
+        if room >= width
+            if Mid(text, index, width) = needle
+                already = false
+                if room >= width + 3
+                    if Mid(text, index + width, 3) = " 19" then already = true
+                end if
+                if already = true
+                    out = out + needle
+                else
+                    out = out + replacement
+                end if
+                index = index + width
+            else
+                out = out + Mid(text, index, 1)
+                index = index + 1
+            end if
+        else
+            out = out + Mid(text, index, 1)
+            index = index + 1
+        end if
+    end while
+    return out
+end function
+
+function ActivityEmptyText(section as string) as string
+    if section = "todo" then return "OK for Dining, Hiking, and the seasons."
+    if section = "fishing" then return "No fishing spots listed right now."
+    return "Nothing to show yet."
+end function
+
 function RailLabelWidth() as integer
     return RailW() - 56
 end function
@@ -620,7 +671,7 @@ sub PaintRules()
             label.text = ""
         else
             label.visible = true
-            label.text = "-  " + text
+            label.text = "-  " + GuestFacingText(text)
         end if
     end for
 end sub
@@ -638,7 +689,7 @@ sub PaintFixes()
         else
             row.group.visible = true
             issue = FixIssues()[issueIndex]
-            row.label.text = AsText(issue.Lookup("issue"))
+            row.label.text = GuestFacingText(AsText(issue.Lookup("issue")))
             selected = (issueIndex = m.issueIndex)
             focused = selected and m.zone = "list"
             if focused
@@ -684,7 +735,7 @@ sub PaintSteps()
         title = AsText(issue.Lookup("issue"))
         steps = issue.Lookup("steps")
     end if
-    if m.detailTitle <> invalid then m.detailTitle.text = title
+    if m.detailTitle <> invalid then m.detailTitle.text = GuestFacingText(title)
     maxScroll = StepCount() - VisibleSteps()
     if maxScroll < 0 then maxScroll = 0
     if m.stepScroll > maxScroll then m.stepScroll = maxScroll
@@ -700,7 +751,7 @@ sub PaintSteps()
         else
             row.group.visible = true
             row.numberLabel.text = (stepIndex + 1).ToStr()
-            row.body.text = text
+            row.body.text = GuestFacingText(text)
         end if
     end for
 end sub
@@ -713,7 +764,7 @@ end function
 
 sub PaintCheckout()
     if m.checkoutSummary = invalid then return
-    m.checkoutSummary.text = m.summary
+    m.checkoutSummary.text = GuestFacingText(m.summary)
     if m.checkoutWhen <> invalid then m.checkoutWhen.text = CheckoutWhenLine()
     if m.checkoutHost <> invalid then m.checkoutHost.text = HostLine()
     if m.checkoutStepRows = invalid then return
@@ -731,7 +782,7 @@ sub PaintCheckout()
         else
             row.group.visible = true
             row.numberLabel.text = (start + index + 1).ToStr()
-            row.body.text = text
+            row.body.text = GuestFacingText(text)
         end if
     end for
 end sub
@@ -985,4 +1036,40 @@ function NextNav(depth as string, zone as string, section as string, index as in
         end if
     end if
     return { depth: nextDepth, zone: nextZone, section: nextSection, index: nextIndex, handled: true, leave: leave }
+end function
+
+' Card arrows. Left from the first column, or from an empty grid, returns to the rail.
+function GridNav(count as integer, index as integer, key as string) as object
+    if count < 1
+        if key = "left" then return { zone: "rail", index: index }
+        return { zone: "grid", index: index }
+    end if
+    if index < 0
+        index = 0
+    else if index >= count
+        index = 0
+    end if
+    if key = "left"
+        col = index mod 3
+        if col = 0 then return { zone: "rail", index: index }
+        return { zone: "grid", index: index - 1 }
+    end if
+    if key = "right"
+        col = index mod 3
+        if col >= 2 then return { zone: "grid", index: index }
+        nextIndex = index + 1
+        if nextIndex >= count then return { zone: "grid", index: index }
+        return { zone: "grid", index: nextIndex }
+    end if
+    if key = "up"
+        nextIndex = index - 3
+        if nextIndex < 0 then return { zone: "grid", index: index }
+        return { zone: "grid", index: nextIndex }
+    end if
+    if key = "down"
+        nextIndex = index + 3
+        if nextIndex >= count then return { zone: "grid", index: index }
+        return { zone: "grid", index: nextIndex }
+    end if
+    return { zone: "grid", index: index }
 end function

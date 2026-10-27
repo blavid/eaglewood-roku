@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 22 "; BuildCommit()
+    print "Eaglewood: build 23 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -25,8 +25,11 @@ sub init()
     m.qrPending = {}
     m.wifiFile = ""
     m.shell = invalid
-    m.zone = "prompt"
-    m.section = "home"
+    home = HomePromptState()
+    m.zone = home.zone
+    m.section = home.section
+    m.menuDepth = home.depth
+    m.railIndex = home.index
     m.cardIndex = 0
     m.activities = []
     m.activitiesToken = 0
@@ -38,8 +41,6 @@ sub init()
     m.wifiNotice = ""
     m.wifiSource = "builtin"
     m.tileIndex = 0
-    m.menuDepth = "top"
-    m.railIndex = HomeMenuIndex()
     m.issueIndex = 0
     m.stepScroll = 0
     m.ruleScroll = 0
@@ -101,10 +102,11 @@ sub onRelaunch()
     m.guestCheckout = ""
     m.guestCheckoutPresent = "no"
     ShowGreeting(FallbackGreeting())
-    m.zone = "prompt"
-    m.section = "home"
-    m.menuDepth = "top"
-    m.railIndex = HomeMenuIndex()
+    home = HomePromptState()
+    m.zone = home.zone
+    m.section = home.section
+    m.menuDepth = home.depth
+    m.railIndex = home.index
     m.tileIndex = 0
     m.cardIndex = 0
     m.issueIndex = 0
@@ -466,23 +468,20 @@ function MoveTiles(direction as integer) as boolean
 end function
 
 function MoveCards(dx as integer, dy as integer) as boolean
-    count = CardCount()
-    if count < 1 then return true
-    if m.cardIndex < 0 or m.cardIndex >= count then m.cardIndex = 0
-    col = m.cardIndex mod 3
+    key = ""
     if dx < 0
-        if col = 0 then return FocusRail()
-        m.cardIndex = m.cardIndex - 1
+        key = "left"
     else if dx > 0
-        if col >= 2 then return true
-        nextIndex = m.cardIndex + 1
-        if nextIndex >= count then return true
-        m.cardIndex = nextIndex
-    else if dy <> 0
-        nextIndex = m.cardIndex + (dy * 3)
-        if nextIndex < 0 or nextIndex >= count then return true
-        m.cardIndex = nextIndex
+        key = "right"
+    else if dy < 0
+        key = "up"
+    else if dy > 0
+        key = "down"
     end if
+    moved = GridNav(CardCount(), m.cardIndex, key)
+    if moved.zone = "rail" then return FocusRail()
+    if moved.index = m.cardIndex then return true
+    m.cardIndex = moved.index
     ShowCardFocus()
     HoldFocus()
     return true
@@ -692,10 +691,11 @@ sub onIdle()
     if m.idleTimer.fire <> true then return
     print "Eaglewood: idle return home"
     try
-        m.section = "home"
-        m.zone = "prompt"
-        m.menuDepth = "top"
-        m.railIndex = HomeMenuIndex()
+        home = HomePromptState()
+        m.section = home.section
+        m.zone = home.zone
+        m.menuDepth = home.depth
+        m.railIndex = home.index
         m.tileIndex = 0
         m.cardIndex = 0
         m.issueIndex = 0
