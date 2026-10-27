@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 18 "; BuildCommit()
+    print "Eaglewood: build 19 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -891,6 +891,7 @@ sub DeliverQrPath(slot as string)
     if slot = "detail" then m.detailQrFailed = false
     ShowQrFrame(slot, true)
     AssignQrPoster(slot, uri)
+    if slot = "detail" then RevealDetailQr()
 end sub
 
 sub RememberQrFormat(slot as string, result as object)

@@ -234,6 +234,103 @@ function ActivityAt(items as object, index as integer) as object
     return items[index]
 end function
 
+' Bumped so a launch discards activities.json written before qrUrl was kept.
+function ActivitiesCacheGeneration() as string
+    return "qr3"
+end function
+
+' True when a cached activities document is missing qrUrl on any activity.
+function ActivitiesCacheDropsQr(parsed as object) as boolean
+    if not IsAssoc(parsed) then return true
+    sections = parsed.Lookup("activitySections")
+    if not IsList(sections) then return true
+    last = sections.Count() - 1
+    if last < 0 then return true
+    saw = false
+    for sectionAt = 0 to last
+        section = sections[sectionAt]
+        if IsAssoc(section)
+            rows = section.Lookup("activities")
+            if IsList(rows)
+                rowLast = rows.Count() - 1
+                if rowLast >= 0
+                    for rowAt = 0 to rowLast
+                        row = rows[rowAt]
+                        if IsAssoc(row)
+                            saw = true
+                            if GuideLimitedText(row.Lookup("qrUrl"), 420) = "" then return true
+                        end if
+                    end for
+                end if
+            end if
+        end if
+    end for
+    if saw = false then return true
+    return false
+end function
+
+' Two cards may share an id. Prefer the one that still has qrUrl.
+function ActivityById(items as object, id as string) as object
+    if id = invalid or id = "" then return invalid
+    if IsAssoc(items)
+        sections = items.Lookup("activitySections")
+        if IsList(sections) then return ActivityInSections(sections, id)
+    end if
+    if not IsList(items) then return invalid
+    return ActivityInList(items, id)
+end function
+
+function ActivityInList(items as object, id as string) as object
+    found = invalid
+    last = items.Count() - 1
+    if last < 0 then return invalid
+    for index = 0 to last
+        item = items[index]
+        if ActivityIdIs(item, id)
+            if found = invalid then found = item
+            if ActivityHasQr(item) then return item
+        end if
+    end for
+    return found
+end function
+
+function ActivityInSections(sections as object, id as string) as object
+    found = invalid
+    last = sections.Count() - 1
+    if last < 0 then return invalid
+    for sectionAt = 0 to last
+        section = sections[sectionAt]
+        if IsAssoc(section)
+            rows = section.Lookup("activities")
+            if IsList(rows)
+                rowLast = rows.Count() - 1
+                if rowLast >= 0
+                    for rowAt = 0 to rowLast
+                        row = rows[rowAt]
+                        if ActivityIdIs(row, id)
+                            if found = invalid then found = row
+                            if ActivityHasQr(row) then return row
+                        end if
+                    end for
+                end if
+            end if
+        end if
+    end for
+    return found
+end function
+
+function ActivityIdIs(item as object, id as string) as boolean
+    if not IsAssoc(item) then return false
+    return GuideLimitedText(item.Lookup("id"), 80) = id
+end function
+
+function ActivityHasQr(item as object) as boolean
+    if not IsAssoc(item) then return false
+    if GuideLimitedText(item.Lookup("qrUrl"), 420) <> "" then return true
+    if GuideLimitedText(item.Lookup("qrUri"), 420) <> "" then return true
+    return false
+end function
+
 function ActivitySection(section as string) as boolean
     if section = "dining" or section = "hiking" or section = "todo" then return true
     return false

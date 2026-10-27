@@ -6,6 +6,7 @@ end sub
 ' Response bodies are not printed: troubleshooting text can include access details.
 sub fetchGuideBundle()
     generation = ReadGuideGeneration()
+    DiscardActivitiesCacheGeneration()
     guide = LoadGuideLocal()
     checkout = LoadCheckoutLocal()
     activities = LoadActivitiesLocal()
@@ -114,6 +115,7 @@ function FetchRemote(kind as string) as object
     print "Eaglewood: "; kind; " request sent"
     response = HttpGet(url, etag)
     print "Eaglewood: "; kind; " response code="; response.code
+    if kind = "activities" then response = ActivitiesResponse(url, cachePath, response)
     if response.reason = "not-modified"
         cachedText = ReadText(cachePath)
         parsed = ParseObjectText(cachedText)
@@ -180,6 +182,11 @@ function LoadActivitiesLocal() as object
     bundled = FinishActivities(ParseObjectText(ReadText("pkg:/data/activities.json")), "pkg", "0")
     cachedText = ReadText("cachefs:/eaglewood/activities.json")
     cachedParsed = ParseObjectText(cachedText)
+    if cachedParsed <> invalid and ActivitiesCacheDropsQr(cachedParsed)
+        print "Eaglewood: activities cache missing qrUrl"
+        DeleteActivitiesCache()
+        cachedParsed = invalid
+    end if
     chosen = ActivitiesFromFetch(cachedParsed, "cachefs", "0", bundled)
     if cachedParsed <> invalid and chosen <> invalid and chosen.activitiesSource = "pkg"
         print "Eaglewood: activities cache missing qrUrl"
@@ -289,6 +296,43 @@ function WriteText(path as string, body as string) as boolean
     if wrote = true then return true
     return false
 end function
+
+function ActivitiesResponse(url as string, cachePath as string, response as object) as object
+    if response <> invalid and response.reason = "ok" then return response
+    cached = ParseObjectText(ReadText(cachePath))
+    discard = false
+    if response <> invalid and response.reason = "not-modified" then discard = true
+    if cached <> invalid and ActivitiesCacheDropsQr(cached) then discard = true
+    if discard = false then return response
+    print "Eaglewood: activities cache discarded"
+    DeleteActivitiesCache()
+    return HttpGet(url, "")
+end function
+
+sub DiscardActivitiesCacheGeneration()
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    current = ""
+    if section <> invalid then current = GuideLimitedText(section.Read("activitiesCacheKey"), 40)
+    if current = ActivitiesCacheGeneration() then return
+    print "Eaglewood: activities cache generation "; ActivitiesCacheGeneration()
+    DeleteActivitiesCache()
+    if section = invalid then return
+    section.Write("activitiesCacheKey", ActivitiesCacheGeneration())
+    section.Flush()
+end sub
+
+sub DeleteActivitiesCache()
+    fs = CreateObject("roFileSystem")
+    path = "cachefs:/eaglewood/activities.json"
+    if fs <> invalid
+        if fs.Exists(path) = true then fs.Delete(path)
+    end if
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section = invalid then return
+    section.Delete("activitiesEtag")
+    section.Write("activitiesEtag", "")
+    section.Flush()
+end sub
 
 function RememberedEtag(prefix as string) as string
     section = CreateObject("roRegistrySection", "EaglewoodGuide")

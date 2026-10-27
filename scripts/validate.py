@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "18",
+    "build_version": "19",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -532,10 +532,10 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 18 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 19 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 18 "' not in scene:
-        fail("startup must log build 18 and the commit")
+    if 'print "Eaglewood: build 19 "' not in scene:
+        fail("startup must log build 19 and the commit")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
     if 'id="finalUri"' not in qr_xml or "alwaysNotify" not in qr_xml:
         fail("each QR task needs a finalUri field")
@@ -546,8 +546,17 @@ def check_phase2() -> None:
         fail("finalUri must be observed on the task before it runs")
     if "m.qrPaths" not in scene or "deliver uri=" not in phase2:
         fail("a finished QR path must be stored and assigned to the poster")
-    if "function ActivitiesFromFetch(" not in season or "function ActivityAt(" not in season:
-        fail("a 304 activities document must keep qrUrl and be read by index")
+    if "function ActivitiesFromFetch(" not in season or "function ActivityById(" not in season:
+        fail("detail must resolve qrUrl by activity id")
+    if "function ActivitiesCacheDropsQr(" not in season or "function ActivitiesCacheGeneration(" not in season:
+        fail("a stale activities cache must be recognizable")
+    guide_task = (ROOT / "channel" / "components" / "GuideTask.brs").read_text(encoding="utf-8")
+    if "activities cache discarded" not in guide_task or 'HttpGet(url, "")' not in guide_task:
+        fail("a 304 or a cache missing qrUrl must be deleted and fetched again")
+    if "activitiesCacheKey" not in guide_task or "DeleteActivitiesCache()" not in guide_task:
+        fail("the activities cache generation must discard the stale file and etag")
+    if 'print "Eaglewood: detail qrUrl="' not in phase2:
+        fail("opening detail must log detail qrUrl")
     if "ActivitiesFromText(" not in (ROOT / "channel" / "components" / "GuideTask.brs").read_text(encoding="utf-8"):
         fail("304 and 200 activities must share one parse path")
     if "RetainBodyOnError(true)" not in qr_task or "InitClientCertificates()" not in qr_task:
@@ -596,8 +605,8 @@ def check_phase2() -> None:
         fail("the build number stays in the startup log, not on Home")
     if "RaiseBadge()" not in guide or "sub RaiseBadge(" not in phase2:
         fail("the corner badge must be raised above later panes")
-    if "function QrRectText(" not in phase2 or "rect=" not in phase2:
-        fail("each QR must log its uri, loadStatus, and bounding rect")
+    if "function QrRectText(" not in phase2 or "caption badge rect=" not in phase2:
+        fail("caption and Checkout rects must be logged")
     if 'print "Eaglewood: qr ' not in phase2:
         fail("poster loadStatus must be logged for late debug consoles")
     for path in channel_text_files():

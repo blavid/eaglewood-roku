@@ -64,35 +64,33 @@ sub BuildHomePrompt(parent as object)
 end sub
 
 sub BuildBadge(parent as object)
+    frame = BadgeFrame()
     group = CreateObject("roSGNode", "Group")
-    group.translation = [1496, 830]
+    group.translation = [frame.x, frame.y]
     group.visible = false
-    card = AddRect(group, "0xFFFFFFF2", 0, 0, 220, 200)
+    card = AddRect(group, "0xFFFFFFF2", 0, 0, frame.w, frame.h)
     card.visible = false
     m.badgeCard = card
-    m.badgeMark = AddRect(group, QrMarkColor(), 0, 0, 220, 200)
+    m.badgeMark = AddRect(group, QrMarkColor(), frame.qrX, frame.qrY, frame.qr, frame.qr)
     m.badgeMark.visible = false
-    m.badgeLabel = AddLabel(group, "Book direct", "font:SmallestBoldSystemFont", "0x1B4D38FF", 8, 4, 204, 36)
-    m.badgeLabel.horizAlign = "center"
-    m.badgeLabel.visible = false
     m.badgePoster = CreateObject("roSGNode", "Poster")
     m.badgePoster.id = "badgeQr"
     m.badgePoster.focusable = false
-    m.badgePoster.translation = [46, 42]
-    m.badgePoster.width = 128
-    m.badgePoster.height = 128
+    m.badgePoster.translation = [frame.qrX, frame.qrY]
+    m.badgePoster.width = frame.qr
+    m.badgePoster.height = frame.qr
     m.badgePoster.loadWidth = 256
     m.badgePoster.loadHeight = 256
     m.badgePoster.loadDisplayMode = "scaleToFit"
     m.badgePoster.visible = false
     m.badgePoster.observeField("loadStatus", "onBadgeStatus")
-    m.badgeMissing = AddLabel(group, "", "font:SmallestSystemFont", "0x1C1408FF", 12, 78, 196, 64)
+    group.appendChild(m.badgePoster)
+    m.badgeMissing = AddLabel(group, "", "font:SmallestSystemFont", "0x1C1408FF", frame.qrX, frame.qrY, frame.qr, frame.qr)
     m.badgeMissing.horizAlign = "center"
     m.badgeMissing.maxLines = 3
-    m.badgeDomain = AddLabel(group, DisplayDomain(), "font:SmallestBoldSystemFont", "0x146B3AFF", 8, 172, 204, 24)
+    m.badgeDomain = AddLabel(group, DisplayDomain(), QrCaptionFont(), QrCaptionColor(), frame.captionX, frame.captionY, frame.captionW, frame.captionH)
     m.badgeDomain.horizAlign = "center"
     m.badgeDomain.visible = false
-    group.appendChild(m.badgePoster)
     parent.appendChild(group)
     m.badgeGroup = group
     m.badgeHint = AddLabel(parent, "", "font:SmallSystemFont", MuteColor(), 980, 800, 500, 28)
@@ -167,7 +165,7 @@ function BuildBookPane(parent as object) as object
     m.bookQr.visible = false
     pane.appendChild(m.bookQr)
     m.bookQr.observeField("loadStatus", "onBookQrStatus")
-    m.bookDomain = AddLabel(pane, DisplayDomain(), "font:SmallBoldSystemFont", AmberColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
+    m.bookDomain = AddLabel(pane, DisplayDomain(), QrCaptionFont(), QrCaptionColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
     m.bookDomain.horizAlign = "center"
     m.bookDomain.visible = false
     m.bookQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", AmberColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
@@ -408,7 +406,6 @@ sub ShowBadgeFrame(show as boolean)
     if m.section = "book" then show = false
     if m.badgeGroup <> invalid then m.badgeGroup.visible = show
     if m.badgeCard <> invalid then m.badgeCard.visible = show
-    if m.badgeLabel <> invalid then m.badgeLabel.visible = show
     if m.badgeDomain <> invalid then m.badgeDomain.visible = show
     if m.badgePoster <> invalid then m.badgePoster.visible = show
     if m.badgeMissing <> invalid then m.badgeMissing.visible = false
@@ -821,11 +818,12 @@ sub PaintDetail()
         m.detailPhoto.loadHeight = 360
         m.detailPhoto.uri = photo
     end if
-    qr = DetailQrUrl(item)
+    qr = DetailQrForItem(item)
     if m.detailQrCaption <> invalid
         if m.section = "dining" then m.detailQrCaption.text = "Scan for this restaurant"
         else m.detailQrCaption.text = "Scan for this place"
     end if
+    print "Eaglewood: detail qrUrl="; qr
     if qr = ""
         source = "none"
         if m.activitiesSource <> invalid and m.activitiesSource <> "" then source = m.activitiesSource
@@ -834,16 +832,47 @@ sub PaintDetail()
         print "Eaglewood: qr detail open url="; SafeUri(qr)
     end if
     EnsureQrSlot("detail", qr)
+    RevealDetailQr()
 end sub
 
+function DetailQrForItem(item as object) as string
+    qr = DetailQrUrl(item)
+    if qr <> "" then return qr
+    alt = ActivityById(m.activities, ItemText(item, "id"))
+    if alt = invalid then return ""
+    return DetailQrUrl(alt)
+end function
+
 sub ShowDetailQr(show as boolean)
+    ready = DetailPosterReady()
     if m.detailQrCard <> invalid then m.detailQrCard.visible = show
     if m.detailPlace <> invalid then m.detailPlace.visible = show
     if m.detailSite <> invalid then m.detailSite.visible = show
     if m.detailQrCaption <> invalid then m.detailQrCaption.visible = show
-    if m.detailQr <> invalid then m.detailQr.visible = show
+    if m.detailQr <> invalid then m.detailQr.visible = (show and ready)
     if m.detailQrMissing <> invalid then m.detailQrMissing.visible = false
     ShowQrMark("detail", show)
+end sub
+
+function DetailPosterReady() as boolean
+    poster = PosterForSlot("detail")
+    if poster = invalid then return false
+    if poster.loadStatus = "ready" then return true
+    return false
+end function
+
+' The poster stays hidden until it has a bitmap, so the cream rect stays visible.
+sub RevealDetailQr()
+    if QrRemote("detail") = "" then return
+    ready = DetailPosterReady()
+    if m.detailQrCard <> invalid then m.detailQrCard.visible = true
+    poster = PosterForSlot("detail")
+    if poster <> invalid then poster.visible = ready
+    if ready
+        ShowQrMark("detail", false)
+    else
+        ShowQrMark("detail", true)
+    end if
 end sub
 
 function DetailMeta(item as object) as string
@@ -948,13 +977,63 @@ function QrMarkColor() as string
     return "0xFFFFFFF2"
 end function
 
+function QrCaptionFont() as string
+    return "font:SmallestBoldSystemFont"
+end function
+
+function QrCaptionColor() as string
+    return AmberColor()
+end function
+
+function CheckoutTileRect() as object
+    tileW = 362
+    tileH = 164
+    stride = 22
+    originY = 480
+    return {
+        x: ContentLeft() + (2 * (tileW + stride)),
+        y: originY + (tileH + stride),
+        w: tileW,
+        h: tileH
+    }
+end function
+
+function BadgeFrame() as object
+    tile = CheckoutTileRect()
+    cardW = 220
+    qr = 116
+    gap = 28
+    return {
+        x: 1920 - 16 - cardW,
+        y: tile.y + tile.h + gap,
+        w: cardW,
+        h: 168,
+        qrX: 52,
+        qrY: 8,
+        qr: qr,
+        captionX: 0,
+        captionY: 130,
+        captionW: cardW,
+        captionH: 30
+    }
+end function
+
+function RectsClear(a as object, b as object, gap as integer) as boolean
+    if a = invalid or b = invalid then return false
+    if a.x >= b.x + b.w + gap then return true
+    if b.x >= a.x + a.w + gap then return true
+    if a.y >= b.y + b.h + gap then return true
+    if b.y >= a.y + a.h + gap then return true
+    return false
+end function
+
 ' Scan me card, poster, label, and domain. All of it sits inside the card
 ' and inside 1920x1080.
 function BookQrSlot() as object
     return {
         cardX: 1296,
         cardY: 292,
-        cardW: 300,
+        cardW: 360,
         cardH: 280,
         qrX: 1336,
         qrY: 340,
@@ -962,12 +1041,12 @@ function BookQrSlot() as object
         qrH: 180,
         labelX: 1296,
         labelY: 296,
-        labelW: 300,
+        labelW: 360,
         labelH: 40,
-        domainX: 1312,
-        domainY: 528,
-        domainW: 268,
-        domainH: 36
+        domainX: 1296,
+        domainY: 524,
+        domainW: 360,
+        domainH: 40
     }
 end function
 
@@ -1108,6 +1187,7 @@ sub EnsureQrSlot(slot as string, url as string)
     end if
     ShowQrFrame(slot, url <> "")
     ApplyStoredQr(slot)
+    if slot = "detail" then RevealDetailQr()
 end sub
 
 function QrRemote(slot as string) as string
@@ -1241,6 +1321,21 @@ sub LogQrScreen()
         LogQrState("badge", PosterForSlot("badge"))
         LogQrFormat("badge")
     end if
+    LogCaptionLayout()
+end sub
+
+sub LogCaptionLayout()
+    checkout = "0,0 0x0"
+    if m.tiles <> invalid
+        last = m.tiles.Count() - 1
+        if last >= 0
+            for index = 0 to last
+                tile = m.tiles[index]
+                if tile.section = "checkout" then checkout = QrRectText(tile.group)
+            end for
+        end if
+    end if
+    print "Eaglewood: caption badge rect="; QrRectText(m.badgeDomain); " book rect="; QrRectText(m.bookDomain); " checkout rect="; checkout
 end sub
 
 sub LogQrFormat(slot as string)

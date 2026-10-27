@@ -9,6 +9,7 @@ output="$(npx --yes brs@0.45.0 \
     --root "$ROOT/channel" \
     "$ROOT/channel/components/GuideModel.brs" \
     "$ROOT/channel/components/GuestRules.brs" \
+    "$ROOT/channel/components/GuideUi.brs" \
     "$ROOT/channel/components/Season.brs" \
     "$ROOT/channel/components/Phase2Ui.brs" \
     "$ROOT/scripts/brs_phase2_check.brs")"

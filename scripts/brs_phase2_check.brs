@@ -215,6 +215,43 @@ sub Main()
         print "FAIL QR debug marks are on"
         failed = failed + 1
     end if
+    if ActivitiesCacheGeneration() <> "qr3"
+        print "FAIL the activities cache generation was not bumped"
+        failed = failed + 1
+    end if
+    if ActivitiesCacheDropsQr({ activitySections: [{ activities: [{ id: "viator-ebike-tour", url: "https://example.com/a" }] }] }) <> true
+        print "FAIL a cached activity without qrUrl was kept"
+        failed = failed + 1
+    end if
+    if ActivitiesCacheDropsQr({ activitySections: [{ activities: [{ id: "viator-ebike-tour", qrUrl: "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png" }] }] }) <> false
+        print "FAIL a cached activity with qrUrl was discarded"
+        failed = failed + 1
+    end if
+    byId = ActivityById({
+        activitySections: [{
+            activities: [
+                { id: "viator-ebike-tour", name: "First" },
+                { id: "viator-ebike-tour", name: "Second", qrUrl: "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png" }
+            ]
+        }]
+    }, "viator-ebike-tour")
+    if byId = invalid or byId.qrUrl <> "https://sunrivertownhome.com/data/qr/viator-ebike-tour.png"
+        print "FAIL detail did not resolve qrUrl by id"
+        failed = failed + 1
+    end if
+    slot = BookQrSlot()
+    if slot.domainW <> slot.cardW or slot.domainX <> slot.cardX
+        print "FAIL the Book Direct domain caption is narrower than its card"
+        failed = failed + 1
+    end if
+    if QrCaptionColor() <> AmberColor() or QrCaptionFont() <> "font:SmallestBoldSystemFont"
+        print "FAIL the QR captions do not share the gold caption style"
+        failed = failed + 1
+    end if
+    if RectsClear(BadgeFrame(), CheckoutTileRect(), 24) <> true
+        print "FAIL the corner badge crowds the Checkout tile"
+        failed = failed + 1
+    end if
 
     book = NormalizeBookDirect({
         bookDirect: {
