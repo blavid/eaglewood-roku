@@ -78,6 +78,7 @@ sub BuildBadge(parent as object)
     m.badgeLabel.visible = false
     m.badgePoster = CreateObject("roSGNode", "Poster")
     m.badgePoster.id = "badgeQr"
+    m.badgePoster.focusable = false
     m.badgePoster.translation = [46, 42]
     m.badgePoster.width = 128
     m.badgePoster.height = 128
@@ -156,6 +157,7 @@ function BuildBookPane(parent as object) as object
     m.bookScan = scan
     m.bookQr = CreateObject("roSGNode", "Poster")
     m.bookQr.id = "bookQr"
+    m.bookQr.focusable = false
     m.bookQr.translation = [slot.qrX, slot.qrY]
     m.bookQr.width = slot.qrW
     m.bookQr.height = slot.qrH
@@ -213,6 +215,7 @@ function BuildWifiPane(parent as object) as object
     backing = AddRect(pane, "0xFFFFFFFF", ContentLeft(), ContentTop() + 96, 400, 400)
     m.wifiPoster = CreateObject("roSGNode", "Poster")
     m.wifiPoster.id = "wifiQr"
+    m.wifiPoster.focusable = false
     m.wifiPoster.translation = [ContentLeft() + 20, ContentTop() + 116]
     m.wifiPoster.width = 360
     m.wifiPoster.height = 360
@@ -301,6 +304,7 @@ function BuildDetailPane(parent as object) as object
     m.detailSite = site
     m.detailQr = CreateObject("roSGNode", "Poster")
     m.detailQr.id = "detailQr"
+    m.detailQr.focusable = false
     m.detailQr.translation = [ContentLeft() + 780, ContentTop() + 216]
     m.detailQr.width = 200
     m.detailQr.height = 172
@@ -539,12 +543,15 @@ sub ShowBookQr(show as boolean)
     if m.bookQrMissing <> invalid then m.bookQrMissing.visible = false
 end sub
 
-' Assign a finished local file once. A failed load clears uri, so the assigned
-' path is remembered and retried one time.
+' Assign a path the task already finished. The scene does not read the file.
+' A failed load clears uri, so the assigned path is retried once, and that
+' retry never runs from inside the loadStatus observer.
 sub MountQrPosterBody(poster as object, path as string, slot as string)
+    if m.qrAssigning = true then return
     if poster = invalid or path = invalid or path = "" then return
     if Left(path, 8) <> "cachefs:" and Left(path, 4) <> "tmp:" then return
     poster.visible = true
+    poster.focusable = false
     poster.loadDisplayMode = "scaleToFit"
     RememberPoster(slot, poster)
     status = poster.loadStatus
@@ -554,19 +561,20 @@ sub MountQrPosterBody(poster as object, path as string, slot as string)
         if QrRetried(slot) then return
         MarkQrRetry(slot)
         print "Eaglewood: qr "; slot; " retry"
+        m.qrAssigning = true
         poster.uri = ""
         poster.uri = path
+        m.qrAssigning = false
         LogQrState(slot, poster)
         return
     end if
-    readBack = QrReadLength(path)
     noted = NotedQrBytes(slot)
-    if noted < 1 then noted = readBack
-    print "Eaglewood: qr "; slot; " file bytes="; noted; " read="; readBack
-    if readBack < 8 then return
+    print "Eaglewood: qr "; slot; " file bytes="; noted; " read="; noted
     ClearQrRetry(slot)
     NoteAssigned(slot, path)
+    m.qrAssigning = true
     poster.uri = path
+    m.qrAssigning = false
     LogQrState(slot, poster)
 end sub
 
@@ -962,6 +970,7 @@ sub ApplyWifiResult(result as object)
     m.wifiRemoteSafe = AsText(result.remoteSafe)
     incoming = AsText(result.pngPath)
     if incoming <> "" then m.wifiFile = incoming
+    NoteQrBytes("wifi", ResultNumber(result, "pngBytes"))
     PaintWifi()
 end sub
 

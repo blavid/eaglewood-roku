@@ -58,5 +58,7 @@
         <Timer id="idleTimer" repeat="false" duration="600" />
         <!-- Six hours. Repeats on its own; a keypress does not reset it. -->
         <Timer id="refreshTimer" repeat="true" duration="21600" />
+        <!-- Proves the render thread is still dispatching. -->
+        <Timer id="heartbeatTimer" repeat="true" duration="5" />
     </children>
 </component>

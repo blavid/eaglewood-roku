@@ -259,6 +259,26 @@ end function
 
 ' A 200 saves a new file. wifi.png is not rewritten while a Poster points at it.
 function PromoteWifiPng() as string
+    try
+        return CommitWifiPng()
+    catch err
+        print "Eaglewood: wifi png error="; WifiErrorText(err)
+        return ""
+    end try
+end function
+
+function WifiErrorText(err as object) as string
+    if err = invalid then return "failed"
+    kind = type(err)
+    if kind = "String" or kind = "roString" then return err
+    if kind = "roAssociativeArray"
+        message = err.Lookup("message")
+        if message <> invalid and message <> "" then return message
+    end if
+    return "failed"
+end function
+
+function CommitWifiPng() as string
     data = CreateObject("roByteArray")
     if data = invalid then return ""
     if data.ReadFile(WifiPngTempPath()) <> true then return ""

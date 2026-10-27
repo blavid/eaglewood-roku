@@ -1,10 +1,11 @@
 sub init()
-    print "Eaglewood: build 14 "; BuildCommit()
-    ClearStaleQrCache()
+    print "Eaglewood: build 15 "; BuildCommit()
+    m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
     m.idleTimer = m.top.findNode("idleTimer")
     m.refreshTimer = m.top.findNode("refreshTimer")
+    m.heartbeatTimer = m.top.findNode("heartbeatTimer")
     m.guestTask = invalid
     m.guideTask = invalid
     m.wifiTask = invalid
@@ -13,6 +14,8 @@ sub init()
     m.guideGeneration = 0
     m.wifiGeneration = 0
     m.qrGeneration = 0
+    m.qrCleanupDone = false
+    m.qrAssigning = false
     m.qrJobs = {}
     m.qrTasks = {}
     m.qrRetries = {}
@@ -77,6 +80,10 @@ sub init()
     end try
     if m.idleTimer <> invalid then m.idleTimer.observeField("fire", "onIdle")
     if m.refreshTimer <> invalid then m.refreshTimer.observeField("fire", "onRefresh")
+    if m.heartbeatTimer <> invalid
+        m.heartbeatTimer.observeField("fire", "onHeartbeat")
+        m.heartbeatTimer.control = "start"
+    end if
     BumpIdle()
     HoldFocus()
     startGuestFetch()
@@ -346,6 +353,21 @@ function LayoutErrorText(err as object) as string
     return "layout failed"
 end function
 
+function FocusedNodeId() as string
+    if m.top = invalid then return "none"
+    if m.top.hasFocus() = true
+        if m.top.id <> invalid and m.top.id <> "" then return m.top.id
+        return "scene"
+    end if
+    return "none"
+end function
+
+sub onHeartbeat()
+    if m.heartbeatTimer = invalid then return
+    if m.heartbeatTimer.fire <> true then return
+    print "Eaglewood: heartbeat"
+end sub
+
 sub printUiResolution()
     deviceInfo = CreateObject("roDeviceInfo")
     if deviceInfo = invalid then return
@@ -355,6 +377,9 @@ sub printUiResolution()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    flag = "false"
+    if press = true then flag = "true"
+    print "Eaglewood: key " + key + " press=" + flag + " focus=" + FocusedNodeId()
     if press <> true then return false
     handled = true
     try
@@ -822,6 +847,11 @@ sub StartQrFetch(slot as string)
     if slot = "book" then task.bookUrl = url
     if slot = "detail" then task.detailUrl = url
     task.busyPaths = LiveQrPathList()
+    task.doCleanup = false
+    if m.qrCleanupDone <> true
+        task.doCleanup = true
+        m.qrCleanupDone = true
+    end if
     task.observeField("result", "onQrReady")
     m.qrTasks[slot] = task
     task.control = "RUN"

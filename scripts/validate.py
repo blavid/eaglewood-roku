@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "14",
+    "build_version": "15",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -511,8 +511,17 @@ def check_phase2() -> None:
         fail("public QR URLs must add v=rgb2")
     if "sub ClearStaleQrCache(" not in png or "qrCacheVersion" not in png:
         fail("startup must clear stale QR cache once per version")
-    if "ClearStaleQrCache()" not in scene:
-        fail("startup must clear the stale QR cache")
+    if "ClearStaleQrCache(" in scene:
+        fail("QR cache cleanup must not run on the render thread")
+    qr_task = (ROOT / "channel" / "components" / "QrTask.brs").read_text(encoding="utf-8")
+    if "ClearStaleQrCache(busy)" not in qr_task:
+        fail("QR cache cleanup must run on the QR task")
+    if "digest.Process(raw)" not in png or 'digest.Setup("md5")' not in png or "digest.Final()" not in png:
+        fail("QR files must be named from md5 via roEVPDigest Process")
+    if "fs.Rename(" not in png or "fs.MoveFile(" in png:
+        fail("QR files must be renamed into place")
+    if "fs.Exists(" not in qr_task:
+        fail("a missing QR note must be skipped before ReadAsciiFile")
     if "wifi png format bitdepth=" not in wifi:
         fail("wifi png format must be logged")
     if "sub MountQrPosterBody(" not in phase2:
@@ -523,12 +532,16 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 14 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 15 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 14 "' not in scene:
-        fail("startup must log build 14 and the commit")
-    if "function QrContentFileName(" not in png or "MoveFile" not in png or "function CommitQrBytes(" not in png:
-        fail("QR files must be content-named and moved into place")
+    if 'print "Eaglewood: build 15 "' not in scene:
+        fail("startup must log build 15 and the commit")
+    if "function QrContentFileName(" not in png or "function CommitQrBytes(" not in png:
+        fail("QR files must be content-named")
+    if 'print "Eaglewood: heartbeat"' not in scene or 'id="heartbeatTimer"' not in xml:
+        fail("the render thread needs a 5 second heartbeat")
+    if 'print "Eaglewood: key "' not in scene:
+        fail("every key event must be logged")
     if "function BookQrFits(" not in phase2 or "findNode(id)" not in phase2:
         fail("Book Direct must measure its QR slot and assign the live poster")
     if 'print "Eaglewood: qr detail open url="' not in phase2:

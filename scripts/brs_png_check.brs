@@ -56,6 +56,27 @@ sub Main()
         print "FAIL a QR file was not named from its digest"
         failed = failed + 1
     end if
+    hello = DigestTagFromHex("5d41402abc4b2a76eea3a8c7e1c5c1c6")
+    if hello <> "5d41402a"
+        print "FAIL the md5 suffix was not the first 8 hex chars"
+        failed = failed + 1
+    end if
+    if QrContentFileName("book", hello) <> "qr-book-5d41402a.png"
+        print "FAIL the book QR was not named from the md5"
+        failed = failed + 1
+    end if
+    if QrTempFileName("book", hello) <> "qr-book-5d41402a.tmp"
+        print "FAIL the temp QR was not named from the md5"
+        failed = failed + 1
+    end if
+    if QrContentFileName("book", "") <> "" or QrTempFileName("book", "") <> ""
+        print "FAIL an empty digest still built a QR path"
+        failed = failed + 1
+    end if
+    if PngDigestTag(invalid) <> ""
+        print "FAIL a missing digest became a file suffix"
+        failed = failed + 1
+    end if
     if PathIsBusy("cachefs:/eaglewood/qr-badge-abcdef12.png", "cachefs:/eaglewood/wifi.png|cachefs:/eaglewood/qr-badge-abcdef12.png") <> true
         print "FAIL an in-use QR file was treated as free"
         failed = failed + 1

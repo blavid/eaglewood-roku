@@ -6,6 +6,7 @@
         <field id="bookUrl" type="string" value="" />
         <field id="detailUrl" type="string" value="" />
         <field id="busyPaths" type="string" value="" />
+        <field id="doCleanup" type="boolean" value="false" />
         <field id="result" type="assocarray" alwaysNotify="true" />
     </interface>
 

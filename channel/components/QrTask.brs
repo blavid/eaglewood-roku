@@ -4,6 +4,15 @@ end sub
 
 ' Public QR PNGs. Same download as wifi.png: AsyncGetToFile, then a local file for Poster.
 sub fetchQrs()
+    if m.top.doCleanup = true
+        busy = ""
+        if m.top.busyPaths <> invalid then busy = m.top.busyPaths
+        try
+            ClearStaleQrCache(busy)
+        catch err
+            print "Eaglewood: qr cache error="; TaskErrorText(err)
+        end try
+    end if
     generation = ReadQrGeneration()
     FetchQr("badge", m.top.badgeUrl, generation)
     FetchQr("book", m.top.bookUrl, generation)
@@ -11,6 +20,27 @@ sub fetchQrs()
 end sub
 
 sub FetchQr(slot as string, url as string, generation as integer)
+    try
+        FetchQrBody(slot, url, generation)
+    catch err
+        print "Eaglewood: qr "; slot; " error="; TaskErrorText(err)
+        PublishQr(slot, generation, url, 0, FailQr("commit"), "", 0)
+        print "Eaglewood: qr "; slot; " final uri=none"
+    end try
+end sub
+
+function TaskErrorText(err as object) as string
+    if err = invalid then return "failed"
+    kind = type(err)
+    if kind = "String" or kind = "roString" then return err
+    if kind = "roAssociativeArray"
+        message = err.Lookup("message")
+        if message <> invalid and message <> "" then return message
+    end if
+    return "failed"
+end function
+
+sub FetchQrBody(slot as string, url as string, generation as integer)
     if url = invalid then url = ""
     if slot = invalid or slot = "" or url = "" then return
     code = 0
@@ -88,12 +118,24 @@ function LocalPosterPath(path as string) as boolean
 end function
 
 function CachedContentPath(slot as string, url as string) as string
-    note = ReadAsciiFile(QrNotePath(slot))
+    notePath = QrNotePath(slot)
+    pathNote = QrPathNote(slot)
+    if FsExists(notePath) <> true or FsExists(pathNote) <> true then return ""
+    note = ReadAsciiFile(notePath)
     if note = invalid or note <> url then return ""
-    path = ReadAsciiFile(QrPathNote(slot))
+    path = ReadAsciiFile(pathNote)
     if path = invalid or LocalPosterPath(path) <> true then return ""
     if QrReadLength(path) < 8 then return ""
     return path
+end function
+
+function FsExists(path as string) as boolean
+    if path = invalid or path = "" then return false
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return false
+    found = fs.Exists(path)
+    if found = true then return true
+    return false
 end function
 
 function DownloadQr(url as string, dest as string) as integer

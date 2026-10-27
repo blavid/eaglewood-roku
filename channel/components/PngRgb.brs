@@ -328,24 +328,36 @@ function FileSize(path as string) as integer
 end function
 
 function QrContentFileName(slot as string, tag as string) as string
-    clean = tag
-    if clean = invalid then clean = ""
-    if Len(clean) > 8 then clean = Left(clean, 8)
-    if clean = "" then clean = "00000000"
+    clean = DigestTagFromHex(tag)
+    if clean = "" or slot = invalid or slot = "" then return ""
     return "qr-" + slot + "-" + clean + ".png"
+end function
+
+function QrTempFileName(slot as string, tag as string) as string
+    clean = DigestTagFromHex(tag)
+    if clean = "" or slot = invalid or slot = "" then return ""
+    return "qr-" + slot + "-" + clean + ".tmp"
+end function
+
+' First 8 hex chars of an MD5. Empty input stays empty so a missed digest
+' cannot become qr-book-.tmp or qr-book-00000000.png.
+function DigestTagFromHex(hex as string) as string
+    if hex = invalid then return ""
+    clean = LCase(hex)
+    if Len(clean) < 8 then return ""
+    return Left(clean, 8)
 end function
 
 function PngDigestTag(raw as object) as string
     if raw = invalid then return ""
     digest = CreateObject("roEVPDigest")
     if digest = invalid then return ""
-    if digest.Setup("md5") <> true then return ""
-    digest.Update(raw)
+    ready = digest.Setup("md5")
+    if ready = false or ready = 0 or ready = invalid then return ""
+    digest.Process(raw)
     sum = digest.Final()
     if sum = invalid then return ""
-    hex = LCase(sum.ToHexString())
-    if hex = invalid or Len(hex) < 8 then return ""
-    return Left(hex, 8)
+    return DigestTagFromHex(sum.ToHexString())
 end function
 
 function QrReadLength(path as string) as integer
@@ -363,17 +375,19 @@ function PathIsBusy(path as string, busy as string) as boolean
     return Instr(1, "|" + busy + "|", "|" + path + "|") > 0
 end function
 
-' Write tmp, then MoveFile. An existing content file is reused. A file named
-' in busy is never deleted or replaced.
+' Write tmp, then Rename. roFileSystem has no MoveFile. An existing content
+' file is reused. A file named in busy is never deleted or replaced.
 function CommitQrBytes(slot as string, raw as object, busy as string) as string
     if raw = invalid or slot = invalid or slot = "" then return ""
     count = raw.Count()
     if count = invalid or count < 8 then return ""
     tag = PngDigestTag(raw)
     fileName = QrContentFileName(slot, tag)
-    stored = PlaceNewPng(raw, "cachefs:/eaglewood/" + fileName, "cachefs:/eaglewood/qr-" + slot + "-" + tag + ".tmp", busy, slot)
+    tempName = QrTempFileName(slot, tag)
+    if fileName = "" or tempName = "" then return ""
+    stored = PlaceNewPng(raw, "cachefs:/eaglewood/" + fileName, "cachefs:/eaglewood/" + tempName, busy, slot)
     if stored <> "" then return stored
-    return PlaceNewPng(raw, "tmp:/eaglewood/" + fileName, "tmp:/eaglewood/qr-" + slot + "-" + tag + ".tmp", busy, slot)
+    return PlaceNewPng(raw, "tmp:/eaglewood/" + fileName, "tmp:/eaglewood/" + tempName, busy, slot)
 end function
 
 function PlaceNewPng(raw as object, finalPath as string, tmpPath as string, busy as string, slot as string) as string
@@ -397,7 +411,8 @@ function PlaceNewPng(raw as object, finalPath as string, tmpPath as string, busy
     if PathIsBusy(finalPath, busy) then return ""
     fs = CreateObject("roFileSystem")
     if fs = invalid then return ""
-    if fs.MoveFile(tmpPath, finalPath) <> true then return ""
+    renamed = fs.Rename(tmpPath, finalPath)
+    if renamed = false or renamed = 0 or renamed = invalid then return ""
     if QrReadLength(finalPath) <> count then return ""
     return finalPath
 end function
@@ -411,9 +426,9 @@ end function
 
 ' Drop old QR files before any fetch starts. wifi.png stays. A path a Poster
 ' is using is left in place.
-sub ClearStaleQrCache()
+sub ClearStaleQrCache(busy as string)
     version = "rgb2"
-    busy = LiveQrPathList()
+    if busy = invalid then busy = ""
     DeleteStaleQrFiles("cachefs:/eaglewood", busy)
     DeleteStaleQrFiles("tmp:/eaglewood", busy)
     DeleteStaleQrFiles("tmp:/", busy)
