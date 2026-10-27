@@ -48,6 +48,22 @@ sub Main()
         print "FAIL a non-QR cache file was selected"
         failed = failed + 1
     end if
+    if StaleQrCacheName("wifi-next.png") <> false or StaleQrCacheName("qr-badge-abcdef12.png") <> true
+        print "FAIL content-named QR cleanup picked the wrong file"
+        failed = failed + 1
+    end if
+    if QrContentFileName("badge", "abcdef123456") <> "qr-badge-abcdef12.png"
+        print "FAIL a QR file was not named from its digest"
+        failed = failed + 1
+    end if
+    if PathIsBusy("cachefs:/eaglewood/qr-badge-abcdef12.png", "cachefs:/eaglewood/wifi.png|cachefs:/eaglewood/qr-badge-abcdef12.png") <> true
+        print "FAIL an in-use QR file was treated as free"
+        failed = failed + 1
+    end if
+    if PathIsBusy("cachefs:/eaglewood/qr-book-abcdef12.png", "cachefs:/eaglewood/qr-badge-abcdef12.png") <> false
+        print "FAIL a free QR file was treated as in use"
+        failed = failed + 1
+    end if
 
     if failed = 0 then print "brs png checks passed"
 end sub

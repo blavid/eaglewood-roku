@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "13",
+    "build_version": "14",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -523,10 +523,16 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 13 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 14 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 13 "' not in scene:
-        fail("startup must log build 13 and the commit")
+    if 'print "Eaglewood: build 14 "' not in scene:
+        fail("startup must log build 14 and the commit")
+    if "function QrContentFileName(" not in png or "MoveFile" not in png or "function CommitQrBytes(" not in png:
+        fail("QR files must be content-named and moved into place")
+    if "function BookQrFits(" not in phase2 or "findNode(id)" not in phase2:
+        fail("Book Direct must measure its QR slot and assign the live poster")
+    if 'print "Eaglewood: qr detail open url="' not in phase2:
+        fail("activity detail must fetch its QR when the screen opens")
     if "0xFF00FFFF" not in phase2:
         fail("QR slots need a visible magenta marker")
     if "function QrRectText(" not in phase2 or "rect=" not in phase2:

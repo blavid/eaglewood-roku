@@ -40,10 +40,13 @@ sub fetchWifi()
         print "Eaglewood: wifi png response code="; png.code
         cached.pngCode = png.code
         if png.reason = "ok" or png.reason = "not-modified"
-            size = PngFileBytes(WifiPngPath())
+            shown = WifiPngPath()
+            if png.reason = "ok" and png.stored <> invalid and png.stored <> "" then shown = png.stored
+            size = PngFileBytes(shown)
             if size > 0
                 cached.png = "yes"
                 cached.pngBytes = size
+                if png.reason = "ok" then cached.pngPath = shown
                 if png.etag <> "" and png.reason = "ok" then print "Eaglewood: wifi etag stored"
                 if png.reason = "not-modified" then print "Eaglewood: wifi etag match"
                 RememberWifiFetch("wifiPng", png.etag)
@@ -53,6 +56,7 @@ sub fetchWifi()
             if size > 0
                 cached.png = "yes"
                 cached.pngBytes = size
+                cached.pngPath = WifiPngPath()
             end if
         end if
         cached.notice = ""
@@ -99,7 +103,9 @@ end function
 
 sub NoteWifiPng(info as object)
     if info = invalid then return
-    prepared = ExpandPngFile(WifiPngPath(), WifiPngPath())
+    path = WifiPngPath()
+    if info.pngPath <> invalid and info.pngPath <> "" then path = info.pngPath
+    prepared = ExpandPngFile(path, path)
     info.pngBit = prepared.bit
     info.pngColor = prepared.color
     info.pngInterlace = prepared.interlace
@@ -240,24 +246,34 @@ function WifiHttp(url as string, etag as string, dest as string, wantJson as boo
         result.reason = "bad-png"
         return result
     end if
-    if not PromoteWifiPng()
+    stored = PromoteWifiPng()
+    if stored = ""
         result.reason = "cache-write"
         return result
     end if
-    result.bytes = size
+    result.stored = stored
+    result.bytes = PngFileBytes(stored)
     result.reason = "ok"
     return result
 end function
 
-function PromoteWifiPng() as boolean
+' A 200 saves a new file. wifi.png is not rewritten while a Poster points at it.
+function PromoteWifiPng() as string
     data = CreateObject("roByteArray")
-    if data = invalid then return false
-    if data.ReadFile(WifiPngTempPath()) <> true then return false
-    if data.Count() < 8 then return false
-    wrote = data.WriteFile(WifiPngPath())
+    if data = invalid then return ""
+    if data.ReadFile(WifiPngTempPath()) <> true then return ""
+    count = data.Count()
+    if count = invalid or count < 8 then return ""
+    busy = ""
+    if m.top.busyPaths <> invalid then busy = m.top.busyPaths
+    existing = QrReadLength(WifiPngPath())
+    if existing = count
+        DeleteWifiFile(WifiPngTempPath())
+        return WifiPngPath()
+    end if
+    stored = CommitQrBytes("wifi", data, busy)
     DeleteWifiFile(WifiPngTempPath())
-    if wrote = true then return true
-    return false
+    return stored
 end function
 
 function PngFileBytes(path as string) as integer
@@ -386,6 +402,8 @@ sub PublishWifi(info as object, generation as integer)
     if pngIndexed = invalid or pngIndexed = "" then pngIndexed = "no"
     remoteSafe = info.remoteSafe
     if remoteSafe = invalid or remoteSafe = "" then remoteSafe = SafeUri(WifiPngUrl())
+    pngPath = ""
+    if info.pngPath <> invalid then pngPath = info.pngPath
     m.top.result = {
         generation: generation,
         generationText: generation.ToStr(),
@@ -402,7 +420,8 @@ sub PublishWifi(info as object, generation as integer)
         pngColor: pngColor,
         pngInterlace: pngInterlace,
         pngIndexed: pngIndexed,
-        remoteSafe: remoteSafe
+        remoteSafe: remoteSafe,
+        pngPath: pngPath
     }
 end sub
 

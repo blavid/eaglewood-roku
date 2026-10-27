@@ -327,6 +327,81 @@ function FileSize(path as string) as integer
     return stat.size
 end function
 
+function QrContentFileName(slot as string, tag as string) as string
+    clean = tag
+    if clean = invalid then clean = ""
+    if Len(clean) > 8 then clean = Left(clean, 8)
+    if clean = "" then clean = "00000000"
+    return "qr-" + slot + "-" + clean + ".png"
+end function
+
+function PngDigestTag(raw as object) as string
+    if raw = invalid then return ""
+    digest = CreateObject("roEVPDigest")
+    if digest = invalid then return ""
+    if digest.Setup("md5") <> true then return ""
+    digest.Update(raw)
+    sum = digest.Final()
+    if sum = invalid then return ""
+    hex = LCase(sum.ToHexString())
+    if hex = invalid or Len(hex) < 8 then return ""
+    return Left(hex, 8)
+end function
+
+function QrReadLength(path as string) as integer
+    if path = invalid or path = "" then return -1
+    raw = CreateObject("roByteArray")
+    if raw = invalid then return -1
+    if raw.ReadFile(path) <> true then return -1
+    count = raw.Count()
+    if count = invalid then return -1
+    return count
+end function
+
+function PathIsBusy(path as string, busy as string) as boolean
+    if path = invalid or path = "" or busy = invalid or busy = "" then return false
+    return Instr(1, "|" + busy + "|", "|" + path + "|") > 0
+end function
+
+' Write tmp, then MoveFile. An existing content file is reused. A file named
+' in busy is never deleted or replaced.
+function CommitQrBytes(slot as string, raw as object, busy as string) as string
+    if raw = invalid or slot = invalid or slot = "" then return ""
+    count = raw.Count()
+    if count = invalid or count < 8 then return ""
+    tag = PngDigestTag(raw)
+    fileName = QrContentFileName(slot, tag)
+    stored = PlaceNewPng(raw, "cachefs:/eaglewood/" + fileName, "cachefs:/eaglewood/qr-" + slot + "-" + tag + ".tmp", busy, slot)
+    if stored <> "" then return stored
+    return PlaceNewPng(raw, "tmp:/eaglewood/" + fileName, "tmp:/eaglewood/qr-" + slot + "-" + tag + ".tmp", busy, slot)
+end function
+
+function PlaceNewPng(raw as object, finalPath as string, tmpPath as string, busy as string, slot as string) as string
+    count = raw.Count()
+    if EnsureParentDir(finalPath) <> true then return ""
+    existing = QrReadLength(finalPath)
+    if existing = count
+        print "Eaglewood: qr "; slot; " file bytes="; count; " read="; existing
+        return finalPath
+    end if
+    if existing > 0
+        if PathIsBusy(finalPath, busy) then return ""
+        fs = CreateObject("roFileSystem")
+        if fs <> invalid then fs.Delete(finalPath)
+    end if
+    if EnsureParentDir(tmpPath) <> true then return ""
+    wrote = raw.WriteFile(tmpPath)
+    readBack = QrReadLength(tmpPath)
+    print "Eaglewood: qr "; slot; " file bytes="; count; " read="; readBack
+    if wrote <> true or readBack <> count then return ""
+    if PathIsBusy(finalPath, busy) then return ""
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return ""
+    if fs.MoveFile(tmpPath, finalPath) <> true then return ""
+    if QrReadLength(finalPath) <> count then return ""
+    return finalPath
+end function
+
 function WriteResultText(value as object) as string
     if value = invalid then return "invalid"
     if value = true then return "true"
@@ -334,18 +409,15 @@ function WriteResultText(value as object) as string
     return value.ToStr()
 end function
 
-' Drop grayscale QR files left from before ?v=rgb2. Runs once per version.
-' wifi.png, wifi.json, and the guide JSON stay put.
+' Drop old QR files before any fetch starts. wifi.png stays. A path a Poster
+' is using is left in place.
 sub ClearStaleQrCache()
     version = "rgb2"
+    busy = LiveQrPathList()
+    DeleteStaleQrFiles("cachefs:/eaglewood", busy)
+    DeleteStaleQrFiles("tmp:/eaglewood", busy)
+    DeleteStaleQrFiles("tmp:/", busy)
     section = CreateObject("roRegistrySection", "EaglewoodGuide")
-    if section <> invalid
-        saved = section.Read("qrCacheVersion")
-        if saved = version then return
-    end if
-    DeleteStaleQrFiles("cachefs:/eaglewood")
-    DeleteStaleQrFiles("tmp:/eaglewood")
-    DeleteStaleQrFiles("tmp:/")
     if section <> invalid
         section.Write("qrCacheVersion", version)
         section.Flush()
@@ -353,13 +425,13 @@ sub ClearStaleQrCache()
     print "Eaglewood: qr cache cleared version="; version
 end sub
 
-sub DeleteStaleQrFiles(dir as string)
+sub DeleteStaleQrFiles(dir as string, busy as string)
     fs = CreateObject("roFileSystem")
     if fs = invalid or dir = invalid or dir = "" then return
-    known = ["qr-badge.png", "qr-book.png", "qr-detail.png", "qr-next.png", "qr-badge.url", "qr-book.url", "qr-detail.url", "qr-fallback.png"]
+    known = ["qr-badge.png", "qr-book.png", "qr-detail.png", "qr-next.png", "qr-badge.url", "qr-book.url", "qr-detail.url", "qr-badge.path", "qr-book.path", "qr-detail.path", "qr-fallback.png"]
     last = known.Count() - 1
     for index = 0 to last
-        DeleteOneQrFile(fs, JoinFs(dir, known[index]))
+        DeleteOneQrFile(fs, JoinFs(dir, known[index]), busy)
     end for
     listing = fs.GetDirectoryListing(dir)
     if listing = invalid then return
@@ -368,7 +440,7 @@ sub DeleteStaleQrFiles(dir as string)
     last = count - 1
     for index = 0 to last
         name = listing[index]
-        if StaleQrCacheName(name) then DeleteOneQrFile(fs, JoinFs(dir, name))
+        if StaleQrCacheName(name) then DeleteOneQrFile(fs, JoinFs(dir, name), busy)
     end for
 end sub
 
@@ -384,19 +456,56 @@ function StaleQrCacheName(name as object) as boolean
     if kind <> "String" and kind <> "roString" then return false
     if Instr(1, name, "/") > 0 or Instr(1, name, ":") > 0 then return false
     lower = LCase(name)
-    if Instr(1, lower, "wifi") > 0 then return false
+    if Left(lower, 4) = "wifi" then return false
     if Instr(1, lower, "qr") < 1 then return false
     if Right(lower, 4) = ".png" then return true
     if Right(lower, 4) = ".url" then return true
+    if Right(lower, 4) = ".tmp" then return true
+    if Right(lower, 5) = ".path" then return true
     return false
 end function
 
-sub DeleteOneQrFile(fs as object, path as string)
+sub DeleteOneQrFile(fs as object, path as string, busy as string)
     if fs = invalid or path = invalid or path = "" then return
     if fs.Stat(path) = invalid then return
+    if PathIsBusy(path, busy) then return
     removed = fs.Delete(path)
     print "Eaglewood: qr cache delete path="; path; " result="; WriteResultText(removed)
 end sub
+
+function LiveQrPathList() as string
+    text = ""
+    text = AppendLivePath(text, FieldPath(m.badgeFile))
+    text = AppendLivePath(text, FieldPath(m.bookFile))
+    text = AppendLivePath(text, FieldPath(m.detailFile))
+    text = AppendLivePath(text, FieldPath(m.wifiFile))
+    text = AppendLivePath(text, NodeUri(m.badgePoster))
+    text = AppendLivePath(text, NodeUri(m.bookQr))
+    text = AppendLivePath(text, NodeUri(m.detailQr))
+    text = AppendLivePath(text, NodeUri(m.wifiPoster))
+    return text
+end function
+
+function AppendLivePath(text as string, path as string) as string
+    if path = invalid or path = "" then return text
+    if PathIsBusy(path, text) then return text
+    if text = "" then return path
+    return text + "|" + path
+end function
+
+function FieldPath(value as object) as string
+    if value = invalid then return ""
+    kind = type(value)
+    if kind <> "String" and kind <> "roString" then return ""
+    return value
+end function
+
+function NodeUri(node as object) as string
+    if node = invalid then return ""
+    uri = node.uri
+    if uri = invalid then return ""
+    return uri
+end function
 
 
 function AsBuf(src as object) as object

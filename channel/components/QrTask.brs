@@ -12,38 +12,72 @@ end sub
 
 sub FetchQr(slot as string, url as string, generation as integer)
     if url = invalid then url = ""
-    dest = QrPngPath(slot)
-    if dest = "" then return
-    if url = "" then return
+    if slot = invalid or slot = "" or url = "" then return
     code = 0
     prepared = invalid
-    if CachedQr(slot, url)
-        prepared = ExpandPngFile(dest, dest)
+    finalUri = CachedContentPath(slot, url)
+    busy = ""
+    if m.top.busyPaths <> invalid then busy = m.top.busyPaths
+    if finalUri <> ""
+        wrapped = ReadFileBytes(finalUri)
+        prepared = ExpandPngBytes(wrapped)
+        if prepared <> invalid and prepared.converted = true
+            bytes = CopyToByteArray(prepared.bytes)
+            if bytes <> invalid then finalUri = CommitQrBytes(slot, bytes, busy)
+        else if prepared <> invalid
+            prepared.path = finalUri
+        end if
+        readBack = QrReadLength(finalUri)
+        print "Eaglewood: qr "; slot; " file bytes="; readBack; " read="; readBack
     else
         print "Eaglewood: qr "; slot; " request sent"
-        code = DownloadQr(url, "cachefs:/eaglewood/qr-next.png")
+        incoming = "cachefs:/eaglewood/qr-" + slot + "-" + generation.ToStr() + "-incoming.tmp"
+        code = DownloadQr(url, incoming)
         print "Eaglewood: qr "; slot; " response code="; code
         if code <> 200
-            PublishQr(slot, generation, url, code, FailQr("http"), "")
+            DeleteQrFile(incoming)
+            PublishQr(slot, generation, url, code, FailQr("http"), "", 0)
             print "Eaglewood: qr "; slot; " final uri=none"
             return
         end if
-        prepared = PlacePngFile("cachefs:/eaglewood/qr-next.png", dest)
-        DeleteQrFile("cachefs:/eaglewood/qr-next.png")
+        raw = CreateObject("roByteArray")
+        if raw = invalid or raw.ReadFile(incoming) <> true
+            DeleteQrFile(incoming)
+            PublishQr(slot, generation, url, code, FailQr("bad-png"), "", 0)
+            print "Eaglewood: qr "; slot; " final uri=none"
+            return
+        end if
+        prepared = ExpandPngBytes(AsBuf(raw))
+        bytes = raw
+        if prepared <> invalid and prepared.converted = true
+            bytes = CopyToByteArray(prepared.bytes)
+        end if
+        if prepared = invalid or prepared.ok <> true or bytes = invalid
+            DeleteQrFile(incoming)
+            PublishQr(slot, generation, url, code, prepared, "", 0)
+            print "Eaglewood: qr "; slot; " final uri=none"
+            return
+        end if
+        finalUri = CommitQrBytes(slot, bytes, busy)
+        DeleteQrFile(incoming)
+        if prepared <> invalid then prepared.path = finalUri
     end if
     LogQrFormat(slot, prepared)
-    finalUri = ""
-    if prepared <> invalid and prepared.path <> invalid then finalUri = prepared.path
     if LocalPosterPath(finalUri) <> true then finalUri = ""
-    if prepared <> invalid and prepared.ok = true and Instr(1, finalUri, "cachefs:") = 1
-        WriteAsciiFile(QrNotePath(slot), url)
+    byteCount = 0
+    if finalUri <> ""
+        byteCount = QrReadLength(finalUri)
+        if prepared <> invalid and prepared.ok = true
+            WriteAsciiFile(QrNotePath(slot), url)
+            WriteAsciiFile(QrPathNote(slot), finalUri)
+        end if
     end if
     if finalUri = ""
         print "Eaglewood: qr "; slot; " final uri=none"
     else
         print "Eaglewood: qr "; slot; " final uri="; finalUri
     end if
-    PublishQr(slot, generation, url, code, prepared, finalUri)
+    PublishQr(slot, generation, url, code, prepared, finalUri, byteCount)
 end sub
 
 function LocalPosterPath(path as string) as boolean
@@ -53,10 +87,13 @@ function LocalPosterPath(path as string) as boolean
     return false
 end function
 
-function CachedQr(slot as string, url as string) as boolean
+function CachedContentPath(slot as string, url as string) as string
     note = ReadAsciiFile(QrNotePath(slot))
-    if note = invalid or note <> url then return false
-    return PngFileExists(QrPngPath(slot))
+    if note = invalid or note <> url then return ""
+    path = ReadAsciiFile(QrPathNote(slot))
+    if path = invalid or LocalPosterPath(path) <> true then return ""
+    if QrReadLength(path) < 8 then return ""
+    return path
 end function
 
 function DownloadQr(url as string, dest as string) as integer
@@ -97,7 +134,7 @@ sub LogQrFormat(slot as string, prepared as object)
     if prepared = invalid or prepared.ok <> true then print "Eaglewood: qr "; slot; " failure reason="; reason
 end sub
 
-sub PublishQr(slot as string, generation as integer, url as string, code as integer, prepared as object, path as string)
+sub PublishQr(slot as string, generation as integer, url as string, code as integer, prepared as object, path as string, bytes as integer)
     ok = "no"
     reason = "bad-png"
     bit = 0
@@ -127,7 +164,8 @@ sub PublishQr(slot as string, generation as integer, url as string, code as inte
         bit: bit,
         color: color,
         interlace: interlace,
-        indexed: indexed
+        indexed: indexed,
+        bytes: bytes
     }
 end sub
 
@@ -135,26 +173,14 @@ function FailQr(reason as string) as object
     return { ok: false, reason: reason, bit: 0, color: -1, interlace: 0, converted: false }
 end function
 
-function QrPngPath(slot as string) as string
-    if slot = "badge" then return "cachefs:/eaglewood/qr-badge.png"
-    if slot = "book" then return "cachefs:/eaglewood/qr-book.png"
-    if slot = "detail" then return "cachefs:/eaglewood/qr-detail.png"
-    return ""
-end function
-
 function QrNotePath(slot as string) as string
-    if slot = "badge" then return "cachefs:/eaglewood/qr-badge.url"
-    if slot = "book" then return "cachefs:/eaglewood/qr-book.url"
-    if slot = "detail" then return "cachefs:/eaglewood/qr-detail.url"
+    if slot = "badge" or slot = "book" or slot = "detail" or slot = "wifi" then return "cachefs:/eaglewood/qr-" + slot + ".url"
     return ""
 end function
 
-function PngFileExists(path as string) as boolean
-    wrapped = ReadFileBytes(path)
-    if wrapped = invalid then return false
-    if wrapped.n < 8 then return false
-    if BufAt(wrapped, 0) <> 137 or BufAt(wrapped, 1) <> 80 then return false
-    return true
+function QrPathNote(slot as string) as string
+    if slot = "badge" or slot = "book" or slot = "detail" or slot = "wifi" then return "cachefs:/eaglewood/qr-" + slot + ".path"
+    return ""
 end function
 
 sub EnsureQrDir()

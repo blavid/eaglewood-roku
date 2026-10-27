@@ -364,6 +364,7 @@ sub ShowSection(section as string)
     if m.footer <> invalid then m.footer.visible = (section <> "book")
     if not onActivity then ReleaseCardImages()
     UpdateBadgeVisible()
+    ReassignStoredQrs()
     LogQrScreen()
 end sub
 

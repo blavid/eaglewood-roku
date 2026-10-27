@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 13 "; BuildCommit()
+    print "Eaglewood: build 14 "; BuildCommit()
     ClearStaleQrCache()
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -13,9 +13,13 @@ sub init()
     m.guideGeneration = 0
     m.wifiGeneration = 0
     m.qrGeneration = 0
-    m.qrJobKey = ""
+    m.qrJobs = {}
+    m.qrTasks = {}
+    m.qrRetries = {}
+    m.qrBytes = {}
     m.qrFormats = {}
     m.qrPending = {}
+    m.wifiFile = ""
     m.shell = invalid
     m.zone = "prompt"
     m.section = "home"
@@ -570,9 +574,9 @@ function OpenActivityDetail() as boolean
     if CardCount() < 1 then return true
     m.zone = "item"
     ReleaseCardImages()
+    PaintDetail()
     ShowSection(m.section)
     print "Eaglewood: screen="; m.section; " zone=item"
-    PaintDetail()
     UpdateBadgeVisible()
     HoldFocus()
     return true
@@ -714,6 +718,7 @@ sub startWifiFetch()
     end if
     task.functionName = "fetchWifi"
     task.generation = m.wifiGeneration
+    task.busyPaths = LiveQrPathList()
     task.observeField("result", "onWifiFetch")
     m.wifiTask = task
     task.control = "RUN"
@@ -790,48 +795,51 @@ sub StartQrFetch(slot as string)
     if slot = "book" and m.bookQrUri <> invalid then url = m.bookQrUri
     if slot = "detail" and m.detailQrUri <> invalid then url = m.detailQrUri
     if url = "" then return
-    if m.qrPending = invalid then m.qrPending = {}
-    m.qrPending[slot] = url
-    badge = PendingQr("badge")
-    book = PendingQr("book")
-    detail = PendingQr("detail")
-    key = badge + "|" + book + "|" + detail
-    if key = m.qrJobKey and m.qrTask <> invalid then return
-    m.qrJobKey = key
-    if m.qrTask <> invalid
-        m.qrTask.unobserveField("result")
-        m.qrTask.control = "STOP"
-        m.qrTask = invalid
+    if m.qrJobs = invalid then m.qrJobs = {}
+    if m.qrTasks = invalid then m.qrTasks = {}
+    running = m.qrTasks.Lookup(slot)
+    if m.qrJobs[slot] = url and running <> invalid
+        ApplyTaskResult(running)
+        return
+    end if
+    m.qrJobs[slot] = url
+    if running <> invalid
+        running.unobserveField("result")
+        running.control = "STOP"
     end if
     m.qrGeneration = m.qrGeneration + 1
     task = CreateObject("roSGNode", "QrTask")
     if task = invalid
         print "Eaglewood: qr skip reason=task-create-failed"
-        m.qrJobKey = ""
+        m.qrJobs[slot] = ""
         return
     end if
     task.generation = m.qrGeneration
-    task.badgeUrl = badge
-    task.bookUrl = book
-    task.detailUrl = detail
+    task.badgeUrl = ""
+    task.bookUrl = ""
+    task.detailUrl = ""
+    if slot = "badge" then task.badgeUrl = url
+    if slot = "book" then task.bookUrl = url
+    if slot = "detail" then task.detailUrl = url
+    task.busyPaths = LiveQrPathList()
     task.observeField("result", "onQrReady")
-    m.qrTask = task
+    m.qrTasks[slot] = task
     task.control = "RUN"
 end sub
 
-function PendingQr(slot as string) as string
-    if m.qrPending = invalid then return ""
-    value = m.qrPending.Lookup(slot)
-    if value = invalid then return ""
-    return value
-end function
-
 sub onQrReady()
-    task = m.qrTask
+    if m.qrTasks = invalid then return
+    ApplyTaskResult(m.qrTasks.Lookup("badge"))
+    ApplyTaskResult(m.qrTasks.Lookup("book"))
+    ApplyTaskResult(m.qrTasks.Lookup("detail"))
+end sub
+
+sub ApplyTaskResult(task as object)
     if task = invalid then return
     result = task.result
     if result = invalid then return
-    if result.generationText <> invalid and result.generationText <> "" and result.generationText <> m.qrGeneration.ToStr() then return
+    if result.slot = invalid or result.uri = invalid then return
+    if result.generationText <> invalid and result.generationText <> "" and result.generationText <> task.generation.ToStr() then return
     ApplyQrResult(result)
 end sub
 
@@ -845,29 +853,31 @@ sub ApplyQrResult(result as object)
         if uri <> ""
             m.badgeFailed = false
             m.badgeFile = uri
+            NoteQrBytes("badge", ResultNumber(result, "bytes"))
             UpdateBadgeVisible()
             try
-                MountQrPoster(m.badgePoster, uri, "badge")
+                MountQrPoster(PosterForSlot("badge"), uri, "badge")
             catch err
                 print "Eaglewood: qr badge error="; LayoutErrorText(err)
             end try
         else
             m.badgeFailed = true
-            LogQrState("badge", m.badgePoster)
+            LogQrState("badge", PosterForSlot("badge"))
         end if
         RememberQrFormat(slot, result)
     else if slot = "book"
         if remote <> m.bookQrUri then return
         if uri <> ""
             m.bookFile = uri
+            NoteQrBytes("book", ResultNumber(result, "bytes"))
             ShowBookQr(true)
             try
-                MountQrPoster(m.bookQr, uri, "book")
+                MountQrPoster(PosterForSlot("book"), uri, "book")
             catch err
                 print "Eaglewood: qr book error="; LayoutErrorText(err)
             end try
         else
-            LogQrState("book", m.bookQr)
+            LogQrState("book", PosterForSlot("book"))
         end if
         RememberQrFormat(slot, result)
     else if slot = "detail"
@@ -875,15 +885,16 @@ sub ApplyQrResult(result as object)
         if uri <> ""
             m.detailQrFailed = false
             m.detailFile = uri
+            NoteQrBytes("detail", ResultNumber(result, "bytes"))
             ShowDetailQr(true)
             try
-                MountQrPoster(m.detailQr, uri, "detail")
+                MountQrPoster(PosterForSlot("detail"), uri, "detail")
             catch err
                 print "Eaglewood: qr detail error="; LayoutErrorText(err)
             end try
         else
             m.detailQrFailed = true
-            LogQrState("detail", m.detailQr)
+            LogQrState("detail", PosterForSlot("detail"))
         end if
         RememberQrFormat(slot, result)
     end if

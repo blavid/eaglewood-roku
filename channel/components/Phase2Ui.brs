@@ -77,6 +77,7 @@ sub BuildBadge(parent as object)
     m.badgeLabel.horizAlign = "center"
     m.badgeLabel.visible = false
     m.badgePoster = CreateObject("roSGNode", "Poster")
+    m.badgePoster.id = "badgeQr"
     m.badgePoster.translation = [46, 42]
     m.badgePoster.width = 128
     m.badgePoster.height = 128
@@ -144,28 +145,30 @@ function BuildBookPane(parent as object) as object
     m.bookPhoto.failedBitmapUri = PlaceholderPoster()
     pane.appendChild(m.bookPhoto)
     m.bookPhoto.observeField("loadStatus", "onBookPhotoStatus")
-    qrCard = AddRect(pane, "0x1B4D38FF", 1296, 292, 300, 280)
+    slot = BookQrSlot()
+    qrCard = AddRect(pane, "0x1B4D38FF", slot.cardX, slot.cardY, slot.cardW, slot.cardH)
     qrCard.visible = false
     m.bookQrCard = qrCard
-    AddRect(pane, DiagMagenta(), 1296, 292, 300, 280)
-    scan = AddLabel(pane, "Scan me!", "font:SmallBoldSystemFont", InkColor(), 1296, 296, 300, 40)
+    AddRect(pane, DiagMagenta(), slot.cardX, slot.cardY, slot.cardW, slot.cardH)
+    scan = AddLabel(pane, "Scan me!", "font:SmallBoldSystemFont", InkColor(), slot.labelX, slot.labelY, slot.labelW, slot.labelH)
     scan.horizAlign = "center"
     scan.visible = false
     m.bookScan = scan
     m.bookQr = CreateObject("roSGNode", "Poster")
-    m.bookQr.translation = [1336, 340]
-    m.bookQr.width = 220
-    m.bookQr.height = 180
-    m.bookQr.loadWidth = 220
-    m.bookQr.loadHeight = 220
+    m.bookQr.id = "bookQr"
+    m.bookQr.translation = [slot.qrX, slot.qrY]
+    m.bookQr.width = slot.qrW
+    m.bookQr.height = slot.qrH
+    m.bookQr.loadWidth = slot.qrW
+    m.bookQr.loadHeight = slot.qrW
     m.bookQr.loadDisplayMode = "scaleToFit"
     m.bookQr.visible = false
     pane.appendChild(m.bookQr)
     m.bookQr.observeField("loadStatus", "onBookQrStatus")
-    m.bookDomain = AddLabel(pane, DisplayDomain(), "font:SmallBoldSystemFont", AmberColor(), 1312, 528, 268, 36)
+    m.bookDomain = AddLabel(pane, DisplayDomain(), "font:SmallBoldSystemFont", AmberColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
     m.bookDomain.horizAlign = "center"
     m.bookDomain.visible = false
-    m.bookQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", AmberColor(), 1312, 528, 268, 36)
+    m.bookQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", AmberColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
     m.bookQrMissing.horizAlign = "center"
     m.bookQrMissing.visible = false
     m.bookBody = AddLabel(pane, "", "font:SmallSystemFont", "0x1C2A24FF", 588, 508, 680, 128)
@@ -209,6 +212,7 @@ function BuildWifiPane(parent as object) as object
     AddLabel(pane, "Join the Wi-Fi", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
     backing = AddRect(pane, "0xFFFFFFFF", ContentLeft(), ContentTop() + 96, 400, 400)
     m.wifiPoster = CreateObject("roSGNode", "Poster")
+    m.wifiPoster.id = "wifiQr"
     m.wifiPoster.translation = [ContentLeft() + 20, ContentTop() + 116]
     m.wifiPoster.width = 360
     m.wifiPoster.height = 360
@@ -296,6 +300,7 @@ function BuildDetailPane(parent as object) as object
     site.visible = false
     m.detailSite = site
     m.detailQr = CreateObject("roSGNode", "Poster")
+    m.detailQr.id = "detailQr"
     m.detailQr.translation = [ContentLeft() + 780, ContentTop() + 216]
     m.detailQr.width = 200
     m.detailQr.height = 172
@@ -389,13 +394,13 @@ sub PaintBadge()
         m.badgeFile = ""
         m.badgeReady = false
         m.badgeFailed = false
+        ClearQrAssign("badge")
         if m.badgeMissing <> invalid then m.badgeMissing.text = ""
-        if m.badgePoster <> invalid then m.badgePoster.uri = ""
         if uri <> "" then StartQrFetch("badge")
     end if
     if m.badgeDomain <> invalid then m.badgeDomain.text = DisplayDomain()
     UpdateBadgeVisible()
-    if m.badgeFile <> "" then GuardMountQrPoster(m.badgePoster, m.badgeFile, "badge")
+    if m.badgeFile <> "" then GuardMountQrPoster(PosterForSlot("badge"), m.badgeFile, "badge")
 end sub
 
 sub onBadgeStatus()
@@ -453,16 +458,17 @@ sub PaintBook()
     end if
     qr = WithQrVersion(GuideLimitedText(m.book.Lookup("qrImageUrl"), 320))
     if not PosterKindOk(qr) then qr = ""
-    if qr <> m.bookQrUri and m.bookQr <> invalid
+    poster = PosterForSlot("book")
+    if qr <> m.bookQrUri and poster <> invalid
         m.bookQrUri = qr
         m.bookQrTried = false
         m.bookFile = ""
+        ClearQrAssign("book")
         if m.bookQrMissing <> invalid then m.bookQrMissing.text = ""
-        if m.bookQr <> invalid then m.bookQr.uri = ""
         if qr <> "" then StartQrFetch("book")
     end if
     ShowBookQr(qr <> "")
-    if m.bookFile <> "" then GuardMountQrPoster(m.bookQr, m.bookFile, "book")
+    if m.bookFile <> "" then GuardMountQrPoster(PosterForSlot("book"), m.bookFile, "book")
 end sub
 
 function BookHeadline(book as object) as object
@@ -533,25 +539,42 @@ sub ShowBookQr(show as boolean)
     if m.bookQrMissing <> invalid then m.bookQrMissing.visible = false
 end sub
 
-' Wi-Fi draws because its Poster.uri is cachefs:/eaglewood/wifi.png, the node
-' is already in the tree with a real width and height, and loadDisplayMode is
-' scaleToFit. Public QR codes use this same assignment.
+' Assign a finished local file once. A failed load clears uri, so the assigned
+' path is remembered and retried one time.
 sub MountQrPosterBody(poster as object, path as string, slot as string)
     if poster = invalid or path = invalid or path = "" then return
     if Left(path, 8) <> "cachefs:" and Left(path, 4) <> "tmp:" then return
     poster.visible = true
     poster.loadDisplayMode = "scaleToFit"
+    RememberPoster(slot, poster)
     status = poster.loadStatus
     if poster.uri = path and (status = "ready" or status = "loading") then return
-    poster.uri = ""
+    if AssignedQrPath(slot) = path
+        if status = "ready" or status = "loading" then return
+        if QrRetried(slot) then return
+        MarkQrRetry(slot)
+        print "Eaglewood: qr "; slot; " retry"
+        poster.uri = ""
+        poster.uri = path
+        LogQrState(slot, poster)
+        return
+    end if
+    readBack = QrReadLength(path)
+    noted = NotedQrBytes(slot)
+    if noted < 1 then noted = readBack
+    print "Eaglewood: qr "; slot; " file bytes="; noted; " read="; readBack
+    if readBack < 8 then return
+    ClearQrRetry(slot)
+    NoteAssigned(slot, path)
     poster.uri = path
     LogQrState(slot, poster)
 end sub
 
 sub onBookQrStatus()
-    if m.bookQr = invalid then return
-    LogQrState("book", m.bookQr)
-    if m.bookQr.loadStatus = "ready" then m.bookQr.visible = true
+    poster = PosterForSlot("book")
+    if poster = invalid then return
+    LogQrState("book", poster)
+    if poster.loadStatus = "ready" then poster.visible = true
 end sub
 
 sub PaintWifi()
@@ -577,20 +600,17 @@ sub PaintWifi()
     end if
     if m.wifiRouter <> invalid then m.wifiRouter.text = RouterStep(m.issues)
     pngReady = (m.wifiPng = "yes")
-    if m.wifiPoster = invalid then return
+    poster = PosterForSlot("wifi")
+    if poster = invalid then return
     path = "cachefs:/eaglewood/wifi.png"
+    if m.wifiFile <> invalid and m.wifiFile <> "" then path = m.wifiFile
     if pngReady
-        if m.wifiShown <> path
-            m.wifiShown = path
-            m.wifiPoster.loadWidth = 480
-            m.wifiPoster.loadHeight = 480
-            m.wifiPoster.uri = ""
-        end if
-        GuardMountQrPoster(m.wifiPoster, path, "wifi")
-        if m.wifiPoster.loadStatus = "ready" and m.wifiMissing <> invalid then m.wifiMissing.text = ""
+        poster.loadWidth = 480
+        poster.loadHeight = 480
+        GuardMountQrPoster(poster, path, "wifi")
+        if poster.loadStatus = "ready" and m.wifiMissing <> invalid then m.wifiMissing.text = ""
     else
-        m.wifiPoster.visible = false
-        m.wifiShown = ""
+        poster.visible = false
         if m.wifiMissing <> invalid
             if notice = "coming-soon" then m.wifiMissing.text = ComingSoonWifi()
             else m.wifiMissing.text = "Join code unavailable"
@@ -817,8 +837,7 @@ sub PaintDetail()
         m.detailPhoto.loadHeight = 360
         m.detailPhoto.uri = photo
     end if
-    qr = WithQrVersion(ItemText(item, "qrUri"))
-    if not PosterKindOk(qr) then qr = ""
+    qr = DetailQrUrl(item)
     if m.detailQrCaption <> invalid
         if m.section = "dining" then m.detailQrCaption.text = "Scan for this restaurant"
         else m.detailQrCaption.text = "Scan for this place"
@@ -827,21 +846,23 @@ sub PaintDetail()
         if m.detailQrUri <> ""
             m.detailQrUri = ""
             m.detailFile = ""
-            if m.detailQr <> invalid then m.detailQr.uri = ""
+            ClearQrAssign("detail")
         end if
         ShowDetailQr(false)
+        print "Eaglewood: qr detail skip reason=no-url"
         return
     end if
-    if m.detailQr <> invalid and qr <> m.detailQrUri
+    if qr <> m.detailQrUri
         m.detailQrUri = qr
         m.detailQrFailed = false
         m.detailFile = ""
+        ClearQrAssign("detail")
         if m.detailQrMissing <> invalid then m.detailQrMissing.text = ""
-        if m.detailQr <> invalid then m.detailQr.uri = ""
-        StartQrFetch("detail")
+        print "Eaglewood: qr detail open url="; SafeUri(qr)
     end if
     ShowDetailQr(true)
-    if m.detailFile <> "" then GuardMountQrPoster(m.detailQr, m.detailFile, "detail")
+    StartQrFetch("detail")
+    if m.detailFile <> "" then GuardMountQrPoster(PosterForSlot("detail"), m.detailFile, "detail")
 end sub
 
 sub ShowDetailQr(show as boolean)
@@ -917,9 +938,10 @@ sub onDetailPhotoStatus()
 end sub
 
 sub onDetailQrStatus()
-    if m.detailQr = invalid then return
-    LogQrState("detail", m.detailQr)
-    if m.detailQr.loadStatus = "ready" then m.detailQr.visible = true
+    poster = PosterForSlot("detail")
+    if poster = invalid then return
+    LogQrState("detail", poster)
+    if poster.loadStatus = "ready" then poster.visible = true
 end sub
 
 sub ApplyWifiResult(result as object)
@@ -938,7 +960,8 @@ sub ApplyWifiResult(result as object)
     m.wifiIndexed = AsText(result.pngIndexed)
     if m.wifiIndexed = "" then m.wifiIndexed = "no"
     m.wifiRemoteSafe = AsText(result.remoteSafe)
-    m.wifiShown = ""
+    incoming = AsText(result.pngPath)
+    if incoming <> "" then m.wifiFile = incoming
     PaintWifi()
 end sub
 
@@ -950,6 +973,128 @@ end function
 function DiagMagenta() as string
     return "0xFF00FFFF"
 end function
+
+' Scan me card, poster, label, and domain. All of it sits inside the card
+' and inside 1920x1080.
+function BookQrSlot() as object
+    return {
+        cardX: 1296,
+        cardY: 292,
+        cardW: 300,
+        cardH: 280,
+        qrX: 1336,
+        qrY: 340,
+        qrW: 220,
+        qrH: 180,
+        labelX: 1296,
+        labelY: 296,
+        labelW: 300,
+        labelH: 40,
+        domainX: 1312,
+        domainY: 528,
+        domainW: 268,
+        domainH: 36
+    }
+end function
+
+function BookQrFits(slot as object) as boolean
+    if slot = invalid then return false
+    if slot.cardX < 0 or slot.cardY < 0 then return false
+    if slot.cardX + slot.cardW > 1920 or slot.cardY + slot.cardH > 1080 then return false
+    if InsideSlot(slot.qrX, slot.qrY, slot.qrW, slot.qrH, slot) <> true then return false
+    if InsideSlot(slot.labelX, slot.labelY, slot.labelW, slot.labelH, slot) <> true then return false
+    if InsideSlot(slot.domainX, slot.domainY, slot.domainW, slot.domainH, slot) <> true then return false
+    return true
+end function
+
+function InsideSlot(x as integer, y as integer, width as integer, height as integer, slot as object) as boolean
+    if x < slot.cardX or y < slot.cardY then return false
+    if x + width > slot.cardX + slot.cardW then return false
+    if y + height > slot.cardY + slot.cardH then return false
+    return true
+end function
+
+function DetailQrUrl(item as object) as string
+    qr = WithQrVersion(ItemText(item, "qrUri"))
+    if not PosterKindOk(qr) then qr = WithQrVersion(ItemText(item, "qrUrl"))
+    if not PosterKindOk(qr) then return ""
+    return qr
+end function
+
+function PosterForSlot(slot as string) as object
+    if slot = "badge" then return LivePoster("badgeQr", m.badgePoster)
+    if slot = "book" then return LivePoster("bookQr", m.bookQr)
+    if slot = "detail" then return LivePoster("detailQr", m.detailQr)
+    if slot = "wifi" then return LivePoster("wifiQr", m.wifiPoster)
+    return invalid
+end function
+
+function LivePoster(id as string, fallback as object) as object
+    node = invalid
+    if m.top <> invalid then node = m.top.findNode(id)
+    if node <> invalid then return node
+    return fallback
+end function
+
+sub RememberPoster(slot as string, node as object)
+    if node = invalid then return
+    if slot = "badge" then m.badgePoster = node
+    if slot = "book" then m.bookQr = node
+    if slot = "detail" then m.detailQr = node
+    if slot = "wifi" then m.wifiPoster = node
+end sub
+
+function QrRetried(slot as string) as boolean
+    if m.qrRetries = invalid then return false
+    value = m.qrRetries.Lookup(slot)
+    if value = invalid then return false
+    return value = true
+end function
+
+sub MarkQrRetry(slot as string)
+    if m.qrRetries = invalid then m.qrRetries = {}
+    m.qrRetries[slot] = true
+end sub
+
+sub ClearQrRetry(slot as string)
+    if m.qrRetries = invalid then m.qrRetries = {}
+    m.qrRetries[slot] = false
+end sub
+
+function AssignedQrPath(slot as string) as string
+    if m.qrAssigned = invalid then return ""
+    value = m.qrAssigned.Lookup(slot)
+    if value = invalid then return ""
+    return value
+end function
+
+sub NoteAssigned(slot as string, path as string)
+    if m.qrAssigned = invalid then m.qrAssigned = {}
+    m.qrAssigned[slot] = path
+end sub
+
+sub ClearQrAssign(slot as string)
+    ClearQrRetry(slot)
+    NoteAssigned(slot, "")
+end sub
+
+function NotedQrBytes(slot as string) as integer
+    if m.qrBytes = invalid then return 0
+    value = m.qrBytes.Lookup(slot)
+    if value = invalid then return 0
+    return value
+end function
+
+sub NoteQrBytes(slot as string, bytes as integer)
+    if m.qrBytes = invalid then m.qrBytes = {}
+    m.qrBytes[slot] = bytes
+end sub
+
+sub ReassignStoredQrs()
+    if m.badgeFile <> invalid and m.badgeFile <> "" then GuardMountQrPoster(PosterForSlot("badge"), m.badgeFile, "badge")
+    if m.bookFile <> invalid and m.bookFile <> "" then GuardMountQrPoster(PosterForSlot("book"), m.bookFile, "book")
+    if m.detailFile <> invalid and m.detailFile <> "" then GuardMountQrPoster(PosterForSlot("detail"), m.detailFile, "detail")
+end sub
 
 sub LogQrState(name as string, poster as object)
     status = "none"
@@ -979,14 +1124,14 @@ sub LogQrScreen()
         print "Eaglewood: wifi png format bitdepth="; m.wifiPngBit; " colortype="; m.wifiPngColor; " interlace="; m.wifiPngInterlace; " indexed="; m.wifiIndexed
         LogQrState("wifi", m.wifiPoster)
     else if m.section = "book"
-        LogQrState("book", m.bookQr)
+        LogQrState("book", PosterForSlot("book"))
         LogQrFormat("book")
     else if ActivitySection(m.section) and m.zone = "item"
-        LogQrState("detail", m.detailQr)
+        LogQrState("detail", PosterForSlot("detail"))
         LogQrFormat("detail")
     end if
     if m.section <> "book"
-        LogQrState("badge", m.badgePoster)
+        LogQrState("badge", PosterForSlot("badge"))
         LogQrFormat("badge")
     end if
 end sub

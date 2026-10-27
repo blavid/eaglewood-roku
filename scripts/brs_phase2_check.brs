@@ -132,6 +132,10 @@ sub Main()
         print "FAIL a missing qrUrl still built a QR"
         failed = failed + 1
     end if
+    if BookQrFits(BookQrSlot()) <> true
+        print "FAIL the Scan me slot falls outside its card or the screen"
+        failed = failed + 1
+    end if
 
     book = NormalizeBookDirect({
         bookDirect: {
