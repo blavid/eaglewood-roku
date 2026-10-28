@@ -40,28 +40,28 @@ function MenuStringList(value as object) as object
 end function
 
 function MenuRejectReason(parsed as object) as string
-    if not IsAssoc(parsed) then return "bad-json"
+    if not IsAssoc(parsed) then return "badjson"
     rawItems = AaField(parsed, "items")
-    if not IsList(rawItems) then return "bad-json"
-    if rawItems.Count() < 1 then return "bad-json"
+    if not IsList(rawItems) then return "badjson"
+    if rawItems.Count() < 1 then return "badjson"
     last = rawItems.Count() - 1
     for index = 0 to last
         entry = rawItems[index]
-        if not IsAssoc(entry) then return "bad-json"
+        if not IsAssoc(entry) then return "badjson"
         kind = LCase(GuideLimitedText(AaField(entry, "type"), 40))
-        if KnownMenuType(kind) <> true then return "bad-type"
+        if KnownMenuType(kind) <> true then return "badtype"
         label = GuideLimitedText(AaField(entry, "label"), 80)
-        if label = "" then return "bad-json"
+        if label = "" then return "badjson"
         if kind = "things"
             kids = AaField(entry, "children")
-            if not IsList(kids) then return "bad-json"
-            if kids.Count() < 1 then return "bad-json"
+            if not IsList(kids) then return "badjson"
+            if kids.Count() < 1 then return "badjson"
             childLast = kids.Count() - 1
             for childAt = 0 to childLast
                 child = kids[childAt]
-                if not IsAssoc(child) then return "bad-json"
-                if GuideLimitedText(AaField(child, "id"), 40) = "" then return "bad-json"
-                if GuideLimitedText(AaField(child, "label"), 80) = "" then return "bad-json"
+                if not IsAssoc(child) then return "badjson"
+                if GuideLimitedText(AaField(child, "id"), 40) = "" then return "badjson"
+                if GuideLimitedText(AaField(child, "label"), 80) = "" then return "badjson"
             end for
         end if
     end for
