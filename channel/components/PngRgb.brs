@@ -384,8 +384,82 @@ end function
 function ProtectedCacheFile(path as string) as boolean
     base = CacheBaseName(path)
     if base = "wifi.png" then return true
+    if base = "qr-badge.url" then return true
+    if base = "qr-badge.path" then return true
+    if base = "qr-book.url" then return true
+    if base = "qr-book.path" then return true
+    if base = "qr-detail.url" then return true
+    if base = "qr-detail.path" then return true
     if HashedQrPngName(base) then return true
     return false
+end function
+
+' Cold start: a missing path or a 0-byte file must be downloaded again.
+' The same URI with loadStatus still "none" will not fire, so the scene assigns it again.
+function BadgeColdStartPlan(notePath as string, bytes as integer, posterUri as string, loadStatus as string) as object
+    path = ""
+    if notePath <> invalid then path = notePath
+    count = 0
+    if bytes <> invalid then count = bytes
+    status = "none"
+    if loadStatus <> invalid and loadStatus <> "" then status = loadStatus
+    shown = ""
+    if posterUri <> invalid then shown = posterUri
+    action = "regenerate"
+    if path <> ""
+        if count > 0
+            if shown = path
+                if status = "ready" or status = "loading"
+                    action = "keep"
+                else
+                    action = "assign"
+                end if
+            else
+                action = "assign"
+            end if
+        end if
+    end if
+    return { path: path, bytes: count, status: status, action: action }
+end function
+
+sub LogBadgeColdStart(path as string, bytes as integer, status as string)
+    shown = ""
+    if path <> invalid then shown = path
+    label = "none"
+    if status <> invalid and status <> "" then label = status
+    count = 0
+    if bytes <> invalid then count = bytes
+    print "badge cold-start path="; shown; " bytes="; count; " status="; label
+end sub
+
+function RunBadgeColdStarts() as integer
+    missed = 0
+    cachePath = ""
+    cacheBytes = 0
+    first = BadgeColdStartPlan(cachePath, cacheBytes, "", "none")
+    LogBadgeColdStart(first.path, first.bytes, first.status)
+    if first.action <> "regenerate" then missed = missed + 1
+    cachePath = "cachefs:/eaglewood/qr-badge-aaaaaaaa.png"
+    cacheBytes = 4000
+    if cachePath = "" or cacheBytes <= 0 then missed = missed + 1
+    present = BadgeColdStartPlan(cachePath, cacheBytes, "", "none")
+    LogBadgeColdStart(present.path, present.bytes, present.status)
+    if present.action <> "assign" or present.path = "" then missed = missed + 1
+    missing = BadgeColdStartPlan(cachePath, -1, "", "none")
+    LogBadgeColdStart(missing.path, missing.bytes, missing.status)
+    if missing.action <> "regenerate" then missed = missed + 1
+    empty = BadgeColdStartPlan(cachePath, 0, cachePath, "none")
+    LogBadgeColdStart(empty.path, empty.bytes, empty.status)
+    if empty.action <> "regenerate" then missed = missed + 1
+    kept = BadgeColdStartPlan(cachePath, cacheBytes, cachePath, "ready")
+    if kept.action <> "keep" or kept.path = "" then missed = missed + 1
+    stale = BadgeColdStartPlan(cachePath, cacheBytes, cachePath, "none")
+    LogBadgeColdStart(stale.path, stale.bytes, stale.status)
+    if stale.action <> "assign" or stale.path = "" then missed = missed + 1
+    if ProtectedCacheFile("cachefs:/eaglewood/qr-badge.path") <> true then missed = missed + 1
+    if ProtectedCacheFile("cachefs:/eaglewood/qr-badge-aaaaaaaa.png") <> true then missed = missed + 1
+    if missed <> 0 then print "FAIL badge cold start"
+    return missed
 end function
 
 function QrCacheHit(path as string, bytes as integer) as boolean
@@ -613,6 +687,10 @@ function PlaceNewPng(raw as object, finalPath as string, tmpPath as string, busy
     if existing = count
         print "Eaglewood: qr "; slot; " file bytes="; count; " read="; existing
         return finalPath
+    end if
+    if existing = 0
+        fs = CreateObject("roFileSystem")
+        if fs <> invalid then fs.Delete(finalPath)
     end if
     if existing > 0
         if PathIsBusy(finalPath, busy) then return ""

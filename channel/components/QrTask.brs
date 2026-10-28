@@ -52,6 +52,7 @@ sub FetchQrBody(slot as string, url as string, generation as integer)
     cached = CachedContentPath(slot, url)
     cachedBytes = 0
     if cached <> "" then cachedBytes = QrReadLength(cached)
+    if slot = "badge" then LogBadgeColdStart(cached, cachedBytes, "cache")
     if QrCacheHit(cached, cachedBytes)
         print "Eaglewood: qr "; slot; " response code=cache"
         prepared = ExpandPngBytes(ReadFileBytes(cached))

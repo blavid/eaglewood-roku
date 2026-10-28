@@ -35,9 +35,9 @@
             font="font:SmallestBoldSystemFont" />
         <Label
             id="name"
-            translation="[16, 162]"
+            translation="[16, 158]"
             width="332"
-            height="52"
+            height="64"
             wrap="true"
             maxLines="2"
             vertAlign="top"
@@ -45,10 +45,12 @@
             font="font:SmallBoldSystemFont" />
         <Label
             id="distance"
-            translation="[16, 214]"
+            translation="[16, 222]"
             width="332"
-            height="28"
+            height="22"
+            wrap="false"
+            maxLines="1"
             color="0xD5DBE8FF"
-            font="font:SmallSystemFont" />
+            font="font:SmallestSystemFont" />
     </children>
 </component>

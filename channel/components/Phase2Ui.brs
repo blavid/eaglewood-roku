@@ -64,13 +64,14 @@ sub BuildHomePrompt(parent as object)
 end sub
 
 sub BuildBadge(parent as object)
+    frame = BadgeFrame()
     group = CreateObject("roSGNode", "Group")
     group.translation = [1496, 830]
     group.visible = false
-    card = AddRect(group, "0xFFFFFFF2", 0, 0, 220, 200)
+    card = AddRect(group, "0xFFFFFFF2", 0, 0, frame.w, frame.h)
     card.visible = false
     m.badgeCard = card
-    m.badgeMark = AddRect(group, QrMarkColor(), 0, 0, 220, 200)
+    m.badgeMark = AddRect(group, QrMarkColor(), 0, 0, frame.w, frame.h)
     m.badgeMark.visible = false
     m.badgePoster = CreateObject("roSGNode", "Poster")
     m.badgePoster.id = "badgeQr"
@@ -86,10 +87,13 @@ sub BuildBadge(parent as object)
     m.badgeMissing = AddLabel(group, "", "font:SmallestSystemFont", "0x1C1408FF", 12, 78, 196, 64)
     m.badgeMissing.horizAlign = "center"
     m.badgeMissing.maxLines = 3
-    m.badgeDomain = AddLabel(group, DisplayDomain(), QrCaptionFont(), QrCaptionColor(), 0, 172, 220, 28)
-    m.badgeDomain.horizAlign = "center"
-    m.badgeDomain.visible = false
     group.appendChild(m.badgePoster)
+    m.badgeDomain = AddLabel(group, DisplayDomain(), QrCaptionFont(), QrCaptionColor(), frame.captionX, frame.captionY, frame.captionW, frame.captionH)
+    m.badgeDomain.color = "0xF2A93BFF"
+    m.badgeDomain.horizAlign = "center"
+    m.badgeDomain.vertAlign = "center"
+    m.badgeDomain.maxLines = 1
+    m.badgeDomain.visible = false
     parent.appendChild(group)
     m.badgeGroup = group
     m.badgeHint = AddLabel(parent, "", "font:SmallSystemFont", MuteColor(), 980, 800, 500, 28)
@@ -105,31 +109,15 @@ function BuildBookPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
     parent.appendChild(pane)
-    panel = AddRect(pane, "0xF4EFE3FF", 540, 36, 1320, 1000)
-    pines = CreateObject("roSGNode", "Poster")
-    pines.uri = "pkg:/images/decor-pine.png"
-    pines.translation = [588, 78]
-    pines.width = 72
-    pines.height = 48
-    pines.loadWidth = 72
-    pines.loadHeight = 48
-    pane.appendChild(pines)
-    heart = CreateObject("roSGNode", "Poster")
-    heart.uri = "pkg:/images/decor-heart.png"
-    heart.translation = [1548, 78]
-    heart.width = 48
-    heart.height = 48
-    heart.loadWidth = 48
-    heart.loadHeight = 48
-    pane.appendChild(heart)
+    panel = AddRect(pane, BookPanelColor(), 540, 36, 1320, 1000)
     m.bookLines = []
     for index = 0 to 2
-        label = AddLabel(pane, "", "font:MediumBoldSystemFont", "0x1B4D38FF", 676, 64 + (index * 44), 840, 44)
+        label = AddLabel(pane, "", "font:MediumBoldSystemFont", BookInkColor(), 588, 64 + (index * 44), 1100, 44)
         label.horizAlign = "left"
         m.bookLines.Push(label)
     end for
-    banner = AddRect(pane, "0x1B4D38FF", 588, 214, 620, 64)
-    bannerText = AddLabel(pane, "", "font:MediumBoldSystemFont", InkColor(), 588, 214, 620, 64)
+    banner = AddRect(pane, BookBannerColor(), 588, 214, 620, 64)
+    bannerText = AddLabel(pane, "", "font:MediumBoldSystemFont", InkOnAmber(), 588, 214, 620, 64)
     bannerText.horizAlign = "center"
     m.bookBanner = bannerText
     m.bookPhoto = CreateObject("roSGNode", "Poster")
@@ -143,15 +131,13 @@ function BuildBookPane(parent as object) as object
     pane.appendChild(m.bookPhoto)
     m.bookPhoto.observeField("loadStatus", "onBookPhotoStatus")
     slot = BookQrSlot()
-    qrCard = AddRect(pane, "0x1B4D38FF", slot.cardX, slot.cardY, slot.cardW, slot.cardH)
+    qrCard = AddRect(pane, BookCardColor(), slot.cardX, slot.cardY, slot.cardW, slot.cardH)
     qrCard.visible = false
     m.bookQrCard = qrCard
     m.bookQrMark = AddRect(pane, QrMarkColor(), slot.cardX, slot.cardY, slot.cardW, slot.cardH)
     m.bookQrMark.visible = false
-    scan = AddLabel(pane, "Scan me!", "font:SmallBoldSystemFont", InkColor(), slot.labelX, slot.labelY, slot.labelW, slot.labelH)
-    scan.horizAlign = "center"
-    scan.visible = false
-    m.bookScan = scan
+    m.bookQrPlate = AddRect(pane, "0xFFFFFFF2", slot.qrX, slot.qrY, slot.qrW, slot.qrH)
+    m.bookQrPlate.visible = false
     m.bookQr = CreateObject("roSGNode", "Poster")
     m.bookQr.id = "bookQr"
     m.bookQr.focusable = false
@@ -164,43 +150,39 @@ function BuildBookPane(parent as object) as object
     m.bookQr.visible = false
     pane.appendChild(m.bookQr)
     m.bookQr.observeField("loadStatus", "onBookQrStatus")
-    m.bookDomain = AddLabel(pane, DisplayDomain(), QrCaptionFont(), QrCaptionColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
+    scan = AddLabel(pane, "Scan me!", "font:SmallBoldSystemFont", BookInkColor(), slot.labelX, slot.labelY, slot.labelW, slot.labelH)
+    scan.horizAlign = "center"
+    scan.visible = false
+    m.bookScan = scan
+    m.bookDomain = AddLabel(pane, DisplayDomain(), QrCaptionFont(), "0xF2A93BFF", slot.domainX, slot.domainY, slot.domainW, slot.domainH)
     m.bookDomain.horizAlign = "center"
     m.bookDomain.visible = false
     m.bookQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", AmberColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
     m.bookQrMissing.horizAlign = "center"
     m.bookQrMissing.visible = false
     bodyRect = BookBodyRect()
-    m.bookBody = AddLabel(pane, "", "font:SmallSystemFont", "0x1C2A24FF", bodyRect.x, bodyRect.y, bodyRect.w, bodyRect.h)
+    m.bookBody = AddLabel(pane, "", "font:SmallSystemFont", BookInkColor(), bodyRect.x, bodyRect.y, bodyRect.w, bodyRect.h)
     m.bookBody.vertAlign = "top"
     m.bookBody.maxLines = 6
     saveRect = BookSavingsRect()
-    m.bookSavings = AddLabel(pane, "", "font:SmallSystemFont", "0x1B4D38FF", saveRect.x, saveRect.y, saveRect.w, saveRect.h)
+    m.bookSavings = AddLabel(pane, "", "font:SmallestSystemFont", BookInkColor(), saveRect.x, saveRect.y, saveRect.w, saveRect.h)
     m.bookSavings.vertAlign = "top"
-    m.bookSavings.maxLines = 4
+    m.bookSavings.maxLines = 5
     m.perkGroups = []
     perkRow = BookPerkRow()
     for index = 0 to 4
         chip = CreateObject("roSGNode", "Group")
         chip.translation = [perkRow.x + (index * 226), perkRow.y]
-        bg = AddRect(chip, "0x1B4D38FF", 0, 0, 214, 88)
-        text = AddLabel(chip, "", "font:SmallestSystemFont", InkColor(), 8, 4, 198, 80)
+        bg = AddRect(chip, BookCardColor(), 0, 0, 214, 88)
+        text = AddLabel(chip, "", "font:SmallestSystemFont", BookInkColor(), 8, 4, 198, 80)
         text.horizAlign = "center"
         text.vertAlign = "center"
         text.maxLines = 2
         pane.appendChild(chip)
         m.perkGroups.Push({ group: chip, bg: bg, text: text })
     end for
-    m.bookSign = AddLabel(pane, "", "font:SmallBoldSystemFont", "0x2C4A6EFF", 1288, 888, 300, 36)
+    m.bookSign = AddLabel(pane, "", "font:SmallBoldSystemFont", BookInkColor(), 1288, 888, 300, 36)
     m.bookSign.horizAlign = "right"
-    ridges = CreateObject("roSGNode", "Poster")
-    ridges.uri = "pkg:/images/decor-ridges.png"
-    ridges.translation = [560, 948]
-    ridges.width = 1280
-    ridges.height = 80
-    ridges.loadWidth = 1280
-    ridges.loadHeight = 88
-    pane.appendChild(ridges)
     m.bookPhotoUri = ""
     m.bookQrUri = ""
     m.bookFile = ""
@@ -539,8 +521,8 @@ sub PaintPerks()
         raw = m.book.Lookup("perks")
         if IsList(raw) then perks = raw
     end if
-    colors = ["0x1B4D38FF", "0xF2A93BFF", "0xC96A32FF", "0x1B4D38FF", "0xF2A93BFF"]
-    inks = [InkColor(), InkOnAmber(), InkColor(), InkColor(), InkOnAmber()]
+    colors = [BookBannerColor(), BookCardColor(), BookBannerColor(), BookCardColor(), BookBannerColor()]
+    inks = [InkOnAmber(), BookInkColor(), InkOnAmber(), BookInkColor(), InkOnAmber()]
     last = m.perkGroups.Count() - 1
     for index = 0 to last
         chip = m.perkGroups[index]
@@ -576,6 +558,7 @@ end sub
 
 sub ShowBookQr(show as boolean)
     if m.bookQrCard <> invalid then m.bookQrCard.visible = show
+    if m.bookQrPlate <> invalid then m.bookQrPlate.visible = show
     if m.bookScan <> invalid then m.bookScan.visible = show
     if m.bookDomain <> invalid then m.bookDomain.visible = show
     if m.bookQr <> invalid then m.bookQr.visible = show
@@ -595,7 +578,18 @@ sub MountQrPosterBody(poster as object, path as string, slot as string)
     poster.loadDisplayMode = "scaleToFit"
     RememberPoster(slot, poster)
     status = poster.loadStatus
-    if poster.uri = path and (status = "ready" or status = "loading") then return
+    if slot = "badge" then LogBadgeColdStart(path, NotedQrBytes(slot), status)
+    plan = BadgeColdStartPlan(path, NotedQrBytes(slot), poster.uri, status)
+    if plan.action = "keep" then return
+    if poster.uri = path and plan.action = "assign"
+        print "Eaglewood: qr "; slot; " retry"
+        m.qrAssigning = true
+        poster.uri = ""
+        poster.uri = path
+        m.qrAssigning = false
+        LogQrState(slot, poster)
+        return
+    end if
     if AssignedQrPath(slot) = path
         if status = "ready" or status = "loading" then return
         if QrRetried(slot) then return
@@ -930,6 +924,30 @@ function BookBodyLineHeight() as integer
     return 36
 end function
 
+function BookSavingsFontSize() as integer
+    return 20
+end function
+
+function BookSavingsLineHeight() as integer
+    return 26
+end function
+
+function BookPanelColor() as string
+    return "0x1A2438FF"
+end function
+
+function BookCardColor() as string
+    return "0x243044FF"
+end function
+
+function BookBannerColor() as string
+    return "0xF2A93BFF"
+end function
+
+function BookInkColor() as string
+    return "0xFFFFFFF2"
+end function
+
 sub LogBadgePlacement()
     group = m.badgeGroup
     if group = invalid then return
@@ -1171,14 +1189,14 @@ function BadgeFrame() as object
         x: 1496,
         y: 830,
         w: 220,
-        h: 200,
+        h: 228,
         qrX: 46,
         qrY: 42,
         qr: 128,
         captionX: 0,
-        captionY: 172,
+        captionY: 176,
         captionW: 220,
-        captionH: 28
+        captionH: 44
     }
 end function
 
@@ -1265,24 +1283,43 @@ end function
 ' Scan me card, poster, label, and domain. All of it sits inside the card
 ' and inside 1920x1080.
 function BookQrSlot() as object
+    cardX = 1296
+    cardY = 292
+    cardW = 360
+    cardH = 280
+    qrW = 220
+    qrH = 180
     return {
-        cardX: 1296,
-        cardY: 292,
-        cardW: 360,
-        cardH: 280,
-        qrX: 1336,
-        qrY: 340,
-        qrW: 220,
-        qrH: 180,
-        labelX: 1296,
-        labelY: 296,
-        labelW: 360,
+        cardX: cardX,
+        cardY: cardY,
+        cardW: cardW,
+        cardH: cardH,
+        qrX: cardX + ((cardW - qrW) \ 2),
+        qrY: cardY + ((cardH - qrH) \ 2),
+        qrW: qrW,
+        qrH: qrH,
+        labelX: cardX,
+        labelY: cardY + 4,
+        labelW: cardW,
         labelH: 40,
-        domainX: 1296,
-        domainY: 524,
-        domainW: 360,
+        domainX: cardX,
+        domainY: cardY + cardH - 48,
+        domainW: cardW,
         domainH: 40
     }
+end function
+
+' True when the poster is centered in the Scan me card. Even sizes leave equal gaps.
+function BookQrCentered(slot as object) as boolean
+    if slot = invalid then return false
+    leftGap = slot.qrX - slot.cardX
+    rightGap = slot.cardX + slot.cardW - slot.qrX - slot.qrW
+    if leftGap <> rightGap then return false
+    topGap = slot.qrY - slot.cardY
+    bottomGap = slot.cardY + slot.cardH - slot.qrY - slot.qrH
+    if topGap <> bottomGap then return false
+    if leftGap < 1 or topGap < 1 then return false
+    return true
 end function
 
 function BookQrFits(slot as object) as boolean

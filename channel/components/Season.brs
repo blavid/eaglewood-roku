@@ -178,6 +178,8 @@ end function
 function ItemOnScreen(item as object, screen as string) as boolean
     if not IsAssoc(item) then return false
     if screen = "todo" then return false
+    rule = MenuChild(screen)
+    if rule <> invalid then return ItemMatchesRule(item, rule)
     section = GuideLimitedText(AaField(item, "sectionId"), 80)
     if screen = "dining" then return section = "dining"
     if screen = "hiking" then return section = "hiking"
@@ -395,13 +397,8 @@ function ActivityHasQr(item as object) as boolean
 end function
 
 function ActivitySection(section as string) as boolean
-    if section = "dining" then return true
-    if section = "hiking" then return true
     if section = "todo" then return true
-    if section = "winter" then return true
-    if section = "summer" then return true
-    if section = "fishing" then return true
-    if section = "biking" then return true
+    if MenuChild(section) <> invalid then return true
     return false
 end function
 

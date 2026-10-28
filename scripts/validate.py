@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "24",
+    "build_version": "25",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -532,10 +532,12 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 24 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 25 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 24 "' not in scene:
-        fail("startup must log build 24 and the commit")
+    if 'print "Eaglewood: build 25 "' not in scene:
+        fail("startup must log build 25 and the commit")
+    if "decor-heart" in phase2:
+        fail("the Book Direct heart poster is still in the scene")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
     if 'id="finalUri"' not in qr_xml or "alwaysNotify" not in qr_xml:
         fail("each QR task needs a finalUri field")

@@ -69,11 +69,15 @@ function TileColor() as string
 end function
 
 function TopMenu() as object
-    return ["todo", "home", "rules", "fixes", "book", "checkout", "wifi"]
+    ids = MenuSectionIds()
+    if ids.Count() < 1 then return ["home", "wifi", "todo", "rules", "fixes", "book", "checkout"]
+    return ids
 end function
 
 function TodoMenu() as object
-    return ["dining", "hiking", "winter", "summer", "fishing", "biking"]
+    ids = TodoMenuIds()
+    if ids.Count() < 1 then return ["dining", "hiking", "winter", "summer", "fishing", "biking"]
+    return ids
 end function
 
 function RailSections() as object
@@ -81,7 +85,7 @@ function RailSections() as object
 end function
 
 function HomeMenuIndex() as integer
-    return 1
+    return MenuIndex(TopMenu(), "home")
 end function
 
 function MenuSlotCount() as integer
@@ -107,7 +111,16 @@ function TileSections() as object
     return ["wifi", "todo", "dining", "hiking", "fixes", "checkout"]
 end function
 
+function RailChevron(section as string) as string
+    if section = "todo" then return ">"
+    if section = "fixes" then return ">"
+    if MenuChild(section) <> invalid then return ">"
+    return ""
+end function
+
 function RailLabel(section as string) as string
+    named = MenuLabel(section)
+    if named <> "" then return named
     if section = "home" then return "Home"
     if section = "rules" then return "House Rules"
     if section = "fixes" then return "Quick Fixes"
@@ -131,17 +144,31 @@ function ShownBrand(brand as string) as string
 end function
 
 function ActivityEmptyText(section as string) as string
+    named = MenuEmptyText(section)
+    if named <> "" then return named
     if section = "todo" then return "OK for Dining, Hiking, and the seasons."
     if section = "fishing" then return "No fishing spots listed right now."
     return "Nothing to show yet."
 end function
 
 function RailLabelWidth() as integer
-    return RailW() - 56
+    return RailW() - 92
 end function
 
 function RailRowHeight() as integer
-    return 64
+    return 72
+end function
+
+function RailStride() as integer
+    return 80
+end function
+
+function ParentRowY(index as integer) as integer
+    return 104 + (index * RailStride())
+end function
+
+function ChildRowY(index as integer) as integer
+    return 72 + (index * RailStride())
 end function
 
 function NavFontSize() as integer
@@ -149,11 +176,11 @@ function NavFontSize() as integer
 end function
 
 function NavLineHeight() as integer
-    return 27
+    return 34
 end function
 
 function TileTitleBox() as object
-    return { x: 12, y: 28, w: 338, h: 80 }
+    return { x: 8, y: 12, w: 346, h: 88 }
 end function
 
 function LabelLinesFit(text as string, width as integer, charWidth as integer, maxLines as integer, lineHeight as integer, boxHeight as integer) as boolean
@@ -236,23 +263,34 @@ sub BuildShell()
     shell.translation = [0, 0]
     if m.menuDepth = invalid or m.menuDepth = "" then m.menuDepth = "top"
 
-    panel = AddRect(shell, GlassColor(), RailX(), RailY(), RailW(), RailH())
-    m.railBrand = AddLabel(shell, ShownBrand("Eaglewood"), "font:MediumBoldSystemFont", InkColor(), RailX() + 24, RailY() + 18, RailW() - 48, 40)
-    m.railPlace = AddLabel(shell, "Sunriver, Oregon", "font:SmallSystemFont", MuteColor(), RailX() + 24, RailY() + 58, RailW() - 48, 32)
+    m.railDock = CreateObject("roSGNode", "Group")
+    m.railDock.translation = [RailX(), RailY()]
+    shell.appendChild(m.railDock)
+    m.railTop = CreateObject("roSGNode", "Group")
+    m.railTop.id = "railTop"
+    m.railTop.translation = [0, 0]
+    m.railDock.appendChild(m.railTop)
+    AddRect(m.railTop, GlassColor(), 0, 0, RailW(), RailH())
+    m.railBrand = AddLabel(m.railTop, ShownBrand("Eaglewood"), "font:MediumBoldSystemFont", InkColor(), 24, 18, RailW() - 48, 40)
+    m.railPlace = AddLabel(m.railTop, "Sunriver, Oregon", "font:SmallSystemFont", MuteColor(), 24, 58, RailW() - 48, 32)
 
     m.railItems = []
-    sections = TopMenu()
     last = MenuSlotCount() - 1
     for index = 0 to last
-        group = CreateObject("roSGNode", "Group")
-        group.translation = [RailX() + 12, RailY() + 112 + (index * 72)]
-        bg = AddRect(group, "0x00000000", 0, 0, RailW() - 24, RailRowHeight())
-        text = ""
-        if index < sections.Count() then text = RailLabel(sections[index])
-        label = AddLabel(group, text, "font:SmallBoldSystemFont", InkColor(), 16, 0, RailLabelWidth(), RailRowHeight())
-        label.maxLines = 2
-        shell.appendChild(group)
-        m.railItems.Push({ group: group, bg: bg, label: label })
+        m.railItems.Push(MakeRailRow(m.railTop, ParentRowY(index)))
+    end for
+
+    m.railChild = CreateObject("roSGNode", "Group")
+    m.railChild.id = "railChild"
+    m.railChild.translation = [RailW(), 0]
+    m.railChild.visible = false
+    m.railDock.appendChild(m.railChild)
+    AddRect(m.railChild, GlassColor(), 0, 0, RailW(), RailH())
+    m.childHeader = AddLabel(m.railChild, "<  Things to Do", "font:SmallBoldSystemFont", AmberColor(), 16, 8, RailW() - 32, 52)
+    m.childItems = []
+    childLast = 7
+    for index = 0 to childLast
+        m.childItems.Push(MakeRailRow(m.railChild, ChildRowY(index)))
     end for
 
     m.homePane = CreateObject("roSGNode", "Group")
@@ -336,7 +374,8 @@ function BuildFixesPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
     parent.appendChild(pane)
-    AddLabel(pane, "Quick Fixes", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
+    m.fixesTitle = AddLabel(pane, "<  Quick Fixes", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
+    pane.id = "fixesPane"
     listX = ContentLeft()
     listY = ContentTop() + 78
     m.issueRows = []
@@ -511,26 +550,69 @@ sub RefreshHomeLine()
     m.subtitle.text = HomeStatusLine()
 end sub
 
-sub PaintRail()
-    RefreshRail()
-    if m.railItems = invalid then return
-    last = m.railItems.Count() - 1
+function MakeRailRow(parent as object, rowY as integer) as object
+    group = CreateObject("roSGNode", "Group")
+    group.translation = [12, rowY]
+    bg = AddRect(group, "0x00000000", 0, 0, RailW() - 24, RailRowHeight())
+    label = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 16, 0, RailLabelWidth(), RailRowHeight())
+    label.maxLines = 2
+    label.wrap = true
+    mark = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 16 + RailLabelWidth() + 4, 0, 36, RailRowHeight())
+    mark.horizAlign = "center"
+    parent.appendChild(group)
+    return { group: group, bg: bg, label: label, mark: mark }
+end function
+
+sub PaintRailRows(rows as object, menu as object, childPanel as boolean)
+    if rows = invalid or menu = invalid then return
+    active = false
+    if childPanel = true
+        if MenuDepth() = "todo" then active = true
+    else
+        if MenuDepth() <> "todo" then active = true
+    end if
+    last = rows.Count() - 1
     if last < 0 then return
     for index = 0 to last
-        row = m.railItems[index]
-        current = (index = m.railIndex)
-        focused = current and m.zone = "rail"
-        if focused
-            row.bg.color = AmberColor()
-            row.label.color = InkOnAmber()
-        else if current
-            row.bg.color = "0xFFFFFF2E"
-            row.label.color = InkColor()
+        row = rows[index]
+        if index < menu.Count()
+            row.group.visible = true
+            row.label.text = RailLabel(menu[index])
+            row.mark.text = RailChevron(menu[index])
+            current = false
+            if active = true
+                if index = m.railIndex then current = true
+            end if
+            focused = false
+            if current = true
+                if m.zone = "rail" then focused = true
+            end if
+            if focused
+                row.bg.color = AmberColor()
+                row.label.color = InkOnAmber()
+                row.mark.color = InkOnAmber()
+            else if current
+                row.bg.color = "0xFFFFFF2E"
+                row.label.color = InkColor()
+                row.mark.color = InkColor()
+            else
+                row.bg.color = "0x00000000"
+                row.label.color = InkColor()
+                row.mark.color = AmberColor()
+            end if
         else
-            row.bg.color = "0x00000000"
-            row.label.color = InkColor()
+            row.group.visible = false
+            row.label.text = ""
+            row.mark.text = ""
         end if
     end for
+end sub
+
+sub PaintRail()
+    if m.childHeader <> invalid then m.childHeader.text = "<  " + RailLabel("todo")
+    if m.fixesTitle <> invalid then m.fixesTitle.text = "<  " + RailLabel("fixes")
+    PaintRailRows(m.railItems, TopMenu(), false)
+    PaintRailRows(m.childItems, TodoMenu(), true)
 end sub
 
 sub PaintTiles()
@@ -798,7 +880,9 @@ function BundleFromResult(result as object) as object
         book: DecodeAssoc(result.bookJson),
         activitiesSource: AsText(result.activitiesSource),
         activitiesCode: AsText(result.activitiesCode),
-        activitiesVersion: AsText(result.activitiesVersion)
+        activitiesVersion: AsText(result.activitiesVersion),
+        menuSource: AsText(result.menuSource),
+        menuJson: AsText(result.menuJson)
     }
 end function
 
@@ -850,6 +934,10 @@ sub ApplyBundle(bundle as object)
     m.activitiesVersion = OrText(bundle.activitiesVersion, "0")
     if m.activitiesToken = invalid then m.activitiesToken = 0
     m.activitiesToken = m.activitiesToken + 1
+    if bundle.menuJson <> invalid and bundle.menuJson <> ""
+        accepted = AcceptMenuText(bundle.menuJson, OrText(bundle.menuSource, "pkg"))
+        if accepted <> invalid then InstallMenu(accepted)
+    end if
     m.fixIssues = IssuesForFixes(m.issues)
     if IssueCount() = 0
         m.issueIndex = 0
@@ -861,22 +949,7 @@ sub ApplyBundle(bundle as object)
 end sub
 
 sub RefreshRail()
-    if m.railItems = invalid then return
-    depth = "top"
-    if m.menuDepth <> invalid and m.menuDepth <> "" then depth = m.menuDepth
-    menu = ActiveMenu(depth)
-    last = m.railItems.Count() - 1
-    if last < 0 then return
-    for index = 0 to last
-        row = m.railItems[index]
-        if index < menu.Count()
-            row.group.visible = true
-            row.label.text = RailLabel(menu[index])
-        else
-            row.group.visible = false
-            row.label.text = ""
-        end if
-    end for
+    PaintRail()
 end sub
 
 function ZoneForSection(section as string) as string
@@ -895,12 +968,7 @@ function HomePromptState() as object
 end function
 
 function SubmenuSection(section as string) as boolean
-    if section = "dining" then return true
-    if section = "hiking" then return true
-    if section = "winter" then return true
-    if section = "summer" then return true
-    if section = "fishing" then return true
-    if section = "biking" then return true
+    if MenuChild(section) <> invalid then return true
     return false
 end function
 
@@ -977,7 +1045,7 @@ function NextNav(depth as string, zone as string, section as string, index as in
                 nextDepth = "top"
                 nextZone = "rail"
                 nextSection = "todo"
-                nextIndex = 0
+                nextIndex = MenuIndex(TopMenu(), "todo")
             else if depth = "top"
                 if section = "home"
                     if key = "back" then leave = true

@@ -53,9 +53,33 @@ sub paintCard()
     if m.swatch <> invalid then m.swatch.color = swatch
     if m.nameLabel <> invalid then m.nameLabel.text = title
     if m.distanceLabel <> invalid then m.distanceLabel.text = distance
-    PaintChip(season)
+    PaintChip(SeasonChipText(season))
     ShowPoster(uri)
 end sub
+
+function SeasonChipText(season as string) as string
+    if season = invalid or season = "" then return ""
+    lower = LCase(season)
+    if Instr(1, lower, "seasonal") > 0 then return "Seasonal"
+    roundLabel = "Year"
+    roundLabel = roundLabel + "-round"
+    if Instr(1, lower, "year-round") > 0 then return roundLabel
+    if Instr(1, lower, "year round") > 0 then return roundLabel
+    if Len(season) <= 21 then return season
+    index = 21
+    while index > 8
+        if Mid(season, index, 1) = " " then return Left(season, index - 1)
+        index = index - 1
+    end while
+    return Left(season, 21)
+end function
+
+function ChipWidthFor(season as string) as integer
+    width = (Len(season) * 14) + 36
+    if width < 180 then width = 180
+    if width > 336 then width = 336
+    return width
+end function
 
 sub PaintChip(season as string)
     if m.chip = invalid or m.chipText = invalid then return
@@ -65,9 +89,7 @@ sub PaintChip(season as string)
         m.chipText.text = ""
         return
     end if
-    width = (Len(season) * 9) + 20
-    if width < 72 then width = 72
-    if width > 250 then width = 250
+    width = ChipWidthFor(season)
     m.chip.width = width
     m.chipText.width = width
     m.chip.visible = true

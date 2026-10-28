@@ -12,6 +12,7 @@ curl -fsSL -A "EaglewoodQrCheck/22" -o "$dest" "https://sunrivertownhome.com/dat
 output="$(npx --yes brs@0.45.0 \
     --root "$ROOT/channel" \
     "$ROOT/channel/components/GuideModel.brs" \
+    "$ROOT/channel/components/Menu.brs" \
     "$ROOT/channel/components/GuestRules.brs" \
     "$ROOT/channel/components/GuideUi.brs" \
     "$ROOT/channel/components/Season.brs" \

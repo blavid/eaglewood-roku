@@ -10,15 +10,18 @@ sub fetchGuideBundle()
     guide = LoadGuideLocal()
     checkout = LoadCheckoutLocal()
     activities = LoadActivitiesLocal()
+    menu = LoadMenuLocal()
     FillTimes(guide, checkout)
     LogGuideChoice(guide)
     LogCheckoutChoice(checkout)
     LogActivitiesChoice(activities)
-    PublishBundle(guide, checkout, activities, generation)
+    LogMenuChoice(menu)
+    PublishBundle(guide, checkout, activities, menu, generation)
 
     remoteGuide = FetchRemote("guide")
     remoteCheckout = FetchRemote("checkout")
     remoteActivities = FetchRemote("activities")
+    remoteMenu = FetchRemote("menu")
     changed = false
     if remoteGuide <> invalid
         guide = remoteGuide
@@ -35,9 +38,14 @@ sub fetchGuideBundle()
         changed = true
         LogActivitiesChoice(activities)
     end if
+    if remoteMenu <> invalid
+        menu = remoteMenu
+        changed = true
+        LogMenuChoice(menu)
+    end if
     if changed
         FillTimes(guide, checkout)
-        PublishBundle(guide, checkout, activities, generation)
+        PublishBundle(guide, checkout, activities, menu, generation)
     end if
 end sub
 
@@ -52,6 +60,23 @@ end function
 function ActivitiesDataUrl() as string
     return "https://sunrivertownhome.com/data/activities.json"
 end function
+
+function LoadMenuLocal() as object
+    cachedText = ReadText("cachefs:/eaglewood/menu.json")
+    cached = AcceptMenuText(cachedText, "cachefs")
+    if cached <> invalid then return cached
+    if cachedText <> "" then print "Eaglewood: menu fallback reason=bad-cache"
+    packaged = AcceptMenuText(ReadText("pkg:/data/menu.json"), "pkg")
+    if packaged <> invalid then return packaged
+    print "Eaglewood: menu fallback reason=bundle"
+    return BuiltinMenu()
+end function
+
+sub LogMenuChoice(menu as object)
+    source = "none"
+    if menu <> invalid and menu.source <> invalid then source = menu.source
+    print "Eaglewood: menu source="; source
+end sub
 
 function LoadGuideLocal() as object
     parsed = ParseObjectText(ReadText("cachefs:/eaglewood/guide.json"))
@@ -102,7 +127,11 @@ function FetchRemote(kind as string) as object
     url = GuideDataUrl()
     cachePath = "cachefs:/eaglewood/guide.json"
     prefix = "guide"
-    if kind = "checkout"
+    if kind = "menu"
+        url = MenuDataUrl()
+        cachePath = "cachefs:/eaglewood/menu.json"
+        prefix = "menu"
+    else if kind = "checkout"
         url = CheckoutDataUrl()
         cachePath = "cachefs:/eaglewood/checkout.json"
         prefix = "checkout"
@@ -137,6 +166,12 @@ function FetchRemote(kind as string) as object
         print "Eaglewood: "; kind; " failure reason=bad-json"
         return invalid
     end if
+    if kind = "menu"
+        if MenuRejectReason(parsed) <> "ok"
+            print "Eaglewood: menu fallback reason="; MenuRejectReason(parsed)
+            return invalid
+        end if
+    end if
     WriteText(cachePath, response.body)
     stored = response.etag
     if stored = "" then stored = etag
@@ -162,6 +197,12 @@ function ActivitiesFromText(text as string, source as string, code as string) as
 end function
 
 function FinishRemote(kind as string, parsed as object, source as string, code as string) as object
+    if kind = "menu"
+        menu = NormalizeMenu(parsed)
+        if menu = invalid then return invalid
+        menu.source = source
+        return menu
+    end if
     if kind = "checkout"
         checkout = NormalizeCheckout(parsed)
         if checkout = invalid then return invalid
@@ -365,7 +406,7 @@ sub LogCheckoutChoice(checkout as object)
     print "Eaglewood: checkout decision="; checkout.checkoutSource; " version="; VersionText(checkout.checkoutVersion); " code="; checkout.checkoutCode
 end sub
 
-sub PublishBundle(guide as object, checkout as object, activities as object, generation as integer)
+sub PublishBundle(guide as object, checkout as object, activities as object, menu as object, generation as integer)
     if guide = invalid then guide = FallbackGuide()
     if checkout = invalid then checkout = FallbackCheckout()
     if activities = invalid then activities = EmptyActivities()
@@ -403,7 +444,9 @@ sub PublishBundle(guide as object, checkout as object, activities as object, gen
         summary: checkout.summary,
         rulesJson: EncodeJson(guide.rules),
         issuesJson: EncodeJson(guide.issues),
-        stepsJson: EncodeJson(checkout.checkoutSteps)
+        stepsJson: EncodeJson(checkout.checkoutSteps),
+        menuSource: MenuSourceText(menu),
+        menuJson: MenuBodyText(menu)
     }
 end sub
 

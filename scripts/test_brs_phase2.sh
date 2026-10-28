@@ -8,10 +8,12 @@ cd "$ROOT"
 output="$(npx --yes brs@0.45.0 \
     --root "$ROOT/channel" \
     "$ROOT/channel/components/GuideModel.brs" \
+    "$ROOT/channel/components/Menu.brs" \
     "$ROOT/channel/components/GuestRules.brs" \
     "$ROOT/channel/components/GuideUi.brs" \
     "$ROOT/channel/components/Season.brs" \
     "$ROOT/channel/components/Phase2Ui.brs" \
+    "$ROOT/channel/components/ActivityCard.brs" \
     "$ROOT/scripts/brs_phase2_check.brs")"
 printf '%s\n' "$output"
 if ! printf '%s\n' "$output" | grep -q "brs phase2 checks passed"; then

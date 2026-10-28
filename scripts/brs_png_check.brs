@@ -127,6 +127,7 @@ sub Main()
         failed = failed + 1
     end if
 
+    failed = failed + RunBadgeColdStarts()
     if failed = 0 then print "brs png checks passed"
 end sub
 

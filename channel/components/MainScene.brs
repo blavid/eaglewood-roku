@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 24 "; BuildCommit()
+    print "Eaglewood: build 25 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -403,6 +403,7 @@ end function
 function RouteKey(key as string) as boolean
     BumpIdle()
     HoldFocus()
+    if m.menuBusy = true then return true
     if m.shell = invalid
         if key = "back"
             print "Eaglewood: back exit"
@@ -661,6 +662,7 @@ function FinishNav(state as object) as boolean
     ShowSection(m.section)
     print "Eaglewood: screen="; m.section; " zone="; m.zone
     PaintAll()
+    SyncMenuMotion()
     HoldFocus()
     return true
 end function
@@ -691,6 +693,7 @@ sub onIdle()
     if m.idleTimer.fire <> true then return
     print "Eaglewood: idle return home"
     try
+        ResetMenuMotion()
         home = HomePromptState()
         m.section = home.section
         m.zone = home.zone
@@ -711,6 +714,132 @@ sub onIdle()
         HoldFocus()
     end try
     BumpIdle()
+end sub
+
+function PeekX() as integer
+    return 48 - RailW()
+end function
+
+sub ResetMenuMotion()
+    m.menuBusy = false
+    m.slideOpen = false
+    m.fixesShown = false
+    if m.menuAnim <> invalid
+        m.menuAnim.control = "stop"
+        if m.top <> invalid then m.top.removeChild(m.menuAnim)
+        m.menuAnim = invalid
+    end if
+    if m.railTop <> invalid then m.railTop.translation = [0, 0]
+    if m.railChild <> invalid
+        m.railChild.translation = [RailW(), 0]
+        m.railChild.visible = false
+    end if
+    if m.fixesPane <> invalid then m.fixesPane.translation = [0, 0]
+end sub
+
+sub SyncMenuMotion()
+    opening = false
+    if MenuDepth() = "todo" then opening = true
+    if m.slideOpen = invalid then m.slideOpen = false
+    if opening <> m.slideOpen
+        m.slideOpen = opening
+        RunRailSlide(opening)
+    end if
+    showFixes = false
+    if m.section = "fixes" then showFixes = true
+    if m.fixesShown = invalid then m.fixesShown = false
+    if showFixes <> m.fixesShown
+        m.fixesShown = showFixes
+        if showFixes = true
+            RunFixesSlide()
+        else if m.fixesPane <> invalid
+            m.fixesPane.translation = [0, 0]
+        end if
+    end if
+end sub
+
+sub RunRailSlide(opening as boolean)
+    if m.railTop = invalid or m.railChild = invalid then return
+    m.railChild.visible = true
+    peek = PeekX()
+    wide = RailW()
+    parentFrom = [0, 0]
+    parentTo = [0, 0]
+    childFrom = [wide, 0]
+    childTo = [wide, 0]
+    if opening = true
+        parentTo = [peek, 0]
+        childFrom = [wide, 0]
+        childTo = [0, 0]
+    else
+        parentFrom = [peek, 0]
+        childFrom = [0, 0]
+        childTo = [wide, 0]
+    end if
+    m.railTop.translation = parentFrom
+    m.railChild.translation = childFrom
+    StartVectorSlide("railTop.translation", parentFrom, parentTo, "railChild.translation", childFrom, childTo)
+end sub
+
+sub RunFixesSlide()
+    if m.fixesPane = invalid then return
+    m.fixesPane.translation = [56, 0]
+    StartVectorSlide("fixesPane.translation", [56, 0], [0, 0], "", [0, 0], [0, 0])
+end sub
+
+sub StartVectorSlide(firstField as string, firstFrom as object, firstTo as object, secondField as string, secondFrom as object, secondTo as object)
+    anim = CreateObject("roSGNode", "Animation")
+    if anim = invalid
+        ApplySlideEnd(firstField, firstTo, secondField, secondTo)
+        return
+    end if
+    anim.duration = 0.22
+    anim.easeFunction = "outQuad"
+    anim.repeat = false
+    first = CreateObject("roSGNode", "Vector2DFieldInterpolator")
+    if first = invalid
+        ApplySlideEnd(firstField, firstTo, secondField, secondTo)
+        return
+    end if
+    first.key = [0.0, 1.0]
+    first.keyValue = [firstFrom, firstTo]
+    first.fieldToInterp = firstField
+    anim.appendChild(first)
+    if secondField <> ""
+        second = CreateObject("roSGNode", "Vector2DFieldInterpolator")
+        if second <> invalid
+            second.key = [0.0, 1.0]
+            second.keyValue = [secondFrom, secondTo]
+            second.fieldToInterp = secondField
+            anim.appendChild(second)
+        end if
+    end if
+    if m.menuAnim <> invalid
+        m.menuAnim.control = "stop"
+        if m.top <> invalid then m.top.removeChild(m.menuAnim)
+    end if
+    m.menuBusy = true
+    m.menuAnim = anim
+    m.top.appendChild(anim)
+    anim.observeField("state", "onMenuSlideState")
+    anim.control = "start"
+end sub
+
+sub ApplySlideEnd(firstField as string, firstTo as object, secondField as string, secondTo as object)
+    if firstField = "railTop.translation" and m.railTop <> invalid then m.railTop.translation = firstTo
+    if firstField = "fixesPane.translation" and m.fixesPane <> invalid then m.fixesPane.translation = firstTo
+    if secondField = "railChild.translation" and m.railChild <> invalid then m.railChild.translation = secondTo
+    m.menuBusy = false
+    if m.slideOpen <> true and m.railChild <> invalid then m.railChild.visible = false
+end sub
+
+sub onMenuSlideState()
+    if m.menuAnim = invalid then return
+    if m.menuAnim.state <> "stopped" then return
+    m.menuBusy = false
+    if m.slideOpen <> true and m.railChild <> invalid then m.railChild.visible = false
+    if m.top <> invalid then m.top.removeChild(m.menuAnim)
+    m.menuAnim = invalid
 end sub
 
 sub BumpIdle()
