@@ -286,6 +286,7 @@ function CommitWifiPng() as string
     if data.ReadFile(WifiPngTempPath()) <> true then return ""
     count = data.Count()
     if count = invalid or count < 8 then return ""
+    m.lastPng64 = data.ToBase64String()
     busy = ""
     if m.top.busyPaths <> invalid then busy = m.top.busyPaths
     existing = QrReadLength(WifiPngPath())
@@ -438,6 +439,7 @@ sub PublishWifi(info as object, generation as integer)
         password: password,
         png: png,
         pngBytes: pngBytes,
+        png64: TaskPng64(pngPath),
         ssidLen: Len(ssid),
         notice: notice,
         jsonCode: jsonCode,
@@ -475,4 +477,16 @@ function ReadIfPresent(path as string) as string
     text = ReadAsciiFile(path)
     if text = invalid then return ""
     return text
+end function
+
+' Build 33: the task thread's view of the file, as base64, so the render
+' thread can write its own copy (see FreshQrCopy).
+function TaskPng64(path as string) as string
+    if path = invalid or path = "" then return ""
+    if m.lastPng64 <> invalid and m.lastPng64 <> "" then return m.lastPng64
+    data = CreateObject("roByteArray")
+    if data = invalid then return ""
+    if data.ReadFile(path) <> true then return ""
+    if data.Count() < 8 then return ""
+    return data.ToBase64String()
 end function

@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 32 "; BuildCommit()
+    print "Eaglewood: build 33 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -676,7 +676,10 @@ sub SyncChildList()
     if m.childMenu = invalid then return
     list = m.childMenu.list
     if list = invalid then return
-    if MenuDepth() <> "todo" and MenuDepth() <> "fixes" then return
+    if MenuDepth() <> "todo" and MenuDepth() <> "fixes"
+        m.childWindowKey = ""
+        return
+    end if
     content = list.content
     if content = invalid then return
     last = content.getChildCount() - 1
@@ -686,6 +689,27 @@ sub SyncChildList()
         if row <> invalid and row.hasField("lit") then row.lit = (index = m.railIndex)
     end for
     if m.railIndex >= 0 and m.railIndex <= last then list.jumpToItem = m.railIndex
+    SyncMoreBelow(list, last + 1)
+end sub
+
+' Build 33 (Pixel b32 P3): track the visible window the way floatingFocus
+' scrolls it (the least move that keeps the focused row on screen) and show
+' the down-chevron only while rows remain below that window.
+sub SyncMoreBelow(list as object, count as integer)
+    rows = list.numRows
+    if rows = invalid or rows < 1 then rows = 4
+    if m.childWindow = invalid or m.childWindowKey <> MenuDepth() then m.childWindow = 0
+    m.childWindowKey = MenuDepth()
+    if m.railIndex < m.childWindow then m.childWindow = m.railIndex
+    if m.railIndex > m.childWindow + rows - 1 then m.childWindow = m.railIndex - rows + 1
+    if m.childWindow < 0 then m.childWindow = 0
+    more = (m.childWindow + rows < count)
+    pitch = 180
+    size = list.itemSize
+    if size <> invalid and size.Count() > 1 then pitch = size[1] + 4
+    m.childMenu.moreY = 64 + (rows * pitch) - 2
+    m.childMenu.moreBelow = more
+    print "Eaglewood: submenu window="; m.childWindow; " rows="; rows; " count="; count; " more="; more
 end sub
 
 function CurrentTileSection() as string
@@ -1035,6 +1059,7 @@ sub DeliverQrPath(slot as string)
     if task.result <> invalid
         NoteQrBytes(slot, ResultNumber(task.result, "bytes"))
         RememberQrFormat(slot, task.result)
+        RememberQrPng64(slot, task.result.png64)
     end if
     if slot = "badge" then m.badgeFailed = false
     if slot = "detail" then m.detailQrFailed = false

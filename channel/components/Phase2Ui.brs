@@ -639,12 +639,151 @@ sub onBadgeStatus()
         return
     end if
     if status <> "failed" and status <> "error" then return
-    ' Failed bitmap: keep the card hidden (no empty box) and retry once.
-    ShowBadgeFrame(false)
-    if m.qrAssigning = true then return
-    if QrRetried("badge") then return
-    ScheduleBadgeRetry()
+    ' Build 33: the card stays drawn. The failure can fire synchronously
+    ' inside the uri assignment (m.qrAssigning = true), which used to skip
+    ' the retry and leave the card hidden, so the reload is always queued.
+    ShowBadgeFrame(true)
+    ScheduleQrReload("badge")
 end sub
+
+' Build 33 root cause (Home badge blank, Wi-Fi QR needing a relaunch): in
+' brs-node, a cachefs PNG written by a task thread can read back on the render
+' thread as another file's bytes (seen: wifi.png held the 57-byte qr-*.url
+' note QrTask wrote at the same time), so the Poster decode failed. The texture
+' loader also pins a failed URI (failedLocalUris), so retries of the same URI
+' failed, the badge's one retry was skipped when the failure fired inside the
+' uri assignment, and Wi-Fi had no retry. Tasks now send their PNG bytes as
+' base64 in the result; on a failure the render thread writes its own copy to a
+' fresh name and loads that (0.3 s, then 0.6, 1.2, 2.4 s), then the fallback.
+function QrReloadGaps() as object
+    return [0.3, 0.6, 1.2, 2.4]
+end function
+
+function FreshQrCopy(slot as string, path as string, attempt as integer) as string
+    ' Render-thread write (roByteArray only; no roFileSystem here) from the
+    ' task's own bytes, else from this thread's read of the file.
+    target = "cachefs:/eaglewood/reload-" + slot + "-" + attempt.ToStr() + ".png"
+    data = CreateObject("roByteArray")
+    if data = invalid then return ""
+    text = ""
+    if m.qrPng64 <> invalid and m.qrPng64.Lookup(slot) <> invalid then text = m.qrPng64.Lookup(slot)
+    if text <> ""
+        data.FromBase64String(text)
+    else if path = invalid or path = "" or data.ReadFile(path) <> true
+        return ""
+    end if
+    if data.Count() < 8 or data[0] <> 137 or data[1] <> 80 then return ""
+    if data.WriteFile(target) <> true then return ""
+    return target
+end function
+
+sub RememberQrPng64(slot as string, text as dynamic)
+    if m.qrPng64 = invalid then m.qrPng64 = {}
+    if text = invalid then text = ""
+    m.qrPng64[slot] = text
+end sub
+
+function QrReloadCount(slot as string) as integer
+    if m.qrReloads = invalid then return 0
+    value = m.qrReloads.Lookup(slot)
+    if value = invalid then return 0
+    return value
+end function
+
+sub ScheduleQrReload(slot as string)
+    if m.top = invalid then return
+    if m.qrReloads = invalid then m.qrReloads = {}
+    if m.qrReloadTimers = invalid then m.qrReloadTimers = {}
+    if m.qrReloadTimers.Lookup(slot) <> invalid then return
+    count = QrReloadCount(slot)
+    gaps = QrReloadGaps()
+    if count >= gaps.Count()
+        print "Eaglewood: qr "; slot; " reload gave up"
+        QrGaveUp(slot)
+        return
+    end if
+    m.qrReloads[slot] = count + 1
+    timer = CreateObject("roSGNode", "Timer")
+    timer.duration = gaps[count]
+    timer.repeat = false
+    if slot = "badge" then timer.observeField("fire", "onBadgeReload")
+    if slot = "wifi" then timer.observeField("fire", "onWifiReload")
+    m.top.appendChild(timer)
+    m.qrReloadTimers[slot] = timer
+    timer.control = "start"
+end sub
+
+sub onBadgeReload()
+    RunQrReload("badge")
+end sub
+
+sub onWifiReload()
+    RunQrReload("wifi")
+end sub
+
+sub RunQrReload(slot as string)
+    timer = m.qrReloadTimers.Lookup(slot)
+    if timer <> invalid
+        timer.control = "stop"
+        if m.top <> invalid then m.top.removeChild(timer)
+    end if
+    m.qrReloadTimers.Delete(slot)
+    path = StoredQrPath(slot)
+    if path = "" and m.qrMounted <> invalid
+        value = m.qrMounted.Lookup(slot)
+        if value <> invalid then path = value
+    end if
+    poster = PosterForSlot(slot)
+    if poster = invalid or path = "" then return
+    if poster.loadStatus = "ready" then return
+    fresh = FreshQrCopy(slot, path, QrReloadCount(slot))
+    if fresh = ""
+        ' Not visible to this thread yet: wait for the next gap.
+        print "Eaglewood: qr "; slot; " reload "; QrReloadCount(slot).ToStr(); " copy not ready"
+        ScheduleQrReload(slot)
+        return
+    end if
+    path = fresh
+    print "Eaglewood: qr "; slot; " reload "; QrReloadCount(slot).ToStr(); " path="; path
+    m.qrAssigning = true
+    poster.uri = ""
+    poster.uri = path
+    m.qrAssigning = false
+    LogQrState(slot, poster)
+end sub
+
+sub QrGaveUp(slot as string)
+    if slot = "badge"
+        m.badgeFallback = true
+        ShowBadgeFrame(true)
+    end if
+    if slot = "wifi" and m.wifiMissing <> invalid then m.wifiMissing.text = "QR image could not be drawn"
+end sub
+
+' Build 33: the Home card always draws its cream frame and caption. If the
+' QR is not drawn within 5 s, or every reload failed, it switches to the
+' no-link layout (text in place of the code) and stays there.
+sub ArmBadgeDeadline()
+    if m.badgeDeadline <> invalid or m.top = invalid then return
+    timer = CreateObject("roSGNode", "Timer")
+    timer.duration = 5
+    timer.repeat = false
+    timer.observeField("fire", "onBadgeDeadline")
+    m.top.appendChild(timer)
+    m.badgeDeadline = timer
+    timer.control = "start"
+end sub
+
+sub onBadgeDeadline()
+    if BadgeBitmapReady() = true then return
+    print "Eaglewood: qr badge deadline fallback"
+    m.badgeFallback = true
+    ShowBadgeFrame(true)
+end sub
+
+function BadgeFallbackText() as string
+    return "Book direct online at"
+end function
 
 ' The retry runs on a timer so it is outside the loadStatus observer.
 sub ScheduleBadgeRetry()
@@ -681,27 +820,23 @@ end sub
 sub ShowBadgeFrame(show as boolean)
     if BadgeShown(m.section) <> true then show = false
     ApplyBadgeFrame(m.section)
-    ' Pixel b27 P1: no empty card. Hide it until the QR bitmap has loaded.
-    if BadgeBitmapReady() <> true then show = false
+    ' Build 33 (Pixel b32 P2): the frame and caption always draw; only the
+    ' QR inside waits for its bitmap, then falls back to text.
+    if show = true then ArmBadgeDeadline()
+    fallback = (m.badgeFallback = true and BadgeBitmapReady() <> true)
     LogBadgeCard(show)
     if m.badgeGroup <> invalid then m.badgeGroup.visible = show
     if m.badgeCard <> invalid then m.badgeCard.visible = show
     if m.badgeLabel <> invalid then m.badgeLabel.visible = show
     if m.badgeDomain <> invalid then m.badgeDomain.visible = show
-    failed = BadgePosterFailed()
-    if m.badgePoster <> invalid
-        if show = true and failed = true
-            m.badgePoster.visible = false
-        else
-            m.badgePoster.visible = show
-        end if
+    ready = BadgeBitmapReady()
+    if m.badgePoster <> invalid then m.badgePoster.visible = (show and ready)
+    if m.badgeMissing <> invalid
+        m.badgeMissing.text = BadgeFallbackText()
+        m.badgeMissing.visible = (show and fallback)
     end if
-    if m.badgeMissing <> invalid then m.badgeMissing.visible = false
-    if show = true and failed = true
-        ShowQrMark("badge", true)
-    else
-        ShowQrMark("badge", show)
-    end if
+    ' The white plate marks the QR spot while it loads; the fallback has none.
+    ShowQrMark("badge", show and not fallback)
     if m.badgeHint = invalid then return
     if show and m.zone = "item"
         m.badgeHint.text = "Always available"
@@ -853,6 +988,8 @@ sub MountQrPosterBody(poster as object, path as string, slot as string)
     print "Eaglewood: qr "; slot; " file bytes="; noted; " read="; noted
     ClearQrRetry(slot)
     NoteAssigned(slot, path)
+    if m.qrMounted = invalid then m.qrMounted = {}
+    m.qrMounted[slot] = path
     m.qrAssigning = true
     poster.uri = path
     m.qrAssigning = false
@@ -1061,7 +1198,9 @@ sub onWifiPosterStatus()
         return
     end if
     if status <> "failed" and status <> "error" then return
-    if m.wifiMissing <> invalid then m.wifiMissing.text = "QR image could not be drawn"
+    ' Build 33: reload on a timer first; the message shows only after the
+    ' reloads give up (QrGaveUp).
+    ScheduleQrReload("wifi")
 end sub
 
 function WifiFallbackText() as string
@@ -1669,6 +1808,7 @@ sub ApplyWifiResult(result as object)
     incoming = AsText(result.pngPath)
     if incoming <> "" then m.wifiFile = incoming
     NoteQrBytes("wifi", ResultNumber(result, "pngBytes"))
+    RememberQrPng64("wifi", result.png64)
     PaintWifi()
 end sub
 
@@ -1791,6 +1931,18 @@ sub ApplyBadgeFrame(section as string)
     if m.badgeDomain <> invalid
         m.badgeDomain.translation = [frame.captionX, frame.captionY]
         SetFontSize(m.badgeDomain, frame.captionSize)
+    end if
+    ' No-link fallback text sits where the code would, above the caption.
+    if m.badgeMissing <> invalid
+        m.badgeMissing.translation = [16, frame.qrY]
+        m.badgeMissing.width = frame.w - 32
+        m.badgeMissing.height = frame.qr
+        m.badgeMissing.horizAlign = "center"
+        m.badgeMissing.vertAlign = "bottom"
+        m.badgeMissing.wrap = true
+        m.badgeMissing.maxLines = 2
+        m.badgeMissing.color = "0x1B2A44FF"
+        SetFontSize(m.badgeMissing, 30)
     end if
 end sub
 

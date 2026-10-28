@@ -37,7 +37,8 @@ RENDER_THREAD_FILES = (
     CARD_BRS,
 )
 # roDateTime and roDeviceInfo are usable there. roSGNode is how the scene is built.
-RENDER_THREAD_CREATE = {"roSGNode", "roDeviceInfo", "roDateTime"}
+# roByteArray (build 33): the QR reload writes its own PNG copy from the task's bytes.
+RENDER_THREAD_CREATE = {"roSGNode", "roDeviceInfo", "roDateTime", "roByteArray"}
 # Creating these logs "MAIN|TASK-only component failed on RENDER thread".
 RENDER_THREAD_FORBIDDEN = (
     "roFontRegistry",
@@ -532,10 +533,10 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 32 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 33 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 32 "' not in scene:
-        fail("startup must log build 32 and the commit")
+    if 'print "Eaglewood: build 33 "' not in scene:
+        fail("startup must log build 33 and the commit")
     if "decor-heart" in phase2:
         fail("the Book Direct heart poster is still in the scene")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
@@ -610,8 +611,11 @@ def check_phase2() -> None:
         fail("the badge group must sit at BadgeFrame() on the cream card")
     if "m.badgePoster.translation = [frame.qrX, frame.qrY]" not in badge or "m.badgePoster.width = frame.qr" not in badge:
         fail("the badge QR must take its size and place from BadgeFrame()")
-    if "BadgeBitmapReady() <> true then show = false" not in phase2:
-        fail("the badge card must stay hidden until the QR bitmap has loaded")
+    # Build 33: the cream card always draws; only the QR waits for its bitmap.
+    if "m.badgePoster.visible = (show and ready)" not in phase2 or "m.badgeCard.visible = show" not in phase2:
+        fail("the badge card must always draw and its QR must wait for the bitmap")
+    if "sub ArmBadgeDeadline(" not in phase2 or "BadgeFallbackText()" not in phase2:
+        fail("the badge must fall back to no-link text after its deadline")
     if "BadgeCaptionColor()" not in badge or "0x8A5A00FF" not in phase2:
         fail("the badge caption must use the dark gold that clears the cream tile")
     if "QrCaptionFont()" not in badge or "QrCaptionColor()" not in badge:

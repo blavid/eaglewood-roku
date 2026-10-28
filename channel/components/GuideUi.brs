@@ -966,6 +966,10 @@ sub PaintRail()
 end sub
 
 '' Things to Do labels are one line, so its rows are half the Quick Fixes height.
+function ChildLabelWidth() as integer
+    return MenuTitleBox().w
+end function
+
 sub SizeChildRows(depth as string)
     if m.childMenu = invalid or m.childMenu.list = invalid then return
     menuBox = MenuTitleBox()
@@ -1013,7 +1017,9 @@ sub FillChildMenu()
     if last >= 0
         for index = 0 to last
             node = root.createChild("ContentNode")
-            node.title = titles[index]
+            ' Build 33 (Pixel b32 P3): break the title here and trim each line,
+            ' so a wrapped line never starts with the space the label kept.
+            node.title = JoinLines(BreakLines(titles[index], ChildLabelWidth(), MenuTitleBox().size))
             node.shortDescriptionLine1 = ">"
             node.addField("lit", "boolean", false)
         end for

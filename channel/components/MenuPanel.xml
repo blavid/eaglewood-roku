@@ -7,6 +7,8 @@
         <field id="list" type="node" />
         <field id="focusedIndex" type="integer" />
         <field id="selectedIndex" type="integer" alwaysNotify="true" />
+        <field id="moreBelow" type="boolean" value="false" onChange="onMoreBelow" />
+        <field id="moreY" type="integer" value="780" onChange="onMoreBelow" />
     </interface>
     <script type="text/brightscript" uri="pkg:/components/MenuPanel.brs" />
     <children>
@@ -19,5 +21,7 @@
             drawFocusFeedback="false"
             vertFocusAnimationStyle="floatingFocus"
             translation="[12, 64]" />
+        <!-- Build 33 (Pixel b32 P3): 16px gold down-chevron while rows remain below. -->
+        <Poster id="more" uri="pkg:/images/chevron-down.png" width="16" height="10" translation="[186, 780]" visible="false" />
     </children>
 </component>

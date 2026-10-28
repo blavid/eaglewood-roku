@@ -48,6 +48,8 @@ The left rail, the Things to Do list, and the Quick Fixes list all come from one
 
 The format did not change in build 32. Quick Fixes and Things to Do now open the same sliding submenu, built by the same MenuPanel component. Each fix is a submenu row with a chevron. Focusing a row previews its steps. Right or OK opens the scrolling steps, and Back or Left returns to the row. Back from the submenu slides it out to the rail.
 
+Build 33: wrapped submenu titles have no leading space, and a small gold down chevron shows under the last visible row when more rows are below it. Titles still come from `guide.json`; nothing in the format changed.
+
 ## Edits
 
 1. Rename a row: change its `label`.

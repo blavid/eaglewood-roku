@@ -56,8 +56,10 @@ def todo(child: str) -> list[str]:
 def screens() -> list[dict]:
     s: list[dict] = []
 
-    def add(slug: str, keys: list[str], shows: str, stage: str = "key", wait: float = 0.0, need: str = "", same_as: str = "", ecp: list[str] | None = None, visits: list[str] | None = None) -> None:
-        s.append({"slug": slug, "keys": keys, "shows": shows, "stage": stage, "wait": wait, "need": need, "same_as": same_as, "ecp": ecp or [], "visits": visits or []})
+    def add(slug: str, keys: list[str], shows: str, stage: str = "key", wait: float = 0.0, need: str = "", same_as: str = "", ecp: list[str] | None = None, visits: list[str] | None = None, card: str = "") -> None:
+        if not card and (slug.startswith("home-") and slug != "home-after-idle" or slug == "blake-path-focus"):
+            card = "qr"
+        s.append({"slug": slug, "keys": keys, "shows": shows, "stage": stage, "wait": wait, "need": need, "same_as": same_as, "ecp": ecp or [], "visits": visits or [], "card": card})
 
     add("home-prompt-focus", [], "Home, Book Direct strip focused, QR card and badge")
     add("home-rail-focus", rail("home"), "Home, rail Home row focused")
@@ -123,6 +125,9 @@ def screens() -> list[dict]:
              "Down", "Select", "Back", "Down", "Select", "Back", "Up", "Up", "Up", "Up", "Up", "Up", "Select", "Back", "Up", "Up"]
     add("blake-path-focus", [], "Blake's TV path (Things to Do, Dining, moves, back out, every section) as ECP keys; ends on Home rail", ecp=blake, same_as="home-rail-focus",
         visits=["todo", "dining", "rules", "fixes", "book", "checkout", "home"])
+    # Build 33: Home badge QR host unreachable; the card keeps its frame and
+    # caption and shows the no-link text after the 5 s deadline.
+    add("home-badge-blocked", [], "Home with the badge QR fetch blocked: cream card, caption, no-link text", stage="badgeblocked", wait=7, card="fallback")
     add("rail-book-focus", rail("book"), "Rail Book Direct focused")
     add("book-direct", rail("book") + ["Select"], "Book Direct page")
     add("rail-checkout-focus", rail("checkout"), "Rail Checkout focused")
@@ -201,6 +206,8 @@ def build_fixtures() -> None:
 
 
 LONG_FIX_PATH = "/data-longfix/guide.json"
+BADGE_BLOCKED_PATH = "/data-badgeblocked/guide.json"
+BADGE_QR = "/data/qr/book-direct-booking.png"
 
 
 def long_fix_guide() -> str:
@@ -222,6 +229,15 @@ def build_stage(name: str, key: str) -> Path:
         (FIX / LONG_FIX_PATH.lstrip("/")).write_text(long_fix_guide(), encoding="utf-8")
         task = stage / "components" / "GuideTask.brs"
         task.write_text(task.read_text(encoding="utf-8").replace("https://sunrivertownhome.com/data/guide.json", "https://sunrivertownhome.com" + LONG_FIX_PATH, 1), encoding="utf-8")
+    if name == "badgeblocked":
+        blocked = BADGE_QR.replace("/data/qr/", "/blocked-qr/")
+        served = FIX / BADGE_BLOCKED_PATH.lstrip("/")
+        served.parent.mkdir(parents=True, exist_ok=True)
+        served.write_text((FIX / "data" / "guide.json").read_text(encoding="utf-8").replace(BADGE_QR, blocked), encoding="utf-8")
+        for path in [stage / "data" / "guide.json", stage / "components" / "Season.brs"]:
+            path.write_text(path.read_text(encoding="utf-8").replace(BADGE_QR, blocked), encoding="utf-8")
+        task = stage / "components" / "GuideTask.brs"
+        task.write_text(task.read_text(encoding="utf-8").replace("https://sunrivertownhome.com/data/guide.json", "https://sunrivertownhome.com" + BADGE_BLOCKED_PATH, 1), encoding="utf-8")
     if name == "qrblocked":
         acts = stage / "data" / "activities.json"
         acts.write_text(acts.read_text(encoding="utf-8").replace("/data/qr/", "/blocked-qr/"), encoding="utf-8")
@@ -285,7 +301,7 @@ def launch(stage: Path, keys: list[str], ecp: bool = False) -> None:
     link = f" --deep-link emuKeys={'-'.join(keys)}" if keys else ""
     cmd = (
         f"export BRS_NO_UPDATE_CHECK=1 BRS_ECP_PORT={PORT} NODE_PATH={NODE_PATH}; "
-        f"{CLI} --root {stage} --snapshot {SNAP} --log {LOG} --colors 0{link}{' --ecp' if ecp else ''}"
+        f"{CLI} --root {stage} --snapshot {SNAP} --log {LOG} --colors 0{link}{' --ecp' if ecp else ''}{os.environ.get('EMU_CLI_EXTRA', '')}"
     )
     tmux("send-keys", "-t", f"{SESSION}:0.0", cmd, "C-m")
     wait_log("zone=prompt", 60)
@@ -320,6 +336,31 @@ def focus_problems(keys: list[str], visits: list[str]) -> str:
             at += 1
         if at == len(screens):
             return f"path never reached {want} in order"
+    return ""
+
+
+# Home QR card, measured on home-rail-focus (FHD): x 1404-1716, y 474-834.
+CARD_BOX = (1404, 474, 1716, 834)
+
+
+def card_problem(data: bytes, want: str) -> str:
+    """Fail when the Home QR card is blank: it needs the cream frame and ink inside it.
+
+    want "qr" needs QR modules (lots of near-black); "fallback" needs the
+    no-link text (some navy ink) and no QR."""
+    from io import BytesIO
+    from PIL import Image
+    px = list(Image.open(BytesIO(data)).convert("RGB").crop(CARD_BOX).getdata())
+    cream = sum(1 for r, g, b in px if abs(r - 0xF4) < 12 and abs(g - 0xEF) < 12 and abs(b - 0xE3) < 12) / len(px)
+    ink = sum(1 for r, g, b in px if r + g + b < 150) / len(px)
+    black = sum(1 for r, g, b in px if r + g + b < 60) / len(px)
+    stats = f"cream {cream:.2f} ink {ink:.3f} black {black:.3f}"
+    if cream < 0.25:
+        return f"QR card blank (no cream frame; {stats})"
+    if want == "qr" and black < 0.05:
+        return f"QR card has no QR ({stats})"
+    if want == "fallback" and (ink < 0.005 or black >= 0.05):
+        return f"QR card fallback missing ({stats})"
     return ""
 
 
@@ -364,7 +405,7 @@ def launch_retrying(stage, keys, ecp: bool = False) -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     build_fixtures()
-    stages = {"key": build_stage("key", FAKE_KEY), "nokey": build_stage("nokey", ""), "longfix": build_stage("longfix", FAKE_KEY), "qrblocked": build_stage("qrblocked", FAKE_KEY)}
+    stages = {"key": build_stage("key", FAKE_KEY), "nokey": build_stage("nokey", ""), "longfix": build_stage("longfix", FAKE_KEY), "qrblocked": build_stage("qrblocked", FAKE_KEY), "badgeblocked": build_stage("badgeblocked", FAKE_KEY)}
     threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", FIX_PORT), Handler).serve_forever, daemon=True).start()
     rows = []
     seen: dict[str, str] = {}
@@ -391,6 +432,9 @@ def main() -> None:
                 digest = hashlib.sha256(data).hexdigest()
                 (OUT / f"{item['slug']}.png").write_bytes(data)
                 (OUT / f"{item['slug']}.log").write_text(log_text(), encoding="utf-8")
+                if os.environ.get("EMU_PANE"):
+                    pane = subprocess.run([*TMUX, "capture-pane", "-p", "-S", "-5000", "-t", f"{SESSION}:0.0"], capture_output=True, text=True).stdout
+                    (OUT / f"{item['slug']}.pane").write_text(pane, encoding="utf-8")
                 if digest in seen and seen[digest] == item["same_as"]:
                     status, note = "captured", f"expected: same pixels as {seen[digest]}"
                 elif digest in seen:
@@ -398,6 +442,10 @@ def main() -> None:
                 else:
                     seen[digest] = item["slug"]
                     status = "captured"
+                if item["card"] and status != "fail":
+                    problem = card_problem(data, item["card"])
+                    if problem:
+                        status, note = "fail", problem
                 if item["ecp"] and status != "fail":
                     problem = focus_problems(item["ecp"], item["visits"])
                     note = problem or f"{len(item['ecp'])} ECP presses, every one focus=scene; visited {', '.join(item['visits'])}"

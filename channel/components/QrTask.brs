@@ -91,6 +91,8 @@ sub FetchQrBody(slot as string, url as string, generation as integer)
             print "Eaglewood: qr "; slot; " final uri=none"
             return
         end if
+        m.lastPng64 = ""
+        if bytes <> invalid and bytes.Count() > 8 then m.lastPng64 = bytes.ToBase64String()
         finalUri = SaveQrBytes(slot, bytes, busy)
         if prepared <> invalid then prepared.path = finalUri
     end if
@@ -126,6 +128,8 @@ sub FetchQrBody(slot as string, url as string, generation as integer)
             print "Eaglewood: qr "; slot; " final uri=none"
             return
         end if
+        m.lastPng64 = ""
+        if bytes <> invalid and bytes.Count() > 8 then m.lastPng64 = bytes.ToBase64String()
         finalUri = SaveQrBytes(slot, bytes, busy)
         if prepared <> invalid then prepared.path = finalUri
         LogQrFormat(slot, prepared)
@@ -139,6 +143,12 @@ sub FetchQrBody(slot as string, url as string, generation as integer)
     else if finalUri <> "" and QrCacheHit(finalUri, byteCount) <> true
         finalUri = ""
         byteCount = 0
+    end if
+    ' Build 33: a failed task-side write still hands its bytes to the render
+    ' thread, which writes its own copy (FreshQrCopy) after the first load fails.
+    if finalUri = "" and m.lastPng64 <> invalid and m.lastPng64 <> "" and prepared <> invalid and prepared.ok = true
+        finalUri = "cachefs:/eaglewood/qr-" + slot + "-pending.png"
+        print "Eaglewood: qr "; slot; " task write failed, render copy"
     end if
     if finalUri = ""
         print "Eaglewood: qr "; slot; " final uri=none"
@@ -178,7 +188,7 @@ end function
 
 ' Same transfer setup as WifiHttp. The body is read into memory, then WriteFile
 ' goes straight to the md5 name. Nothing is renamed and the dest does not end in .tmp.
-function DownloadQrBytes(slot as string, url as string) as object
+function DownloadQrBytesOnce(slot as string, url as string) as object
     result = { code: 0, reason: "no-transfer", bytes: invalid }
     transfer = CreateObject("roUrlTransfer")
     port = CreateObject("roMessagePort")
@@ -343,10 +353,23 @@ sub PublishQr(slot as string, generation as integer, url as string, code as inte
         color: color,
         interlace: interlace,
         indexed: indexed,
-        bytes: bytes
+        bytes: bytes,
+        png64: TaskPng64(uri)
     }
     if uri <> "" then m.top.finalUri = uri
 end sub
+
+' Build 33: the task thread's view of the file, as base64, so the render
+' thread can write its own copy (see FreshQrCopy).
+function TaskPng64(path as string) as string
+    if path = invalid or path = "" then return ""
+    if m.lastPng64 <> invalid and m.lastPng64 <> "" then return m.lastPng64
+    data = CreateObject("roByteArray")
+    if data = invalid then return ""
+    if data.ReadFile(path) <> true then return ""
+    if data.Count() < 8 then return ""
+    return data.ToBase64String()
+end function
 
 function FailQr(reason as string) as object
     return { ok: false, reason: reason, bit: 0, color: -1, interlace: 0, converted: false }
@@ -385,4 +408,23 @@ function ReadQrGeneration() as integer
     end while
     if generation = invalid then return 0
     return generation
+end function
+
+' Build 33: the downloaded temp file can read back as other bytes in the
+' emulator (same cross-thread cachefs race as the Poster load), so a body that
+' is not a PNG is fetched again, up to 3 tries.
+function DownloadQrBytes(slot as string, url as string) as object
+    fetched = invalid
+    for attempt = 1 to 3
+        fetched = DownloadQrBytesOnce(slot, url)
+        good = (fetched.code = 200 and fetched.bytes <> invalid)
+        if good then good = (fetched.bytes.Count() >= 8 and fetched.bytes[0] = 137 and fetched.bytes[1] = 80)
+        if good then return fetched
+        if fetched.code <> 200 and fetched.reason <> "bad-png" then return fetched
+        print "Eaglewood: qr "; slot; " download retry "; attempt; " reason="; fetched.reason
+        fetched.bytes = invalid
+        if fetched.reason = invalid or fetched.reason = "" or fetched.reason = "ok" then fetched.reason = "bad-png"
+        sleep(200 * attempt)
+    end for
+    return fetched
 end function

@@ -6,6 +6,13 @@ sub init()
     ' Build 32: display only. The scene keeps remote focus and moves the list
     ' with jumpToItem, so a hidden list can never swallow Up/Down.
     m.list.focusable = false
+    m.more = m.top.findNode("more")
+end sub
+
+sub onMoreBelow()
+    if m.more = invalid then return
+    m.more.translation = [186, m.top.moreY]
+    m.more.visible = (m.top.moreBelow = true)
 end sub
 
 sub onSelected()
