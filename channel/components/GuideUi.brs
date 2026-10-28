@@ -543,8 +543,6 @@ sub BuildShell()
         m.childMenu.list.itemSpacing = [0, 4]
         m.childMenu.list.numRows = 4
     end if
-    m.childMenu.observeField("focusedIndex", "onChildFocused")
-    m.childMenu.observeField("selectedIndex", "onChildSelected")
     m.detailScroll = CreateObject("roSGNode", "DetailScroll")
     m.detailScroll.translation = [ContentLeft(), ContentTop()]
     m.detailScroll.visible = false
@@ -1017,11 +1015,13 @@ sub FillChildMenu()
             node = root.createChild("ContentNode")
             node.title = titles[index]
             node.shortDescriptionLine1 = ">"
+            node.addField("lit", "boolean", false)
         end for
     end if
     m.childMenuQuiet = true
     if m.childMenu.list <> invalid then m.childMenu.list.content = root
     m.childMenuQuiet = false
+    SyncChildList()
 end sub
 
 sub PlaceDetailScroll()
@@ -1104,10 +1104,12 @@ sub FillDetailBody()
         text = FixStepsText()
         ' Build 30 (Captain #8): Right from the fix list lands in zone "item",
         ' where Up/Down scroll the steps, so that zone gets the scroll hint.
+        ' Build 32: the same submenu as Things to Do. Right/OK open the steps,
+        ' Left/Back return to the fix list, Back again slides the menu out.
         if m.zone = "detail" or m.zone = "item"
-            hint = "Up/Down|Scroll|Left|Fixes list|Back|Menu"
+            hint = "Up/Down|Scroll|Back|Fixes list"
         else
-            hint = "Up/Down|Next fix|Right|Scroll steps|Back|Menu"
+            hint = "Up/Down|Next fix|OK|Open steps|Back|Menu"
         end if
     else
         if ActivitySection(m.section) = true

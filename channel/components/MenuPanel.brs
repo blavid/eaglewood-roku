@@ -3,14 +3,9 @@ sub init()
     m.top.list = m.list
     m.list.observeField("itemSelected", "onSelected")
     m.list.observeField("itemFocused", "onFocused")
-    m.top.observeField("focusedChild", "onFocusedChild")
-end sub
-
-' LabelListPanel: when the panel is in the focus chain, the list takes the remote.
-sub onFocusedChild()
-    if m.top.isInFocusChain()
-        if m.list.hasFocus() <> true then m.list.setFocus(true)
-    end if
+    ' Build 32: display only. The scene keeps remote focus and moves the list
+    ' with jumpToItem, so a hidden list can never swallow Up/Down.
+    m.list.focusable = false
 end sub
 
 sub onSelected()

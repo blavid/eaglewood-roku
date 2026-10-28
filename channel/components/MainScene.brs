@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 29 "; BuildCommit()
+    print "Eaglewood: build 32 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -403,7 +403,9 @@ end function
 function RouteKey(key as string) as boolean
     BumpIdle()
     HoldFocus()
-    if m.menuBusy = true then return true
+    ' Build 32: a key during a slide snaps the slide to its end instead of
+    ' being dropped, so a slide that never reports "stopped" cannot lock keys.
+    if m.menuBusy = true then FinishMenuSlide()
     if m.shell = invalid
         if key = "back"
             print "Eaglewood: back exit"
@@ -675,49 +677,15 @@ sub SyncChildList()
     list = m.childMenu.list
     if list = invalid then return
     if MenuDepth() <> "todo" and MenuDepth() <> "fixes" then return
-    if m.zone <> "rail" then return
-    m.childMenuQuiet = true
-    list.jumpToItem = m.railIndex
-    m.childMenuQuiet = false
-end sub
-
-sub onChildFocused()
-    if m.childMenuQuiet = true then return
-    if m.childMenu = invalid then return
-    if MenuDepth() <> "todo" and MenuDepth() <> "fixes" then return
-    if m.zone <> "rail" then return
-    index = m.childMenu.focusedIndex
-    if index = invalid or index < 0 then return
-    if index = m.railIndex then return
-    m.railIndex = index
-    if MenuDepth() = "fixes"
-        m.issueIndex = index
-        m.section = "fixes"
-    else
-        menu = TodoMenu()
-        if index < menu.Count() then m.section = menu[index]
-    end if
-    ShowSection(m.section)
-    if ActivitySection(m.section) then PaintActivity()
-    FillDetailBody()
-end sub
-
-sub onChildSelected()
-    if m.childMenuQuiet = true then return
-    if m.childMenu = invalid then return
-    if MenuDepth() <> "todo" and MenuDepth() <> "fixes" then return
-    index = m.childMenu.selectedIndex
-    if index = invalid or index < 0 then return
-    if MenuDepth() = "todo"
-        menu = TodoMenu()
-        if index < menu.Count() then m.section = menu[index]
-    end if
-    if MenuDepth() = "fixes"
-        m.section = "fixes"
-        m.issueIndex = index
-    end if
-    m.railIndex = index
-    FinishNav(NextNav(MenuDepth(), "rail", m.section, m.railIndex, "OK"))
+    content = list.content
+    if content = invalid then return
+    last = content.getChildCount() - 1
+    if last < 0 then return
+    for index = 0 to last
+        row = content.getChild(index)
+        if row <> invalid and row.hasField("lit") then row.lit = (index = m.railIndex)
+    end for
+    if m.railIndex >= 0 and m.railIndex <= last then list.jumpToItem = m.railIndex
 end sub
 
 function CurrentTileSection() as string
@@ -779,7 +747,6 @@ end function
 sub ResetMenuMotion()
     m.menuBusy = false
     m.slideOpen = false
-    m.fixesShown = false
     if m.menuAnim <> invalid
         m.menuAnim.control = "stop"
         if m.top <> invalid then m.top.removeChild(m.menuAnim)
@@ -794,23 +761,13 @@ sub ResetMenuMotion()
 end sub
 
 sub SyncMenuMotion()
+    ' Build 32: Quick Fixes slides in the same submenu as Things to Do.
     opening = false
-    if MenuDepth() = "todo" then opening = true
+    if MenuDepth() = "todo" or MenuDepth() = "fixes" then opening = true
     if m.slideOpen = invalid then m.slideOpen = false
     if opening <> m.slideOpen
         m.slideOpen = opening
         RunRailSlide(opening)
-    end if
-    showFixes = false
-    if m.section = "fixes" then showFixes = true
-    if m.fixesShown = invalid then m.fixesShown = false
-    if showFixes <> m.fixesShown
-        m.fixesShown = showFixes
-        if showFixes = true
-            RunFixesSlide()
-        else if m.fixesPane <> invalid
-            m.fixesPane.translation = [0, 0]
-        end if
     end if
 end sub
 
@@ -828,12 +785,6 @@ sub RunRailSlide(opening as boolean)
         m.railChild.visible = true
         StartVectorSlide("railChild.translation", [0, 0], [wide, 0])
     end if
-end sub
-
-sub RunFixesSlide()
-    if m.fixesPane = invalid then return
-    m.fixesPane.translation = [56, 0]
-    StartVectorSlide("fixesPane.translation", [56, 0], [0, 0])
 end sub
 
 function SimulatorRun() as boolean
@@ -877,7 +828,6 @@ end sub
 
 sub ApplySlideEnd(firstField as string, firstTo as object, secondField as string, secondTo as object)
     if firstField = "railChild.translation" and m.railChild <> invalid then m.railChild.translation = firstTo
-    if firstField = "fixesPane.translation" and m.fixesPane <> invalid then m.fixesPane.translation = firstTo
     if secondField = "railChild.translation" and m.railChild <> invalid then m.railChild.translation = secondTo
     m.menuBusy = false
     if m.slideOpen = true
@@ -889,6 +839,19 @@ sub ApplySlideEnd(firstField as string, firstTo as object, secondField as string
         end if
         if m.railChild <> invalid then m.railChild.visible = false
     end if
+end sub
+
+sub FinishMenuSlide()
+    anim = m.menuAnim
+    m.menuAnim = invalid
+    if anim <> invalid
+        anim.unobserveField("state")
+        anim.control = "stop"
+        if m.top <> invalid then m.top.removeChild(anim)
+    end if
+    target = [RailW(), 0]
+    if m.slideOpen = true then target = [0, 0]
+    ApplySlideEnd("railChild.translation", target, "", [0, 0])
 end sub
 
 sub onMenuSlideState()
@@ -1090,27 +1053,10 @@ function NumberText(value as object) as string
     return value.ToStr()
 end function
 
+' Build 32 (Blake's TV lockup): the scene owns remote focus in every zone.
+' b31 handed focus to the submenu MarkupList; the list ate Up/Down itself
+' and kept focus after the submenu slid away, so Down did nothing.
 sub HoldFocus()
-    if m.zone = "item" and m.detailScroll <> invalid
-        text = m.detailScroll.scrollText
-        if text <> invalid
-            text.setFocus(true)
-            return
-        end if
-    end if
-    if m.zone = "rail"
-        if MenuDepth() = "todo" or MenuDepth() = "fixes"
-            if m.childMenu <> invalid
-                list = m.childMenu.list
-                if list <> invalid
-                    list.setFocus(true)
-                    return
-                end if
-                m.childMenu.setFocus(true)
-                return
-            end if
-        end if
-    end if
     focused = true
     try
         focused = m.top.hasFocus()

@@ -146,7 +146,7 @@ end function
 
 function ReadWifiCache() as object
     EnsureWifiDir()
-    text = ReadAsciiFile(WifiJsonPath())
+    text = ReadIfPresent(WifiJsonPath())
     parsed = ParseWifiDocument(text)
     if parsed = invalid then return invalid
     png = "no"
@@ -463,4 +463,16 @@ function ReadWifiGeneration() as integer
     end while
     if generation = invalid then return 0
     return generation
+end function
+
+' Build 32: Roku logs "ReadAsciiFile: file open for read failed" for every
+' missing file, so check first. A missing cache is normal on a cold start.
+function ReadIfPresent(path as string) as string
+    if path = invalid or path = "" then return ""
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return ""
+    if fs.Exists(path) <> true then return ""
+    text = ReadAsciiFile(path)
+    if text = invalid then return ""
+    return text
 end function

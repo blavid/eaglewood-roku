@@ -56,8 +56,8 @@ def todo(child: str) -> list[str]:
 def screens() -> list[dict]:
     s: list[dict] = []
 
-    def add(slug: str, keys: list[str], shows: str, stage: str = "key", wait: float = 0.0, need: str = "", same_as: str = "") -> None:
-        s.append({"slug": slug, "keys": keys, "shows": shows, "stage": stage, "wait": wait, "need": need, "same_as": same_as})
+    def add(slug: str, keys: list[str], shows: str, stage: str = "key", wait: float = 0.0, need: str = "", same_as: str = "", ecp: list[str] | None = None, visits: list[str] | None = None) -> None:
+        s.append({"slug": slug, "keys": keys, "shows": shows, "stage": stage, "wait": wait, "need": need, "same_as": same_as, "ecp": ecp or [], "visits": visits or []})
 
     add("home-prompt-focus", [], "Home, Book Direct strip focused, QR card and badge")
     add("home-rail-focus", rail("home"), "Home, rail Home row focused")
@@ -110,6 +110,19 @@ def screens() -> list[dict]:
     add("fixes-long-detail", rail("fixes") + ["Select", "Right"], "Fixture long fix after Right: detail zone hint Up/Down Scroll", stage="longfix")
     add("fixes-long-scrolled", rail("fixes") + ["Select", "Right", "Down", "Down", "Down"], "Fixture long fix after Right then Down x3: steps scrolled", stage="longfix")
     add("fixes-long-left", rail("fixes") + ["Select", "Right", "Down", "Left"], "Fixture long fix, Left from the steps returns to the fix list", stage="longfix")
+    # Build 32: Quick Fixes is the same sliding submenu as Things to Do.
+    add("fixes-steps-01", rail("fixes") + ["Select", "Select"], "Quick Fixes issue 1 steps opened with OK (zone item)")
+    add("fixes-steps-03", rail("fixes") + ["Select", "Down", "Down", "Right"], "Quick Fixes issue 3 steps opened with Right")
+    add("fixes-steps-back", rail("fixes") + ["Select", "Down", "Right", "Back"], "Back from the steps returns to the fix submenu on issue 2", same_as="fixes-detail-02")
+    add("fixes-slide-out", rail("fixes") + ["Select", "Down", "Back"], "Back from the fix submenu slides it out to the rail on Quick Fixes", same_as="rail-fixes-focus")
+    add("todo-slide-out", todo("dining") + ["Back"], "Back from the Things to Do submenu slides it out to the rail", same_as="rail-todo-focus")
+    # Build 32: Blake's TV path, sent as real ECP key presses so they go
+    # through roSGScreen focus and onKeyEvent. Each press must log focus=scene.
+    blake = ["Left", "Down", "Down", "Select", "Down", "Down", "Up", "Up", "Right", "Right", "Down", "Up", "Left", "Left", "Down", "Up", "Back",
+             "Down", "Select", "Back", "Down", "Select", "Down", "Down", "Right", "Down", "Back", "Up", "Back",
+             "Down", "Select", "Back", "Down", "Select", "Back", "Up", "Up", "Up", "Up", "Up", "Up", "Select", "Back", "Up", "Up"]
+    add("blake-path-focus", [], "Blake's TV path (Things to Do, Dining, moves, back out, every section) as ECP keys; ends on Home rail", ecp=blake, same_as="home-rail-focus",
+        visits=["todo", "dining", "rules", "fixes", "book", "checkout", "home"])
     add("rail-book-focus", rail("book"), "Rail Book Direct focused")
     add("book-direct", rail("book") + ["Select"], "Book Direct page")
     add("rail-checkout-focus", rail("checkout"), "Rail Checkout focused")
@@ -263,7 +276,7 @@ def wait_log(text: str, seconds: float) -> None:
     raise RuntimeError(f"emulator did not log {text!r}\n{log_text()[-1500:]}")
 
 
-def launch(stage: Path, keys: list[str]) -> None:
+def launch(stage: Path, keys: list[str], ecp: bool = False) -> None:
     stop()
     for f in (LOG, SNAP):
         if f.exists():
@@ -272,12 +285,42 @@ def launch(stage: Path, keys: list[str]) -> None:
     link = f" --deep-link emuKeys={'-'.join(keys)}" if keys else ""
     cmd = (
         f"export BRS_NO_UPDATE_CHECK=1 BRS_ECP_PORT={PORT} NODE_PATH={NODE_PATH}; "
-        f"{CLI} --root {stage} --snapshot {SNAP} --log {LOG} --colors 0{link}"
+        f"{CLI} --root {stage} --snapshot {SNAP} --log {LOG} --colors 0{link}{' --ecp' if ecp else ''}"
     )
     tmux("send-keys", "-t", f"{SESSION}:0.0", cmd, "C-m")
     wait_log("zone=prompt", 60)
     if keys:
         wait_log("emu keys done", 60)
+
+
+ECP_NAMES = {"Left": "Left", "Right": "Right", "Up": "Up", "Down": "Down", "Select": "Select", "Back": "Back"}
+
+
+def send_ecp(keys: list[str]) -> None:
+    for key in keys:
+        urlopen(Request(f"http://127.0.0.1:{PORT}/keypress/{ECP_NAMES[key]}", data=b"", method="POST"), timeout=5).read()
+        time.sleep(0.9)
+
+
+def focus_problems(keys: list[str], visits: list[str]) -> str:
+    """Every ECP press must reach the scene with focus=scene, and the path must visit each section in order."""
+    lines = log_text().splitlines()
+    presses = [l for l in lines if re.search(r"Eaglewood: key \S+ press=true", l)]
+    if len(presses) != len(keys):
+        return f"{len(presses)} of {len(keys)} key presses reached onKeyEvent"
+    stuck = [l for l in presses if "focus=scene" not in l]
+    if stuck:
+        return f"{len(stuck)} press(es) without scene focus: {stuck[0].strip()}"
+    if any("Eaglewood: key error" in l for l in lines):
+        return "key error logged"
+    screens = [m.group(1) for m in (re.search(r"Eaglewood: screen=(\S+)", l) for l in lines) if m]
+    at = 0
+    for want in visits:
+        while at < len(screens) and screens[at] != want:
+            at += 1
+        if at == len(screens):
+            return f"path never reached {want} in order"
+    return ""
 
 
 def qr_ready(tag: str) -> bool:
@@ -306,11 +349,11 @@ def snapshot() -> bytes:
     raise RuntimeError("snapshot was not saved")
 
 
-def launch_retrying(stage, keys) -> None:
+def launch_retrying(stage, keys, ecp: bool = False) -> None:
     # brs-node sometimes stalls before the key timer runs; a fresh process fixes it.
     for attempt in range(3):
         try:
-            launch(stage, keys)
+            launch(stage, keys, ecp)
             return
         except RuntimeError as err:
             if "did not log" not in str(err) or attempt == 2:
@@ -335,7 +378,10 @@ def main() -> None:
                 tries = 0
                 while True:
                     tries += 1
-                    launch_retrying(stages[item["stage"]], item["keys"])
+                    launch_retrying(stages[item["stage"]], item["keys"], bool(item["ecp"]))
+                    if item["ecp"]:
+                        time.sleep(4)
+                        send_ecp(item["ecp"])
                     time.sleep(float(os.environ.get("EMU_SETTLE", "12")) + item["wait"])
                     if not item["need"] or qr_ready(item["need"]) or tries >= 4:
                         break
@@ -352,6 +398,11 @@ def main() -> None:
                 else:
                     seen[digest] = item["slug"]
                     status = "captured"
+                if item["ecp"] and status != "fail":
+                    problem = focus_problems(item["ecp"], item["visits"])
+                    note = problem or f"{len(item['ecp'])} ECP presses, every one focus=scene; visited {', '.join(item['visits'])}"
+                    if problem:
+                        status = "fail"
                 errors = [l for l in log_text().splitlines() if "error" in l.lower() and "Eaglewood" in l]
                 if errors:
                     status, note = "fail", "; ".join(errors[:2])

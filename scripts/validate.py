@@ -532,10 +532,10 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 29 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 32 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 29 "' not in scene:
-        fail("startup must log build 29 and the commit")
+    if 'print "Eaglewood: build 32 "' not in scene:
+        fail("startup must log build 32 and the commit")
     if "decor-heart" in phase2:
         fail("the Book Direct heart poster is still in the scene")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")

@@ -46,6 +46,8 @@ The left rail, the Things to Do list, and the Quick Fixes list all come from one
 
 `source` on Quick Fixes is `guide.troubleshooting`. The list titles and the scrolling steps are read from `guide.json` troubleshooting. The Wi-Fi how-to stays off that list. Do not paste the steps into `menu.json`.
 
+The format did not change in build 32. Quick Fixes and Things to Do now open the same sliding submenu, built by the same MenuPanel component. Each fix is a submenu row with a chevron. Focusing a row previews its steps. Right or OK opens the scrolling steps, and Back or Left returns to the row. Back from the submenu slides it out to the rail.
+
 ## Edits
 
 1. Rename a row: change its `label`.

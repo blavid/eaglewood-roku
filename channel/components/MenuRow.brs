@@ -35,13 +35,21 @@ sub showContent()
     end if
     if m.label <> invalid then m.label.text = title
     if m.chevron <> invalid then m.chevron.text = mark
+    if content <> invalid and content.hasField("lit")
+        content.observeField("lit", "showFocus")
+    end if
+    showFocus()
 end sub
 
 ' MarkupListExample sets the focus graphic opacity from focusPercent.
 sub showFocus()
-    amount = m.top.focusPercent
-    if amount = invalid then amount = 0
-    if m.top.itemHasFocus = true then amount = 1
+    ' Build 32: the list never takes remote focus (the scene drives it), so
+    ' the highlight comes from the row's "lit" field, not focusPercent.
+    amount = 0
+    content = m.top.itemContent
+    if content <> invalid and content.hasField("lit")
+        if content.lit = true then amount = 1
+    end if
     if m.cursor <> invalid then m.cursor.opacity = amount
     if amount > 0.5
         if m.label <> invalid then m.label.color = "0x1C1408FF"

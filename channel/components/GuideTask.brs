@@ -324,9 +324,7 @@ function HeaderValue(headers as object, name as string) as string
 end function
 
 function ReadText(path as string) as string
-    text = ReadAsciiFile(path)
-    if text = invalid then return ""
-    return text
+    return ReadIfPresent(path)
 end function
 
 function WriteText(path as string, body as string) as boolean
@@ -462,4 +460,16 @@ function ReadGuideGeneration() as integer
     end while
     if generation = invalid then return 0
     return generation
+end function
+
+' Build 32: Roku logs "ReadAsciiFile: file open for read failed" for every
+' missing file, so check first. A missing cache is normal on a cold start.
+function ReadIfPresent(path as string) as string
+    if path = invalid or path = "" then return ""
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return ""
+    if fs.Exists(path) <> true then return ""
+    text = ReadAsciiFile(path)
+    if text = invalid then return ""
+    return text
 end function
