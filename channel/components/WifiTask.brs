@@ -169,8 +169,8 @@ function ParseWifiDocument(body as object) as object
     if body = "" or Len(body) > 2048 then return invalid
     parsed = ParseJson(body)
     if parsed = invalid or type(parsed) <> "roAssociativeArray" then return invalid
-    ssid = GuideLimitedText(parsed.Lookup("ssid"), 64)
-    password = GuideLimitedText(parsed.Lookup("password"), 64)
+    ssid = GuideLimitedText(AaField(parsed, "ssid"), 64)
+    password = GuideLimitedText(AaField(parsed, "password"), 64)
     if ssid = "" or password = "" then return invalid
     return { ssid: ssid, password: password }
 end function
@@ -292,6 +292,9 @@ function CommitWifiPng() as string
         return WifiPngPath()
     end if
     stored = CommitQrBytes("wifi", data, busy)
+    if stored = invalid or stored = ""
+        if data.WriteFile(WifiPngPath()) = true then stored = WifiPngPath()
+    end if
     DeleteWifiFile(WifiPngTempPath())
     return stored
 end function

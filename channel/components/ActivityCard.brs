@@ -58,27 +58,13 @@ sub paintCard()
 end sub
 
 function SeasonChipText(season as string) as string
-    if season = invalid or season = "" then return ""
-    lower = LCase(season)
-    if Instr(1, lower, "seasonal") > 0 then return "Seasonal"
-    roundLabel = "Year"
-    roundLabel = roundLabel + "-round"
-    if Instr(1, lower, "year-round") > 0 then return roundLabel
-    if Instr(1, lower, "year round") > 0 then return roundLabel
-    if Len(season) <= 21 then return season
-    index = 21
-    while index > 8
-        if Mid(season, index, 1) = " " then return Left(season, index - 1)
-        index = index - 1
-    end while
-    return Left(season, 21)
+    if season = invalid then return ""
+    return season
 end function
 
 function ChipWidthFor(season as string) as integer
-    width = (Len(season) * 14) + 36
-    if width < 180 then width = 180
-    if width > 336 then width = 336
-    return width
+    if season = invalid or season = "" then return 0
+    return 332
 end function
 
 sub PaintChip(season as string)

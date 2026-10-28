@@ -55,9 +55,9 @@ def main() -> None:
     for index in range(5):
         color = GOLD if index % 2 == 0 else CARD
         box(draw, (588 + index * 226, 788, 214, 88), color)
-    box(draw, (1496, 830, 220, 228), CREAM)
-    box(draw, (1496 + 46, 830 + 42, 128, 128), (40, 40, 40, 255))
-    draw.text((1504, 830 + 186), "sunrivertownhome.com", fill=GOLD, font=font)
+    box(draw, (1380, 832, 520, 200), CREAM)
+    box(draw, (1380 + 196, 832 + 12, 128, 128), (40, 40, 40, 255))
+    draw.text((1392, 832 + 156), "sunrivertownhome.com", fill=(138, 90, 0, 255), font=font)
     left = QR_X - CARD_X
     right = CARD_X + CARD_W - QR_X - QR_W
     top = QR_Y - CARD_Y

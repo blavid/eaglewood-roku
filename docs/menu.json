@@ -59,7 +59,7 @@
       ]
     },
     { "id": "rules", "label": "House Rules", "type": "rules" },
-    { "id": "fixes", "label": "Quick Fixes", "type": "quickfixes" },
+    { "id": "fixes", "label": "Quick Fixes", "type": "quickfixes", "source": "guide.troubleshooting" },
     { "id": "book", "label": "Book Direct", "type": "book" },
     { "id": "checkout", "label": "Checkout Instructions", "type": "checkout" }
   ]

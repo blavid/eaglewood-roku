@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Long copy for Quick Fixes and activity details.
+     ScrollableTextExample sets width and height from the frame, left/top
+     alignment, and scrolltext.setFocus(true). -->
+<component name="DetailScroll" extends="Group">
+    <interface>
+        <field id="body" type="string" onChange="onBody" />
+        <field id="frameWidth" type="integer" onChange="onFrame" value="1132" />
+        <field id="frameHeight" type="integer" onChange="onFrame" value="412" />
+        <field id="scrollText" type="node" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/DetailScroll.brs" />
+    <children>
+        <Rectangle id="frame" width="1132" height="640" color="0x1A2438FF" />
+        <ScrollableText
+            id="bodyText"
+            translation="[20, 20]"
+            width="1092"
+            height="548"
+            font="font:SmallSystemFont"
+            color="0xFFFFFFF2"
+            horizAlign="left"
+            vertAlign="top" />
+        <Label
+            id="hint"
+            translation="[20, 588]"
+            width="1092"
+            height="40"
+            wrap="true"
+            maxLines="2"
+            text="Up/Down scroll    Back to the list"
+            color="0xD5DBE8FF"
+            font="font:SmallSystemFont" />
+    </children>
+</component>

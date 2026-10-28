@@ -9,47 +9,49 @@
     <script type="text/brightscript" uri="pkg:/components/ActivityCard.brs" />
 
     <children>
-        <Rectangle id="ring" width="364" height="252" color="0xF2A93BFF" visible="false" />
-        <Rectangle id="fill" translation="[5, 5]" width="354" height="242" color="0x1A2438F2" />
-        <Rectangle id="swatch" translation="[5, 5]" width="354" height="150" color="0x5C4033FF" />
+        <Rectangle id="ring" width="364" height="488" color="0xF2A93BFF" visible="false" />
+        <Rectangle id="fill" translation="[5, 5]" width="354" height="478" color="0x1A2438F2" />
+        <Rectangle id="swatch" translation="[5, 5]" width="354" height="96" color="0x5C4033FF" />
         <Poster
             id="photo"
             translation="[5, 5]"
             width="354"
-            height="150"
+            height="96"
             loadWidth="354"
-            loadHeight="150"
+            loadHeight="96"
             loadDisplayMode="scaleToZoom"
             failedBitmapUri="pkg:/images/tv-placeholder.jpg"
             loadingBitmapUri="pkg:/images/tv-placeholder.jpg" />
-        <Rectangle id="chip" translation="[16, 16]" width="132" height="32" color="0xF2A93BFF" />
+        <Rectangle id="chip" translation="[16, 104]" width="332" height="99" color="0xF2A93BFF" />
         <Label
             id="chipText"
-            translation="[16, 16]"
-            width="132"
-            height="32"
+            translation="[16, 104]"
+            width="332"
+            height="99"
             horizAlign="center"
             vertAlign="center"
-            wrap="false"
+            wrap="true"
+            maxLines="3"
             color="0x1C1408FF"
             font="font:SmallestBoldSystemFont" />
         <Label
             id="name"
-            translation="[16, 158]"
+            translation="[16, 208]"
             width="332"
-            height="64"
+            height="200"
             wrap="true"
-            maxLines="2"
+            maxLines="5"
             vertAlign="top"
             color="0xFFFFFFFF"
             font="font:SmallBoldSystemFont" />
         <Label
             id="distance"
-            translation="[16, 222]"
+            translation="[16, 412]"
             width="332"
-            height="22"
-            wrap="false"
-            maxLines="1"
+            height="66"
+            wrap="true"
+            maxLines="2"
+            vertAlign="top"
             color="0xD5DBE8FF"
             font="font:SmallestSystemFont" />
     </children>

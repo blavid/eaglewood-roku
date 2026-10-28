@@ -249,17 +249,34 @@ sub Main()
         failed = failed + 1
     end if
     frame = BadgeFrame()
-    if frame.x <> 1496 or frame.y <> 830 or frame.qrX <> 46 or frame.qrY <> 42 or frame.qr <> 128
-        print "FAIL the corner badge left the build 18 size and position"
+    if frame.x <> 1380 or frame.y <> 832 or frame.w <> 520 or frame.h <> 200 or frame.qr <> 128
+        print "FAIL the corner badge is not the wide bottom-right card"
         failed = failed + 1
     end if
-    if frame.captionY <> 176 or frame.captionH <> 44 or frame.captionY < frame.qrY + frame.qr
-        print "FAIL the gold caption is not directly under the corner QR"
+    if frame.qrX <> 196 or frame.qrY <> 12
+        print "FAIL the corner QR is not centered in the wide card"
+        failed = failed + 1
+    end if
+    if frame.captionY <> 148 or frame.captionH <> 44 or frame.captionW <> 496 or frame.captionY < frame.qrY + frame.qr
+        print "FAIL the domain caption is not directly under the corner QR"
         failed = failed + 1
     end if
     if frame.captionY + frame.captionH > frame.h
-        print "FAIL the gold caption is clipped by the badge card"
+        print "FAIL the domain caption is clipped by the badge card"
         failed = failed + 1
+    end if
+    if BadgeCaptionColor() <> "0x8A5A00FF"
+        print "FAIL the badge caption is not the dark gold"
+        failed = failed + 1
+    end if
+    domainWide = PessimisticCharWidth(20) * Len(DisplayDomain())
+    if domainWide < 1 or frame.captionW < domainWide
+        print "FAIL the domain caption is narrower than the pessimistic text"
+        failed = failed + 1
+    else
+        captionMargin = ((frame.captionW - domainWide) * 100) \ domainWide
+        print "Eaglewood: badge caption margin="; captionMargin; "% width="; frame.captionW; " text="; domainWide
+        if captionMargin < 20 then failed = failed + 1
     end if
     if RectsClear(BadgeCaptionRect(), CheckoutTileRect(), 24) <> true
         print "FAIL the badge caption overlaps the Checkout tile"
@@ -432,8 +449,8 @@ sub Main()
         print "FAIL navigation still reparents the corner badge"
         failed = failed + 1
     end if
-    if frame.x <> 1496 or frame.y <> 830
-        print "FAIL the corner badge translation left build 20"
+    if frame.x <> 1380 or frame.y <> 832
+        print "FAIL the corner badge translation left the wide card"
         failed = failed + 1
     end if
 
@@ -525,9 +542,12 @@ sub Main()
         print "FAIL the checkout tile title leaves the tile"
         failed = failed + 1
     end if
-    navLines = WrapGreeting(RailLabel("checkout"), RailLabelWidth(), invalid, FallbackCharWidth(NavFontSize()))
-    print "Eaglewood: checkout nav lines="; navLines.Count(); " rect=220,592 "; RailLabelWidth(); "x"; RailRowHeight()
-    tileLines = WrapGreeting(TileTitle("checkout"), titleBox.w, invalid, FallbackCharWidth(36))
+    navLines = WrapGreeting(RailLabel("checkout"), CheckoutLabelWidth(), invalid, PessimisticCharWidth(NavFontSize()))
+    navWord = LongestWordWidth(RailLabel("checkout"), PessimisticCharWidth(NavFontSize()))
+    navMargin = 0
+    if navWord > 0 then navMargin = ((CheckoutLabelWidth() - navWord) * 100) \ navWord
+    print "Eaglewood: checkout nav lines="; navLines.Count(); " width="; CheckoutLabelWidth(); " height="; RailRowHeight(); " margin="; navMargin; "%"
+    tileLines = WrapGreeting(TileTitle("checkout"), titleBox.w, invalid, PessimisticCharWidth(NavFontSize()))
     print "Eaglewood: checkout tile lines="; tileLines.Count(); " rect="; titleBox.x; ","; titleBox.y; " "; titleBox.w; "x"; titleBox.h; " tile="; ScreenRectText(tile)
 
     if ShownBrand("") <> "Eaglewood 19" or ShownBrand("Eaglewood") <> "Eaglewood 19"
@@ -547,6 +567,7 @@ sub Main()
     failed = failed + ExpectActivityMenus()
     failed = failed + ExpectBrandCopy()
     failed = failed + ExpectTextFit()
+    failed = failed + ExpectScroll()
     failed = failed + PrintNavTrace()
 
     if failed = 0 then print "brs phase2 checks passed"
@@ -703,9 +724,9 @@ end function
 
 function ExpectTextFit() as integer
     missed = 0
+    fullSeason = "Year-round (seasonal trail conditions vary)"
     if SeasonChipText("Year-round") <> "Year-round" then missed = missed + 1
-    if SeasonChipText("Year-round (seasonal trail conditions vary)") <> "Seasonal" then missed = missed + 1
-    if SeasonChipText("Seasonal — check the dates") <> "Seasonal" then missed = missed + 1
+    if SeasonChipText(fullSeason) <> fullSeason then missed = missed + 1
     if ChipWidthFor("Year-round") < 168 then missed = missed + 1
     text = ReadAsciiFile("pkg:/data/activities.json")
     norm = NormalizeActivities(ParseObjectText(text))
@@ -713,17 +734,105 @@ function ExpectTextFit() as integer
     last = norm.items.Count() - 1
     for index = 0 to last
         item = norm.items[index]
-        name = ItemText(item, "name")
-        lines = WrapGreeting(name, 332, invalid, FallbackCharWidth(27))
-        if lines.Count() > 2 then print "FIT title "; name
-        distance = ItemText(item, "distance")
-        if MeasureText(distance, invalid, FallbackCharWidth(20)) > 332 then print "FIT subtitle "; distance
-        chip = SeasonChipText(ItemText(item, "seasonLabel"))
-        if chip <> ""
-            if MeasureText(chip, invalid, 14) + 36 > ChipWidthFor(chip) then print "FIT tag "; chip
+        if LabelFitsBox(ItemText(item, "name"), CardNameBox()) <> true
+            shown = ItemText(item, "name")
+            wrapped = WrapGreeting(shown, CardNameBox().w, invalid, PessimisticCharWidth(27))
+            print "FIT name "; shown; " lines="; wrapped.Count(); " word="; LongestWordWidth(shown, PessimisticCharWidth(27))
+            missed = missed + 1
+        end if
+        if LabelFitsBox(ItemText(item, "distance"), CardDistanceBox()) <> true
+            print "FIT distance "; ItemText(item, "distance")
+            missed = missed + 1
+        end if
+        if LabelFitsBox(ItemText(item, "seasonLabel"), CardSeasonBox()) <> true
+            print "FIT season "; ItemText(item, "seasonLabel")
+            missed = missed + 1
         end if
     end for
+    guide = ParseObjectText(ReadAsciiFile("pkg:/data/guide.json"))
+    issues = []
+    if IsAssoc(guide) then issues = IssuesForFixes(guide.Lookup("troubleshooting"))
+    issueLast = issues.Count() - 1
+    if issueLast >= 0
+        for index = 0 to issueLast
+            title = AsText(issues[index].Lookup("issue"))
+            if LabelFitsBox(title, MenuTitleBox()) <> true
+                print "FIT issue "; title
+                missed = missed + 1
+            end if
+        end for
+    end if
+    menus = TopMenu()
+    menuLast = menus.Count() - 1
+    if menuLast >= 0
+        for index = 0 to menuLast
+            label = RailLabel(menus[index])
+            wide = RailLabelWidth()
+            if RailChevron(menus[index]) = "" then wide = CheckoutLabelWidth()
+            fit = { w: wide, h: RailRowHeight(), maxLines: 2, size: NavFontSize() }
+            if LabelFitsBox(label, fit) <> true
+                print "FIT rail "; label
+                missed = missed + 1
+            end if
+        end for
+    end if
+    if LabelFitsBox(WifiFallbackMessage(), { w: 368, h: 336, maxLines: 8, size: 27 }) <> true
+        print "FIT wifi fallback"
+        missed = missed + 1
+    end if
+    print "ellipsis failures="; missed
     if missed <> 0 then print "FAIL text fit"
+    return missed
+end function
+
+function ExpectScroll() as integer
+    missed = 0
+    guide = ParseObjectText(ReadAsciiFile("pkg:/data/guide.json"))
+    issues = []
+    if IsAssoc(guide) then issues = IssuesForFixes(guide.Lookup("troubleshooting"))
+    longestFix = ""
+    fixLines = 0
+    issueLast = issues.Count() - 1
+    if issueLast >= 0
+        for index = 0 to issueLast
+            m.issueIndex = index
+            m.fixIssues = issues
+            body = FixScrollText()
+            lines = CountWrapped(body, DetailTextWidth(), PessimisticCharWidth(ScrollFontSize()))
+            if lines > fixLines
+                fixLines = lines
+                longestFix = body
+            end if
+        end for
+    end if
+    m.issueIndex = 0
+    fixHeight = ScrollContentHeight(longestFix, DetailTextWidth())
+    fixRange = ScrollRange(longestFix, DetailTextWidth(), FixScrollViewport())
+    print "Eaglewood: scroll fixes lines="; fixLines; " contentH="; fixHeight; " viewport="; FixScrollViewport(); " range="; fixRange
+    acts = NormalizeActivities(ParseObjectText(ReadAsciiFile("pkg:/data/activities.json")))
+    dining = []
+    if acts <> invalid then dining = ActivitiesForScreen(acts.items, "dining")
+    longestDining = ""
+    diningLines = 0
+    diningLast = dining.Count() - 1
+    if diningLast >= 0
+        for index = 0 to diningLast
+            item = dining[index]
+            body = ItemText(item, "description")
+            tip = ItemText(item, "tip")
+            if tip <> "" then body = body + Chr(10) + "Tip: " + tip
+            lines = CountWrapped(body, DetailTextWidth(), PessimisticCharWidth(ScrollFontSize()))
+            if lines > diningLines
+                diningLines = lines
+                longestDining = body
+            end if
+        end for
+    end if
+    diningHeight = ScrollContentHeight(longestDining, DetailTextWidth())
+    diningRange = ScrollRange(longestDining, DetailTextWidth(), ActivityScrollViewport())
+    print "Eaglewood: scroll dining lines="; diningLines; " contentH="; diningHeight; " viewport="; ActivityScrollViewport(); " range="; diningRange
+    if fixLines < 1 or diningLines < 1 then missed = missed + 1
+    if missed <> 0 then print "FAIL scroll range"
     return missed
 end function
 
@@ -787,11 +896,15 @@ function PrintNavTrace() as integer
     rulesOk = NextNav("top", "rail", "rules", 3, "OK")
     missed = missed + ExpectState(rulesOk, "top", "panel", "rules", 3, "ok-rules")
     fixesOk = NextNav("top", "rail", "fixes", 4, "OK")
-    missed = missed + ExpectState(fixesOk, "top", "list", "fixes", 4, "ok-fixes")
+    missed = missed + ExpectState(fixesOk, "fixes", "rail", "fixes", 0, "ok-fixes")
     fixesRight = NextNav("top", "rail", "fixes", 4, "right")
-    missed = missed + ExpectState(fixesRight, "top", "list", "fixes", 4, "right-fixes")
-    fixesBack = NextNav("top", "rail", "fixes", 4, "back")
-    missed = missed + ExpectState(fixesBack, "top", "rail", "home", 0, "back-fixes")
+    missed = missed + ExpectState(fixesRight, "fixes", "rail", "fixes", 0, "right-fixes")
+    fixesOpen = NextNav("fixes", "rail", "fixes", 0, "OK")
+    missed = missed + ExpectState(fixesOpen, "fixes", "item", "fixes", 0, "ok-fix-detail")
+    fixesDetailBack = NextNav("fixes", "item", "fixes", 0, "back")
+    missed = missed + ExpectState(fixesDetailBack, "fixes", "rail", "fixes", 0, "back-fix-detail")
+    fixesBack = NextNav("fixes", "rail", "fixes", 0, "back")
+    missed = missed + ExpectState(fixesBack, "top", "rail", "fixes", 4, "back-fixes")
     bookOk = NextNav("top", "rail", "book", 5, "OK")
     missed = missed + ExpectState(bookOk, "top", "panel", "book", 5, "ok-book")
     opened = NextNav(up.depth, up.zone, up.section, up.index, "OK")

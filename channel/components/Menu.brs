@@ -98,6 +98,7 @@ function NormalizeMenu(parsed as object) as object
         item["section"] = SectionForMenuType(kind)
         item["label"] = GuideLimitedText(AaField(entry, "label"), 80)
         item["type"] = kind
+        item["feed"] = GuideLimitedText(AaField(entry, "source"), 80)
         children = []
         if kind = "things"
             rawChildren = AaField(entry, "children")
@@ -115,6 +116,32 @@ function NormalizeMenu(parsed as object) as object
     menu["items"] = items
     menu["source"] = "parsed"
     return menu
+end function
+
+function MenuFeed(section as string) as string
+    doc = ActiveMenuDoc()
+    if doc = invalid then return ""
+    items = doc.Lookup("items")
+    if not IsList(items) then return ""
+    last = items.Count() - 1
+    if last < 0 then return ""
+    for index = 0 to last
+        item = items[index]
+        if IsAssoc(item)
+            if GuideLimitedText(item.Lookup("section"), 40) = section
+                return GuideLimitedText(item.Lookup("feed"), 80)
+            end if
+        end if
+    end for
+    return ""
+end function
+
+function FixesFromGuide() as boolean
+    feed = MenuFeed("fixes")
+    if feed = "" then return true
+    marker = "guide.troubleshooting"
+    if feed = marker then return true
+    return false
 end function
 
 function AcceptMenuText(text as string, source as string) as object
@@ -195,6 +222,7 @@ function BuiltinMenu() as object
     things["children"] = [dining, hiking, winter, summer, fishing, biking]
     rules = { section: "rules", label: "House Rules", type: "rules", children: [] }
     fixes = { section: "fixes", label: "Quick Fixes", type: "quickfixes", children: [] }
+    fixes["feed"] = "guide.troubleshooting"
     book = { section: "book", label: "Book Direct", type: "book", children: [] }
     checkout = { section: "checkout", label: "Checkout Instructions", type: "checkout", children: [] }
     menu["items"] = [home, wifi, things, rules, fixes, book, checkout]

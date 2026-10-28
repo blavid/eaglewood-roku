@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<!-- Shared list for Things to Do and Quick Fixes.
+     MarkupList setup from MarkupListExample/components/markuplistscene.xml.
+     Focus handoff from LabelListPanel/LabelListPanel.brs. -->
+<component name="MenuPanel" extends="Group">
+    <interface>
+        <field id="list" type="node" />
+        <field id="focusedIndex" type="integer" />
+        <field id="selectedIndex" type="integer" alwaysNotify="true" />
+    </interface>
+    <script type="text/brightscript" uri="pkg:/components/MenuPanel.brs" />
+    <children>
+        <MarkupList
+            id="list"
+            itemComponentName="MenuRow"
+            itemSize="[364, 176]"
+            itemSpacing="[0, 4]"
+            numRows="4"
+            drawFocusFeedback="false"
+            vertFocusAnimationStyle="floatingFocus"
+            translation="[12, 64]" />
+    </children>
+</component>

@@ -66,7 +66,7 @@ end sub
 sub BuildBadge(parent as object)
     frame = BadgeFrame()
     group = CreateObject("roSGNode", "Group")
-    group.translation = [1496, 830]
+    group.translation = [1380, 832]
     group.visible = false
     card = AddRect(group, "0xFFFFFFF2", 0, 0, frame.w, frame.h)
     card.visible = false
@@ -76,7 +76,7 @@ sub BuildBadge(parent as object)
     m.badgePoster = CreateObject("roSGNode", "Poster")
     m.badgePoster.id = "badgeQr"
     m.badgePoster.focusable = false
-    m.badgePoster.translation = [46, 42]
+    m.badgePoster.translation = [196, 12]
     m.badgePoster.width = 128
     m.badgePoster.height = 128
     m.badgePoster.loadWidth = 256
@@ -89,7 +89,7 @@ sub BuildBadge(parent as object)
     m.badgeMissing.maxLines = 3
     group.appendChild(m.badgePoster)
     m.badgeDomain = AddLabel(group, DisplayDomain(), QrCaptionFont(), QrCaptionColor(), frame.captionX, frame.captionY, frame.captionW, frame.captionH)
-    m.badgeDomain.color = "0xF2A93BFF"
+    m.badgeDomain.color = BadgeCaptionColor()
     m.badgeDomain.horizAlign = "center"
     m.badgeDomain.vertAlign = "center"
     m.badgeDomain.maxLines = 1
@@ -194,7 +194,7 @@ function BuildWifiPane(parent as object) as object
     pane.visible = false
     parent.appendChild(pane)
     AddLabel(pane, "Join the Wi-Fi", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
-    backing = AddRect(pane, "0xFFFFFFFF", ContentLeft(), ContentTop() + 96, 400, 400)
+    m.wifiBacking = AddRect(pane, "0x1A2438FF", ContentLeft(), ContentTop() + 96, 400, 400)
     m.wifiPoster = CreateObject("roSGNode", "Poster")
     m.wifiPoster.id = "wifiQr"
     m.wifiPoster.focusable = false
@@ -207,10 +207,10 @@ function BuildWifiPane(parent as object) as object
     m.wifiPoster.visible = false
     pane.appendChild(m.wifiPoster)
     m.wifiPoster.observeField("loadStatus", "onWifiPosterStatus")
-    m.wifiMissing = AddLabel(pane, "", "font:SmallSystemFont", "0x1C1408FF", ContentLeft() + 16, ContentTop() + 220, 368, 140)
+    m.wifiMissing = AddLabel(pane, "", "font:SmallSystemFont", "0xFFFFFFF2", ContentLeft() + 16, ContentTop() + 128, 368, 336)
     m.wifiMissing.horizAlign = "center"
-    m.wifiMissing.vertAlign = "center"
-    m.wifiMissing.maxLines = 4
+    m.wifiMissing.vertAlign = "top"
+    m.wifiMissing.maxLines = 8
     textX = ContentLeft() + 430
     textW = 700
     AddLabel(pane, "Network", "font:SmallSystemFont", MuteColor(), textX, ContentTop() + 96, textW, 36)
@@ -241,10 +241,10 @@ function BuildActivityPane(parent as object) as object
     grid = CreateObject("roSGNode", "MarkupGrid")
     grid.translation = [ContentLeft(), ContentTop() + 104]
     grid.itemComponentName = "ActivityCard"
-    grid.itemSize = [364, 252]
+    grid.itemSize = [364, 488]
     grid.itemSpacing = [18, 16]
     grid.numColumns = 3
-    grid.numRows = 2
+    grid.numRows = 1
     grid.drawFocusFeedback = false
     grid.focusable = false
     grid.vertFocusAnimationStyle = "floatingFocus"
@@ -643,16 +643,43 @@ sub PaintWifi()
     if poster = invalid then return
     path = "cachefs:/eaglewood/wifi.png"
     if m.wifiFile <> invalid and m.wifiFile <> "" then path = m.wifiFile
+    plate = ""
     if pngReady
         poster.loadWidth = 480
         poster.loadHeight = 480
         GuardMountQrPoster(poster, path, "wifi")
-        if poster.loadStatus = "ready" and m.wifiMissing <> invalid then m.wifiMissing.text = ""
+    end if
+    drawn = false
+    if pngReady = true
+        if poster.loadStatus = "ready" then drawn = true
+    end if
+    if drawn
+        poster.visible = true
+        if m.wifiBacking <> invalid
+            m.wifiBacking.color = "0xFFFFFFFF"
+            m.wifiBacking.visible = true
+        end if
+        if m.wifiMissing <> invalid
+            m.wifiMissing.text = ""
+            m.wifiMissing.visible = false
+        end if
     else
         poster.visible = false
+        if m.wifiBacking <> invalid
+            m.wifiBacking.color = "0x1A2438FF"
+            m.wifiBacking.visible = true
+        end if
+        if notice = "coming-soon"
+            plate = ComingSoonWifi()
+        else if lines.mode = "fallback"
+            plate = WifiFallbackMessage()
+        else
+            plate = "Join code unavailable"
+        end if
         if m.wifiMissing <> invalid
-            if notice = "coming-soon" then m.wifiMissing.text = ComingSoonWifi()
-            else m.wifiMissing.text = "Join code unavailable"
+            m.wifiMissing.color = "0xFFFFFFF2"
+            m.wifiMissing.text = plate
+            m.wifiMissing.visible = true
         end if
     end if
 end sub
@@ -866,13 +893,19 @@ sub PaintDetail()
     item = ActivityAt(m.sortedCards, m.cardIndex)
     if m.detailName <> invalid then m.detailName.text = ItemText(item, "name")
     if m.detailMeta <> invalid then m.detailMeta.text = DetailMeta(item)
-    if m.detailBody <> invalid then m.detailBody.text = ItemText(item, "description")
-    if m.detailTip <> invalid
-        tip = ItemText(item, "tip")
-        if tip = "" then m.detailTip.text = ""
-        else m.detailTip.text = "Tip: " + tip
+    if m.detailBody <> invalid
+        m.detailBody.text = ""
+        m.detailBody.visible = false
     end if
-    if m.detailExtra <> invalid then m.detailExtra.text = DetailExtra(item)
+    if m.detailTip <> invalid
+        m.detailTip.text = ""
+        m.detailTip.visible = false
+    end if
+    if m.detailExtra <> invalid
+        m.detailExtra.text = ""
+        m.detailExtra.visible = false
+    end if
+    FillDetailBody()
     if m.detailCredit <> invalid then m.detailCredit.text = ItemText(item, "credit")
     if m.detailBack <> invalid then m.detailBack.text = "Back to " + RailLabel(m.section)
     photo = ItemText(item, "poster")
@@ -1069,6 +1102,16 @@ function DetailMeta(item as object) as string
     return JoinBits(bits)
 end function
 
+function ActivityScrollText() as string
+    item = ActivityAt(m.sortedCards, m.cardIndex)
+    text = ItemText(item, "description")
+    tip = ItemText(item, "tip")
+    extra = DetailExtra(item)
+    if tip <> "" then text = text + Chr(10) + "Tip: " + tip
+    if extra <> "" then text = text + Chr(10) + extra
+    return text
+end function
+
 function DetailExtra(item as object) as string
     bits = []
     difficulty = ItemText(item, "difficulty")
@@ -1128,9 +1171,9 @@ end sub
 
 sub ApplyWifiResult(result as object)
     if result = invalid then return
-    m.wifiSsid = AsText(result.ssid)
-    m.wifiPassword = AsText(result.password)
-    m.wifiPng = AsText(result.png)
+    m.wifiSsid = AsText(AaField(result, "ssid"))
+    m.wifiPassword = AsText(AaField(result, "password"))
+    m.wifiPng = AsText(AaField(result, "png"))
     if m.wifiPng = "" then m.wifiPng = "no"
     m.wifiSource = AsText(result.source)
     m.wifiNotice = AsText(result.notice)
@@ -1184,18 +1227,22 @@ function CheckoutTileRect() as object
 end function
 
 ' Build 18 corner. The gold caption sits under the 128px QR, inside the card.
+function BadgeCaptionColor() as string
+    return "0x8A5A00FF"
+end function
+
 function BadgeFrame() as object
     return {
-        x: 1496,
-        y: 830,
-        w: 220,
-        h: 228,
-        qrX: 46,
-        qrY: 42,
+        x: 1380,
+        y: 832,
+        w: 520,
+        h: 200,
+        qrX: 196,
+        qrY: 12,
         qr: 128,
-        captionX: 0,
-        captionY: 176,
-        captionW: 220,
+        captionX: 12,
+        captionY: 148,
+        captionW: 496,
         captionH: 44
     }
 end function

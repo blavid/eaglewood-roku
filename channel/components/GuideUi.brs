@@ -21,7 +21,7 @@ function RailY() as integer
 end function
 
 function RailW() as integer
-    return 372
+    return 388
 end function
 
 function RailH() as integer
@@ -94,7 +94,20 @@ end function
 
 function ActiveMenu(depth as string) as object
     if depth = "todo" then return TodoMenu()
+    if depth = "fixes" then return FixMenu()
     return TopMenu()
+end function
+
+function FixMenu() as object
+    ids = []
+    count = IssueCount()
+    if count < 1 then count = 1
+    index = 0
+    while index < count
+        ids.Push("fixes")
+        index = index + 1
+    end while
+    return ids
 end function
 
 function MenuIndex(menu as object, section as string) as integer
@@ -152,15 +165,19 @@ function ActivityEmptyText(section as string) as string
 end function
 
 function RailLabelWidth() as integer
-    return RailW() - 92
+    return CheckoutLabelWidth() - 44
+end function
+
+function CheckoutLabelWidth() as integer
+    return RailW() - 56
 end function
 
 function RailRowHeight() as integer
-    return 72
+    return 88
 end function
 
 function RailStride() as integer
-    return 80
+    return 96
 end function
 
 function ParentRowY(index as integer) as integer
@@ -176,7 +193,126 @@ function NavFontSize() as integer
 end function
 
 function NavLineHeight() as integer
-    return 34
+    return 44
+end function
+
+function PessimisticCharWidth(size as integer) as integer
+    base = FallbackCharWidth(size)
+    width = (base * 115 + 99) \ 100
+    if width <= base then width = base + 1
+    return width
+end function
+
+function LineBox(size as integer) as integer
+    return size + 13
+end function
+
+function LongestWordWidth(text as string, charWidth as integer) as integer
+    if text = invalid or text = "" then return 0
+    if charWidth < 1 then charWidth = 1
+    best = 0
+    rest = text
+    while Len(rest) > 0
+        space = Instr(1, rest, " ")
+        word = rest
+        if space > 0
+            word = Left(rest, space - 1)
+            rest = Mid(rest, space + 1)
+        else
+            rest = ""
+        end if
+        wide = Len(word) * charWidth
+        if wide > best then best = wide
+    end while
+    return best
+end function
+
+function CountWrapped(text as string, width as integer, charWidth as integer) as integer
+    if text = invalid or text = "" then return 0
+    total = 0
+    rest = text
+    while Len(rest) > 0
+        nl = Instr(1, rest, Chr(10))
+        piece = rest
+        if nl > 0
+            piece = Left(rest, nl - 1)
+            rest = Mid(rest, nl + 1)
+        else
+            rest = ""
+        end if
+        lines = WrapGreeting(piece, width, invalid, charWidth)
+        count = lines.Count()
+        if count < 1 then count = 1
+        total = total + count
+        if total > 80 then return total
+    end while
+    return total
+end function
+
+function ScrollFontSize() as integer
+    return 27
+end function
+
+function ScrollLineSpacing() as integer
+    return 8
+end function
+
+function DetailTextWidth() as integer
+    return ContentWidth() - 64
+end function
+
+function FixScrollViewport() as integer
+    return 320
+end function
+
+function ActivityScrollViewport() as integer
+    return 128
+end function
+
+function ScrollContentHeight(text as string, width as integer) as integer
+    lines = CountWrapped(text, width, PessimisticCharWidth(ScrollFontSize()))
+    return lines * (ScrollFontSize() + ScrollLineSpacing())
+end function
+
+function ScrollRange(text as string, width as integer, viewport as integer) as integer
+    span = ScrollContentHeight(text, width) - viewport
+    if span < 0 then return 0
+    return span
+end function
+
+function MenuTitleBox() as object
+    return { w: 300, h: 160, maxLines: 4, size: 27 }
+end function
+
+function CardNameBox() as object
+    return { w: 332, h: 200, maxLines: 5, size: 27 }
+end function
+
+function CardDistanceBox() as object
+    return { w: 332, h: 66, maxLines: 2, size: 20 }
+end function
+
+function CardSeasonBox() as object
+    return { w: 332, h: 99, maxLines: 3, size: 20 }
+end function
+
+function LabelFitsBox(text as string, fit as object) as boolean
+    if fit = invalid then return false
+    if text = invalid then text = ""
+    if text = "" then return true
+    charWidth = PessimisticCharWidth(fit.size)
+    if LongestWordWidth(text, charWidth) > fit.w then return false
+    lines = WrapGreeting(text, fit.w, invalid, charWidth)
+    count = lines.Count()
+    if count > fit.maxLines then return false
+    if count * LineBox(fit.size) > fit.h then return false
+    last = count - 1
+    if last >= 0
+        for index = 0 to last
+            if lines[index] = "overflow" then return false
+        end for
+    end if
+    return true
 end function
 
 function TileTitleBox() as object
@@ -199,12 +335,12 @@ function LabelLinesFit(text as string, width as integer, charWidth as integer, m
 end function
 
 function CheckoutNavFits() as boolean
-    return LabelLinesFit(RailLabel("checkout"), RailLabelWidth(), FallbackCharWidth(NavFontSize()), 2, NavLineHeight(), RailRowHeight())
+    return LabelLinesFit(RailLabel("checkout"), CheckoutLabelWidth(), PessimisticCharWidth(NavFontSize()), 2, NavLineHeight(), RailRowHeight())
 end function
 
 function CheckoutTileFits() as boolean
     tileBox = TileTitleBox()
-    return LabelLinesFit(TileTitle("checkout"), tileBox.w, FallbackCharWidth(36), 2, 36, tileBox.h)
+    return LabelLinesFit(TileTitle("checkout"), tileBox.w, PessimisticCharWidth(NavFontSize()), 2, NavLineHeight(), tileBox.h)
 end function
 
 function CheckoutHeadingFits() as boolean
@@ -287,11 +423,21 @@ sub BuildShell()
     m.railDock.appendChild(m.railChild)
     AddRect(m.railChild, GlassColor(), 0, 0, RailW(), RailH())
     m.childHeader = AddLabel(m.railChild, "<  Things to Do", "font:SmallBoldSystemFont", AmberColor(), 16, 8, RailW() - 32, 52)
-    m.childItems = []
-    childLast = 7
-    for index = 0 to childLast
-        m.childItems.Push(MakeRailRow(m.railChild, ChildRowY(index)))
-    end for
+    m.childMenu = CreateObject("roSGNode", "MenuPanel")
+    m.railChild.appendChild(m.childMenu)
+    m.childMenuQuiet = false
+    if m.childMenu.list <> invalid
+        menuBox = MenuTitleBox()
+        m.childMenu.list.itemSize = [menuBox.w + 64, menuBox.h + 16]
+        m.childMenu.list.itemSpacing = [0, 4]
+        m.childMenu.list.numRows = 4
+    end if
+    m.childMenu.observeField("focusedIndex", "onChildFocused")
+    m.childMenu.observeField("selectedIndex", "onChildSelected")
+    m.detailScroll = CreateObject("roSGNode", "DetailScroll")
+    m.detailScroll.translation = [ContentLeft(), ContentTop()]
+    m.detailScroll.visible = false
+    shell.appendChild(m.detailScroll)
 
     m.homePane = CreateObject("roSGNode", "Group")
     shell.appendChild(m.homePane)
@@ -314,8 +460,15 @@ sub BuildShell()
 
     m.top.appendChild(shell)
     m.shell = shell
-    ' Once, before the first ShowSection, so the badge stays the last shell child.
+    ' Scroll sits above the detail pane. The badge stays the last shell child.
+    RaiseDetailScroll()
     RaiseBadge()
+end sub
+
+sub RaiseDetailScroll()
+    if m.detailScroll = invalid or m.shell = invalid then return
+    m.shell.removeChild(m.detailScroll)
+    m.shell.appendChild(m.detailScroll)
 end sub
 
 sub BuildTiles(parent as object)
@@ -335,7 +488,7 @@ sub BuildTiles(parent as object)
         outer = AddRect(group, TileColor(), 0, 0, tileW, tileH)
         inner = AddRect(group, TileColor(), 0, 0, tileW, tileH)
         titleBox = TileTitleBox()
-        title = AddLabel(group, TileTitle(sections[index]), "font:MediumBoldSystemFont", InkColor(), titleBox.x, titleBox.y, titleBox.w, titleBox.h)
+        title = AddLabel(group, TileTitle(sections[index]), "font:SmallBoldSystemFont", InkColor(), titleBox.x, titleBox.y, titleBox.w, titleBox.h)
         title.maxLines = 2
         title.vertAlign = "center"
         subLabel = AddLabel(group, "", "font:SmallSystemFont", MuteColor(), 22, 116, tileW - 44, 40)
@@ -373,42 +526,8 @@ end function
 function BuildFixesPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
-    parent.appendChild(pane)
-    m.fixesTitle = AddLabel(pane, "<  Quick Fixes", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
     pane.id = "fixesPane"
-    listX = ContentLeft()
-    listY = ContentTop() + 78
-    m.issueRows = []
-    last = VisibleIssueRows() - 1
-    for index = 0 to last
-        group = CreateObject("roSGNode", "Group")
-        group.translation = [listX, listY + (index * 66)]
-        bg = AddRect(group, "0x00000000", 0, 0, 456, 60)
-        label = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 16, 0, 424, 60)
-        label.maxLines = 2
-        pane.appendChild(group)
-        m.issueRows.Push({ group: group, bg: bg, label: label })
-    end for
-
-    card = AddRect(pane, GlassColor(), ContentLeft() + 476, listY, 656, 528)
-    m.detailTitle = AddLabel(pane, "", "font:MediumBoldSystemFont", InkColor(), ContentLeft() + 500, listY + 16, 608, 88)
-    m.detailTitle.vertAlign = "top"
-    m.detailTitle.maxLines = 2
-    m.stepRows = []
-    stepLast = VisibleSteps() - 1
-    for index = 0 to stepLast
-        group = CreateObject("roSGNode", "Group")
-        group.translation = [ContentLeft() + 500, listY + 112 + (index * 96)]
-        badge = AddRect(group, AmberColor(), 0, 4, 36, 36)
-        numberLabel = AddLabel(group, "", "font:SmallBoldSystemFont", InkOnAmber(), 0, 4, 36, 36)
-        numberLabel.horizAlign = "center"
-        body = AddLabel(group, "", "font:SmallSystemFont", InkColor(), 48, 0, 560, 92)
-        body.vertAlign = "top"
-        body.maxLines = 3
-        pane.appendChild(group)
-        m.stepRows.Push({ group: group, badge: badge, numberLabel: numberLabel, body: body })
-    end for
-    m.fixesHint = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), 868, ContentWidth(), 32)
+    parent.appendChild(pane)
     return pane
 end function
 
@@ -490,7 +609,7 @@ sub ShowSection(section as string)
     if m.homePane <> invalid then m.homePane.visible = home
     if m.greeting <> invalid then m.greeting.visible = home
     if m.rulesPane <> invalid then m.rulesPane.visible = (section = "rules")
-    if m.fixesPane <> invalid then m.fixesPane.visible = (section = "fixes")
+    if m.fixesPane <> invalid then m.fixesPane.visible = false
     if m.checkoutPane <> invalid then m.checkoutPane.visible = (section = "checkout")
     if m.helpPane <> invalid then m.helpPane.visible = false
     if m.soonPane <> invalid then m.soonPane.visible = SoonSection(section)
@@ -499,6 +618,18 @@ sub ShowSection(section as string)
     onActivity = ActivitySection(section)
     if m.activityPane <> invalid then m.activityPane.visible = onActivity and m.zone <> "item"
     if m.detailPane <> invalid then m.detailPane.visible = onActivity and m.zone = "item"
+    showScroll = false
+    if MenuDepth() = "fixes" then showScroll = true
+    if onActivity = true
+        if m.zone = "item" then showScroll = true
+    end if
+    if m.detailScroll <> invalid
+        m.detailScroll.visible = showScroll
+        if showScroll = true
+            PlaceDetailScroll()
+            FillDetailBody()
+        end if
+    end if
     if m.footer <> invalid then m.footer.visible = (section <> "book")
     if not onActivity then ReleaseCardImages()
     ShowQrFrame("badge", QrRemote("badge") <> "")
@@ -566,11 +697,8 @@ end function
 sub PaintRailRows(rows as object, menu as object, childPanel as boolean)
     if rows = invalid or menu = invalid then return
     active = false
-    if childPanel = true
-        if MenuDepth() = "todo" then active = true
-    else
-        if MenuDepth() <> "todo" then active = true
-    end if
+    if MenuDepth() = "top" then active = true
+    if childPanel = true then active = false
     last = rows.Count() - 1
     if last < 0 then return
     for index = 0 to last
@@ -579,6 +707,9 @@ sub PaintRailRows(rows as object, menu as object, childPanel as boolean)
             row.group.visible = true
             row.label.text = RailLabel(menu[index])
             row.mark.text = RailChevron(menu[index])
+            wide = RailLabelWidth()
+            if row.mark.text = "" then wide = CheckoutLabelWidth()
+            row.label.width = wide
             current = false
             if active = true
                 if index = m.railIndex then current = true
@@ -609,10 +740,97 @@ sub PaintRailRows(rows as object, menu as object, childPanel as boolean)
 end sub
 
 sub PaintRail()
-    if m.childHeader <> invalid then m.childHeader.text = "<  " + RailLabel("todo")
-    if m.fixesTitle <> invalid then m.fixesTitle.text = "<  " + RailLabel("fixes")
+    heading = RailLabel("todo")
+    if MenuDepth() = "fixes" then heading = RailLabel("fixes")
+    if m.childHeader <> invalid then m.childHeader.text = "<  " + heading
     PaintRailRows(m.railItems, TopMenu(), false)
-    PaintRailRows(m.childItems, TodoMenu(), true)
+    FillChildMenu()
+end sub
+
+sub FillChildMenu()
+    if m.childMenu = invalid then return
+    titles = []
+    fromGuide = false
+    if MenuDepth() = "fixes"
+        if FixesFromGuide() then fromGuide = true
+    end if
+    if fromGuide
+        issues = FixIssues()
+        last = issues.Count() - 1
+        if last >= 0
+            for index = 0 to last
+                titles.Push(AsText(issues[index].Lookup("issue")))
+            end for
+        end if
+    else
+        menu = TodoMenu()
+        last = menu.Count() - 1
+        if last >= 0
+            for index = 0 to last
+                titles.Push(RailLabel(menu[index]))
+            end for
+        end if
+    end if
+    key = MenuDepth() + ":" + titles.Count().ToStr()
+    if m.childMenuKey = key then return
+    m.childMenuKey = key
+    root = CreateObject("roSGNode", "ContentNode")
+    if root = invalid then return
+    last = titles.Count() - 1
+    if last >= 0
+        for index = 0 to last
+            node = root.createChild("ContentNode")
+            node.title = titles[index]
+            node.shortDescriptionLine1 = ">"
+        end for
+    end if
+    m.childMenuQuiet = true
+    if m.childMenu.list <> invalid then m.childMenu.list.content = root
+    m.childMenuQuiet = false
+end sub
+
+sub PlaceDetailScroll()
+    if m.detailScroll = invalid then return
+    if MenuDepth() = "fixes"
+        m.detailScroll.translation = [ContentLeft(), ContentTop()]
+        m.detailScroll.frameWidth = ContentWidth()
+        m.detailScroll.frameHeight = FixScrollViewport() + 92
+        return
+    end if
+    body = DetailBodyRect()
+    m.detailScroll.translation = [body.x, body.y]
+    m.detailScroll.frameWidth = body.w
+    m.detailScroll.frameHeight = ActivityScrollViewport() + 92
+end sub
+
+function FixScrollText() as string
+    issue = CurrentIssue()
+    if issue = invalid then return "Nothing to show yet."
+    title = AsText(issue.Lookup("issue"))
+    steps = issue.Lookup("steps")
+    text = title
+    if steps = invalid then return text
+    kind = type(steps)
+    if kind <> "roArray" and kind <> "Array" then return text
+    last = steps.Count() - 1
+    if last < 0 then return text
+    for index = 0 to last
+        text = text + Chr(10) + (index + 1).ToStr() + ". " + AsText(steps[index])
+    end for
+    return text
+end function
+
+sub FillDetailBody()
+    if m.detailScroll = invalid then return
+    text = ""
+    if MenuDepth() = "fixes"
+        text = FixScrollText()
+    else
+        if ActivitySection(m.section) = true
+            if m.zone = "item" then text = ActivityScrollText()
+        end if
+    end if
+    m.detailScroll.body = text
 end sub
 
 sub PaintTiles()
@@ -714,35 +932,7 @@ sub PaintRules()
 end sub
 
 sub PaintFixes()
-    if m.issueRows = invalid then return
-    count = IssueCount()
-    start = WindowStart(count, VisibleIssueRows(), IssueWindowBias())
-    last = m.issueRows.Count() - 1
-    for index = 0 to last
-        row = m.issueRows[index]
-        issueIndex = start + index
-        if issueIndex >= count
-            row.group.visible = false
-        else
-            row.group.visible = true
-            issue = FixIssues()[issueIndex]
-            row.label.text = AsText(issue.Lookup("issue"))
-            selected = (issueIndex = m.issueIndex)
-            focused = selected and m.zone = "list"
-            if focused
-                row.bg.color = AmberColor()
-                row.label.color = InkOnAmber()
-            else if selected
-                row.bg.color = "0xFFFFFF2E"
-                row.label.color = InkColor()
-            else
-                row.bg.color = "0x00000000"
-                row.label.color = InkColor()
-            end if
-        end if
-    end for
-    PaintSteps()
-    if m.fixesHint <> invalid then m.fixesHint.text = FixesHint()
+    if MenuDepth() = "fixes" then FillDetailBody()
 end sub
 
 function IssueWindowBias() as integer
@@ -954,7 +1144,7 @@ end sub
 
 function ZoneForSection(section as string) as string
     if section = "home" then return "prompt"
-    if section = "fixes" then return "list"
+    if section = "fixes" then return "rail"
     if ActivitySection(section) then return "grid"
     return "panel"
 end function
@@ -982,7 +1172,7 @@ function OpenTarget(section as string) as object
     end if
     if section = "home" then return HomePromptState()
     if section = "fixes"
-        return { depth: "top", zone: "list", section: "fixes", index: MenuIndex(TopMenu(), "fixes"), handled: true, leave: false }
+        return { depth: "fixes", zone: "rail", section: "fixes", index: 0, handled: true, leave: false }
     end if
     return { depth: "top", zone: "panel", section: section, index: MenuIndex(TopMenu(), section), handled: true, leave: false }
 end function
@@ -1022,30 +1212,47 @@ function NextNav(depth as string, zone as string, section as string, index as in
         if zone = "rail"
             drill = false
             if depth = "top"
-                if section = "todo" then drill = true
+                if section = "todo" or section = "fixes" then drill = true
             end if
             if drill = true
-                nextDepth = "todo"
-                nextZone = "rail"
-                nextIndex = 0
-                nextSection = TodoMenu()[0]
+                if section = "fixes"
+                    nextDepth = "fixes"
+                    nextZone = "rail"
+                    nextIndex = 0
+                    nextSection = "fixes"
+                else
+                    nextDepth = "todo"
+                    nextZone = "rail"
+                    nextIndex = 0
+                    nextSection = TodoMenu()[0]
+                end if
             else if depth = "todo"
                 nextZone = "grid"
+            else if depth = "fixes"
+                nextZone = "item"
             else
                 nextZone = ZoneForSection(section)
             end if
         end if
     else if kind = "back"
         if zone = "item"
-            nextZone = "grid"
+            if depth = "fixes"
+                nextZone = "rail"
+            else
+                nextZone = "grid"
+            end if
         else if zone = "grid"
             if key = "back" then nextZone = "rail"
         else if zone = "rail"
-            if depth = "todo"
+            openChild = false
+            if depth = "todo" then openChild = true
+            if depth = "fixes" then openChild = true
+            if openChild
                 nextDepth = "top"
                 nextZone = "rail"
                 nextSection = "todo"
-                nextIndex = MenuIndex(TopMenu(), "todo")
+                if depth = "fixes" then nextSection = "fixes"
+                nextIndex = MenuIndex(TopMenu(), nextSection)
             else if depth = "top"
                 if section = "home"
                     if key = "back" then leave = true

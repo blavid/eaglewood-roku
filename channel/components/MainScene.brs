@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 25 "; BuildCommit()
+    print "Eaglewood: build 26 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -658,14 +658,66 @@ function FinishNav(state as object) as boolean
     m.zone = state.zone
     m.section = state.section
     m.railIndex = state.index
+    if state.depth = "fixes" then m.issueIndex = state.index
     if state.section = "home" then m.tileIndex = 0
     ShowSection(m.section)
     print "Eaglewood: screen="; m.section; " zone="; m.zone
     PaintAll()
     SyncMenuMotion()
+    SyncChildList()
     HoldFocus()
     return true
 end function
+
+sub SyncChildList()
+    if m.childMenu = invalid then return
+    list = m.childMenu.list
+    if list = invalid then return
+    if MenuDepth() <> "todo" and MenuDepth() <> "fixes" then return
+    if m.zone <> "rail" then return
+    m.childMenuQuiet = true
+    list.jumpToItem = m.railIndex
+    m.childMenuQuiet = false
+end sub
+
+sub onChildFocused()
+    if m.childMenuQuiet = true then return
+    if m.childMenu = invalid then return
+    if MenuDepth() <> "todo" and MenuDepth() <> "fixes" then return
+    if m.zone <> "rail" then return
+    index = m.childMenu.focusedIndex
+    if index = invalid or index < 0 then return
+    if index = m.railIndex then return
+    m.railIndex = index
+    if MenuDepth() = "fixes"
+        m.issueIndex = index
+        m.section = "fixes"
+    else
+        menu = TodoMenu()
+        if index < menu.Count() then m.section = menu[index]
+    end if
+    ShowSection(m.section)
+    if ActivitySection(m.section) then PaintActivity()
+    FillDetailBody()
+end sub
+
+sub onChildSelected()
+    if m.childMenuQuiet = true then return
+    if m.childMenu = invalid then return
+    if MenuDepth() <> "todo" and MenuDepth() <> "fixes" then return
+    index = m.childMenu.selectedIndex
+    if index = invalid or index < 0 then return
+    if MenuDepth() = "todo"
+        menu = TodoMenu()
+        if index < menu.Count() then m.section = menu[index]
+    end if
+    if MenuDepth() = "fixes"
+        m.section = "fixes"
+        m.issueIndex = index
+    end if
+    m.railIndex = index
+    FinishNav(NextNav(MenuDepth(), "rail", m.section, m.railIndex, "OK"))
+end sub
 
 function CurrentTileSection() as string
     sections = TileSections()
@@ -1025,6 +1077,26 @@ function NumberText(value as object) as string
 end function
 
 sub HoldFocus()
+    if m.zone = "item" and m.detailScroll <> invalid
+        text = m.detailScroll.scrollText
+        if text <> invalid
+            text.setFocus(true)
+            return
+        end if
+    end if
+    if m.zone = "rail"
+        if MenuDepth() = "todo" or MenuDepth() = "fixes"
+            if m.childMenu <> invalid
+                list = m.childMenu.list
+                if list <> invalid
+                    list.setFocus(true)
+                    return
+                end if
+                m.childMenu.setFocus(true)
+                return
+            end if
+        end if
+    end if
     focused = true
     try
         focused = m.top.hasFocus()
