@@ -49,6 +49,8 @@ trap cleanup EXIT
 mkdir -p "$STAGE"
 cp -a "$CHANNEL/." "$STAGE/"
 rm -f "$STAGE/components/secrets.brs"
+# The screenshot harness marker must never ship.
+rm -rf "$STAGE/emu"
 short_commit="$(git -C "$ROOT" rev-parse --short=7 HEAD 2>/dev/null || true)"
 python3 - "$STAGE/components/BuildStamp.brs" "$short_commit" <<'PY'
 import pathlib

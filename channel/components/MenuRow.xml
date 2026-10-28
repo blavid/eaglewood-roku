@@ -13,7 +13,7 @@
     <script type="text/brightscript" uri="pkg:/components/MenuRow.brs" />
     <children>
         <Rectangle id="cursor" width="364" height="172" color="0xF2A93BFF" opacity="0.0" />
-        <Label id="itemLabel" translation="[12, 8]" width="300" height="160" wrap="true" maxLines="4" vertAlign="top" color="0xFFFFFFFF" font="font:SmallBoldSystemFont" />
+        <Label id="itemLabel" translation="[12, 8]" width="300" height="160" wrap="true" maxLines="4" vertAlign="center" color="0xFFFFFFFF" font="font:SmallBoldSystemFont" />
         <Label id="itemChevron" translation="[316, 8]" width="36" height="160" horizAlign="center" vertAlign="center" wrap="false" maxLines="1" color="0xF2A93BFF" font="font:SmallBoldSystemFont" />
     </children>
 </component>

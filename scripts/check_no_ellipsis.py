@@ -138,9 +138,12 @@ def main() -> int:
     for perk in book.get("perks") or []:
         if isinstance(perk, str):
             check(f"perk {perk[:24]}", perk, 198, 20, 2, 80)
-    check("badge domain", "sunrivertownhome.com", 496, 20, 1, 44, False)
-    fallback = "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Help)."
-    check("wifi fallback", fallback, 368, 27, 8, 336)
+    check("detail qr caption", "Scan for info", 280, 20, 1, 34, False)
+    check("badge domain", "sunrivertownhome.com", 432, 20, 1, 44, False)
+    fallback = "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Quick Fixes)."
+    # Build 28 status panel body: 416 wide at 28px, 9 lines in 376.
+    check("wifi fallback", fallback, 416, 28, 9, 376)
+    check("wifi status heading", "Wi-Fi details didn't load", 416, 34, 2, 96)
 
     items = []
     for block in activities.get("activitySections") or []:

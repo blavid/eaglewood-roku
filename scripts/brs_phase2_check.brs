@@ -249,15 +249,60 @@ sub Main()
         failed = failed + 1
     end if
     frame = BadgeFrame()
-    if frame.x <> 1304 or frame.y <> 832 or frame.w <> 520 or frame.h <> 188 or frame.qr <> 128
-        print "FAIL the corner badge is not the wide bottom-right card"
+    ' Build 28 (Pixel b27 P1): cream card, 16px padding, right edge 1717,
+    ' bottom 960 at most, inside FHD title-safe (x 192-1726, y 106-972).
+    if frame.x + frame.w <> 1717 or frame.y + frame.h > 960 or frame.qr <> 128 or frame.qrY <> 16
+        print "FAIL the corner badge is not the title-safe cream card"
         failed = failed + 1
     end if
-    if frame.qrX <> 196 or frame.qrY <> 8
-        print "FAIL the corner QR is not centered in the wide card"
+    if frame.qrX <> (frame.w - frame.qr) \ 2
+        print "FAIL the corner QR is not centered in the card"
         failed = failed + 1
     end if
-    if frame.captionY <> 144 or frame.captionH <> 40 or frame.captionW <> 496 or frame.captionY < frame.qrY + frame.qr
+    home = HomeBadgeFrame()
+    grid = HomeGrid()
+    if home.qr <> 240 or home.x + home.w <> 1717 or home.y + home.h > 960 or home.captionH <> 40
+        print "FAIL the Home QR card is not 240 plus a 40px caption inside the grid column"
+        failed = failed + 1
+    end if
+    if grid.x + (3 * grid.w) + (2 * grid.gap) + grid.gap > home.x or grid.gap <> 24 or grid.h <> 168
+        print "FAIL the Home tile grid does not clear the QR card with 24px gutters"
+        failed = failed + 1
+    end if
+    if HomeGridBottom() + 32 > 972
+        print "FAIL the Home grid does not keep 32px inside title-safe"
+        failed = failed + 1
+    end if
+    for each section in TileSections()
+        if TileTitleFits(section) <> true
+            print "FAIL tile title does not fit: "; section
+            failed = failed + 1
+        end if
+        if LabelFitsBox(TileSubtitle(section), TileSubBox()) <> true
+            print "FAIL tile subtitle does not fit: "; section
+            failed = failed + 1
+        end if
+    end for
+    preview = TodoPreviewCard()
+    if preview.y <> HomeSubheadY() + 64 or preview.w <> 280 or preview.h <> 160 or preview.gap <> 24
+        print "FAIL the Things to Do preview cards are not 280x160 with 24px gutters 24px under the subhead"
+        failed = failed + 1
+    end if
+    if TodoPreviewOrder("winter")[0] <> "winter" or TodoPreviewOrder("winter").Count() <> TodoMenu().Count()
+        print "FAIL the Things to Do preview does not lead with the current season"
+        failed = failed + 1
+    end if
+    for each section in TodoMenu()
+        if LabelFitsBox(RailLabel(section), { w: 232, h: 48, maxLines: 1, size: 34 }) <> true or LabelFitsBox(TodoPreviewLine(section), { w: 232, h: 84, maxLines: 2, size: 28 }) <> true
+            print "FAIL a Things to Do preview card does not fit: "; section
+            failed = failed + 1
+        end if
+    end for
+    if BadgeCardColor() <> "0xF4EFE3FF"
+        print "FAIL the badge card is not cream"
+        failed = failed + 1
+    end if
+    if frame.captionH <> 40 or frame.captionY < frame.qrY + frame.qr
         print "FAIL the domain caption is not directly under the corner QR"
         failed = failed + 1
     end if
@@ -347,7 +392,7 @@ sub Main()
         print "FAIL the network label prefix stayed on the value"
         failed = failed + 1
     end if
-    if WifiFallbackMessage() <> "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Help)."
+    if WifiFallbackMessage() <> "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Quick Fixes)."
         print "FAIL the Wi-Fi fallback message changed"
         failed = failed + 1
     end if
@@ -449,8 +494,8 @@ sub Main()
         print "FAIL navigation still reparents the corner badge"
         failed = failed + 1
     end if
-    if frame.x <> 1304 or frame.y <> 832
-        print "FAIL the corner badge translation left the wide card"
+    if frame.x + frame.w <> 1717 or frame.y + frame.h > 960
+        print "FAIL the corner badge translation left the title-safe card"
         failed = failed + 1
     end if
 
@@ -559,7 +604,7 @@ sub Main()
         failed = failed + 1
     end if
     failed = failed + ExpectMenuFile()
-    if RailLabel("checkout") <> "Checkout Instructions" or TileTitle("checkout") <> "Checkout Instructions"
+    if RailLabel("checkout") <> "Checkout Instructions" or TileTitle("checkout") <> "Checkout"
         print "FAIL Checkout was not renamed"
         failed = failed + 1
     end if
@@ -776,8 +821,25 @@ function ExpectTextFit() as integer
             end if
         end for
     end if
-    if LabelFitsBox(WifiFallbackMessage(), { w: 368, h: 336, maxLines: 8, size: 27 }) <> true
+    if LabelFitsBox(WifiFallbackMessage(), WifiStatusBodyBox()) <> true
         print "FIT wifi fallback"
+        missed = missed + 1
+    end if
+    if LabelFitsBox(WifiStatusHeading(), WifiStatusHeadingBox()) <> true
+        print "FIT wifi status heading"
+        missed = missed + 1
+    end if
+    routerText = "If it still doesn't connect, try restarting the router. The router is located in the cabinet under the TV in the living room. Unplug the power, wait 30 seconds, and plug it back in."
+    if LabelFitsBox(routerText, WifiRouterBox(true)) <> true or LabelFitsBox(routerText, WifiRouterBox(false)) <> true
+        print "FIT wifi router tip"
+        missed = missed + 1
+    end if
+    if FlushText(" cabinet  under ") <> "cabinet under"
+        print "FIT wifi router tip keeps a leading or double space"
+        missed = missed + 1
+    end if
+    if WifiTop() + WifiPanelHeight() > 972
+        print "FIT wifi status panel leaves title-safe"
         missed = missed + 1
     end if
     print "ellipsis failures="; missed

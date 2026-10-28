@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 27 "; BuildCommit()
+    print "Eaglewood: build 28 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -310,7 +310,7 @@ sub ApplyPlainGreeting(text as string)
     m.greeting.maxLines = 2
     m.greeting.horizAlign = "left"
     m.greeting.vertAlign = "center"
-    m.greeting.height = 130
+    m.greeting.height = 64
     m.greeting.translation = [ContentLeft(), ContentTop()]
     m.greeting.text = text
 end sub
@@ -337,7 +337,7 @@ function GreetingFace(text as string) as string
     if last < 0 then return names[0]
     for index = 0 to last
         pixels = Len(text) * FallbackCharWidth(sizes[index])
-        if pixels <= (limit * 2)
+        if pixels <= limit
             chosen = index
             exit for
         end if
@@ -839,7 +839,7 @@ function SimulatorRun() as boolean
 end function
 
 sub StartVectorSlide(firstField as string, firstFrom as object, firstTo as object)
-    if SimulatorRun()
+    if SimulatorRun() or m.emuReplay = true
         ApplySlideEnd(firstField, firstTo, "", [0, 0])
         return
     end if
@@ -1117,4 +1117,43 @@ sub HoldFocus()
     if focused = true then return
     m.top.setFocus(true)
     print "Eaglewood: focus restored"
+end sub
+
+' Replays a dash-separated key list (for example Left-Down-OK) once the scene
+' is up. Only reachable through the harness-only emuKeys launch parameter.
+' Debug-only (pkg:/emu/enabled, stripped by package.sh): replays a key list from
+' the emuKeys deep link, one key every 0.6 s, so async loads land between keys
+' the way they do for a person holding the remote.
+sub onEmuKeys()
+    keys = m.top.emuKeys
+    if keys = invalid or keys = "" then return
+    m.emuReplay = true
+    names = {left: "left", right: "right", up: "up", down: "down", select: "OK", ok: "OK", back: "back"}
+    m.emuQueue = []
+    for each part in keys.split("-")
+        name = names.lookup(LCase(part))
+        if name <> invalid then m.emuQueue.Push(name)
+    end for
+    timer = CreateObject("roSGNode", "Timer")
+    timer.duration = 0.6
+    timer.repeat = true
+    timer.observeField("fire", "onEmuKeyTick")
+    m.top.appendChild(timer)
+    m.emuTimer = timer
+    timer.control = "start"
+end sub
+
+sub onEmuKeyTick()
+    if m.emuQueue <> invalid and m.emuQueue.Count() > 0
+        name = m.emuQueue.Shift()
+        print "Eaglewood: emu key " + name
+        RouteKey(name)
+        return
+    end if
+    if m.emuTimer <> invalid
+        m.emuTimer.control = "stop"
+        m.top.removeChild(m.emuTimer)
+        m.emuTimer = invalid
+    end if
+    print "Eaglewood: emu keys done section=" + m.section + " zone=" + m.zone
 end sub

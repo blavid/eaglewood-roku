@@ -156,7 +156,7 @@ On the house TCL (`192.168.86.101`), after `git pull`, `export ROKUPASS` and `GU
 2. Home shows the Mt. Bachelor photo, the left rail, **Welcome, \<name\>** when the worker has a current guest, otherwise **Welcome to Eaglewood 19**. The line under the greeting includes the checkout time and quiet hours. The cream strip reads **Book your next stay direct and save!** and has the amber focus. The footer reads `sunrivertownhome.com · Book your next stay direct` (the domain comes from the guide). A small **Book direct** badge sits bottom-right. Its caption is `sunrivertownhome.com`. The badge card is visible on Home, and its QR is the local copy of the booking PNG.
 3. Down and Right move among the six tiles. Up from Wi-Fi returns to the strip. The amber outline moves with the remote. It does not disappear. OK on the strip opens Book Direct.
 4. Things to Do is the first rail item. OK opens Dining, Hiking, Winter, Summer, Fishing, and Biking. Each shows its photo grid. OK opens one place. The title and description wrap. A place with a `qrUrl` shows **Website / menu** and a larger QR. A place with no `qrUrl` shows no QR block. Back returns to the grid, then to the submenu, then to Things to Do. Posters that fail show the bundled placeholder.
-5. OK on Wi-Fi shows the join QR, the network name, and the password on separate wrapped lines when `wifi.json` is 200. The caption is not a URL. If the worker returns 503 and this TV has never stored Wi-Fi, the screen says **Wi-Fi details coming soon**. A 404 with nothing stored shows the network name from the guide without a "Network name:" prefix, and where the password would go it says **Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Help).** The log line is `Eaglewood: wifi screen mode=show`, `fallback`, or `coming-soon`.
+5. OK on Wi-Fi shows the join QR, the network name, and the password on separate wrapped lines when `wifi.json` is 200. The caption is not a URL. If the worker returns 503 and this TV has never stored Wi-Fi, the screen says **Wi-Fi details coming soon**. A 404 with nothing stored shows the network name from the guide without a "Network name:" prefix, and where the password would go it says **Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Quick Fixes).** The log line is `Eaglewood: wifi screen mode=show`, `fallback`, or `coming-soon`.
 6. OK on Quick Fixes opens the how-to list: issues on the left, numbered steps on the right. Up and Down change the issue. The Wi-Fi issue is not in this list. The log still counts every issue in the file (13 when the current file is loaded). Back returns to the rail.
 7. Rail Down to House Rules, then OK or Right. The bullets and the check-in/out times. Back returns to the rail.
 8. Checkout, from the rail or the tile: the summary, the steps, and the host name, email, and phone. The phone is whatever `guide.json` sent. It is not baked into the channel source. Book Direct shows the three headlines, the forest banner, the living-room photo, the savings line and perk chips wrapped with no ellipsis, and the **Scan me!** QR box on the right. The corner badge is hidden on this screen.
@@ -232,3 +232,15 @@ python3 scripts/render_preview.py    # 1920×1080 previews, including a long nam
 ![Welcome screen preview with a long name wrapped onto the dark bar. Not a device capture.](docs/screenshots/welcome-long-name-preview.jpg)
 
 Still needs the house TV: the checklist above, the real system font, digest install, `PowerOn` with Fast TV start, `POST /launch/dev`, `query/active-app`, relaunch while the app is open, and Guest Mode closing the app.
+
+## Emulator screen pass (debug only)
+
+`scripts/emu_screens.sh OUTDIR` runs brs-node on a debug build that contains
+`pkg:/emu/enabled`. Each screen starts as a fresh process and is driven by the
+`emuKeys` deep link (for example `left-down-down-select`). The keys replay one
+every 0.6 s. `package.sh` removes `channel/emu/`, so the hook never ships.
+The tour writes one PNG per screen plus `index.tsv` (name, keys, sha256, note).
+
+Build 28 layout: H1 at y≈167 (ContentTop 154), one-line subhead, Book Direct
+strip full width over a 3x2 tile grid, cream booking QR card right of the
+grid on Home and in the corner (312 px) elsewhere, hidden on Wi-Fi.

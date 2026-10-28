@@ -3,6 +3,8 @@
     <interface>
         <!-- Incremented when ECP relaunches the running app. Same screen. -->
         <field id="relaunchCount" type="integer" alwaysNotify="true" value="0" />
+        <!-- Screenshot harness only; set from main.brs when pkg:/emu/enabled exists. -->
+        <field id="emuKeys" type="string" onChange="onEmuKeys" />
     </interface>
 
     <script type="text/brightscript" uri="pkg:/components/PngRgb.brs" />

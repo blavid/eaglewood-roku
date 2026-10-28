@@ -5,7 +5,7 @@ function ContentLeft() as integer
 end function
 
 function ContentTop() as integer
-    return 120
+    return 154
 end function
 
 function ContentWidth() as integer
@@ -315,9 +315,66 @@ function LabelFitsBox(text as string, fit as object) as boolean
     return true
 end function
 
+' Pixel b27: one 24px inner left padding and 20px top padding for both lines.
 function TileTitleBox() as object
-    return { x: 8, y: 12, w: 346, h: 88 }
+    grid = HomeGrid()
+    return { x: 24, y: 20, w: grid.w - 48, h: 88 }
 end function
+
+function TileSubBox() as object
+    grid = HomeGrid()
+    ' Bottom-anchored, two lines, so a long subtitle wraps instead of clipping.
+    return { x: 24, y: 72, w: grid.w - 48, h: 84, maxLines: 2, size: 28 }
+end function
+
+function TileSubColor() as string
+    return "0xC9D1E0FF"
+end function
+
+' Home column, top to bottom: H1, subhead 12px under it, strip 32px under
+' that, then a 3x2 grid with 24px gutters. The QR card sits right of the grid.
+function HomeSubheadY() as integer
+    return ContentTop() + 64 + 12
+end function
+
+function HomeStripRect() as object
+    return { x: ContentLeft(), y: HomeSubheadY() + 36 + 32, w: HomeRight() - ContentLeft(), h: 164 }
+end function
+
+function HomeRight() as integer
+    return 1717
+end function
+
+function HomeGrid() as object
+    strip = HomeStripRect()
+    card = HomeBadgeFrame()
+    gap = 24
+    span = card.x - gap - ContentLeft()
+    w = (span - (2 * gap)) \ 3
+    return { x: ContentLeft(), y: strip.y + strip.h + gap, w: w, h: 168, gap: gap }
+end function
+
+function HomeGridBottom() as integer
+    grid = HomeGrid()
+    return grid.y + (2 * grid.h) + grid.gap
+end function
+
+' Pixel b27 drops the footer on Home, Things to Do and Wi-Fi. The domain is in
+' the QR card on every page except Book Direct, which spells it out, so it is
+' off everywhere.
+function FooterShown(section as string) as boolean
+    if section = "" then return false
+    return false
+end function
+
+' Roku system fonts take a size on the Font node the label gets.
+sub SetFontSize(label as object, size as integer)
+    if label = invalid then return
+    font = label.font
+    if font = invalid then return
+    if type(font) <> "roSGNode" then return
+    font.size = size
+end sub
 
 function LabelLinesFit(text as string, width as integer, charWidth as integer, maxLines as integer, lineHeight as integer, boxHeight as integer) as boolean
     lines = WrapGreeting(text, width, invalid, charWidth)
@@ -339,8 +396,12 @@ function CheckoutNavFits() as boolean
 end function
 
 function CheckoutTileFits() as boolean
+    return TileTitleFits("checkout")
+end function
+
+function TileTitleFits(section as string) as boolean
     tileBox = TileTitleBox()
-    return LabelLinesFit(TileTitle("checkout"), tileBox.w, PessimisticCharWidth(NavFontSize()), 2, NavLineHeight(), tileBox.h)
+    return LabelLinesFit(TileTitle(section), tileBox.w, PessimisticCharWidth(NavFontSize()), 2, NavLineHeight(), tileBox.h)
 end function
 
 function CheckoutHeadingFits() as boolean
@@ -355,6 +416,8 @@ end function
 
 function TileTitle(section as string) as string
     if section = "fixes" then return "Quick Fixes"
+    ' The tile column is narrower now; the rail and the page keep the full name.
+    if section = "checkout" then return "Checkout"
     return RailLabel(section)
 end function
 
@@ -441,9 +504,10 @@ sub BuildShell()
 
     m.homePane = CreateObject("roSGNode", "Group")
     shell.appendChild(m.homePane)
-    m.subtitle = AddLabel(m.homePane, "Checkout", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 138, ContentWidth(), 44)
+    m.subtitle = AddLabel(m.homePane, "Checkout", "font:SmallSystemFont", MuteColor(), ContentLeft(), HomeSubheadY(), ContentWidth(), 40)
+    SetFontSize(m.subtitle, 28)
     m.subtitle.vertAlign = "top"
-    m.subtitle.maxLines = 2
+    m.subtitle.maxLines = 1
     BuildTiles(m.homePane)
 
     m.rulesPane = BuildRulesPane(shell)
@@ -453,7 +517,7 @@ sub BuildShell()
     m.soonPane = BuildSoonPane(shell)
     BuildPhase2(shell)
 
-    footerW = BadgeFrame().x - ContentLeft() - 16
+    footerW = ContentWidth()
     m.footer = AddLabel(shell, FooterLine(), "font:SmallSystemFont", MuteColor(), ContentLeft(), 848, footerW, 88)
     m.footer.maxLines = 2
     m.footer.vertAlign = "top"
@@ -477,25 +541,29 @@ end sub
 sub BuildTiles(parent as object)
     m.tiles = []
     sections = TileSections()
-    tileW = 362
-    tileH = 164
-    originY = 480
+    grid = HomeGrid()
     last = sections.Count() - 1
     for index = 0 to last
         col = index mod 3
         row = index \ 3
-        x = ContentLeft() + (col * (tileW + 22))
-        y = originY + (row * (tileH + 22))
+        x = grid.x + (col * (grid.w + grid.gap))
+        y = grid.y + (row * (grid.h + grid.gap))
         group = CreateObject("roSGNode", "Group")
         group.translation = [x, y]
-        AddRect(group, "0x00000055", 8, 8, tileW, tileH)
-        outer = AddRect(group, TileColor(), 0, 0, tileW, tileH)
-        inner = AddRect(group, TileColor(), 0, 0, tileW, tileH)
+        AddRect(group, "0x00000055", 8, 8, grid.w, grid.h)
+        outer = AddRect(group, TileColor(), 0, 0, grid.w, grid.h)
+        inner = AddRect(group, TileColor(), 0, 0, grid.w, grid.h)
         titleBox = TileTitleBox()
-        title = AddLabel(group, TileTitle(sections[index]), "font:SmallBoldSystemFont", InkColor(), titleBox.x, titleBox.y, titleBox.w, titleBox.h)
+        title = AddLabel(group, TileTitle(sections[index]), "font:SmallBoldSystemFont", "0xFFFFFFFF", titleBox.x, titleBox.y, titleBox.w, titleBox.h)
+        SetFontSize(title, 34)
         title.maxLines = 2
-        title.vertAlign = "center"
-        subLabel = AddLabel(group, "", "font:SmallSystemFont", MuteColor(), 22, 116, tileW - 44, 40)
+        title.vertAlign = "top"
+        subBox = TileSubBox()
+        subLabel = AddLabel(group, "", "font:SmallSystemFont", TileSubColor(), subBox.x, subBox.y, subBox.w, subBox.h)
+        SetFontSize(subLabel, subBox.size)
+        subLabel.wrap = true
+        subLabel.vertAlign = "bottom"
+        subLabel.maxLines = subBox.maxLines
         parent.appendChild(group)
         m.tiles.Push({
             group: group,
@@ -503,8 +571,8 @@ sub BuildTiles(parent as object)
             inner: inner,
             title: title,
             subLabel: subLabel,
-            wide: tileW,
-            tall: tileH,
+            wide: grid.w,
+            tall: grid.h,
             section: sections[index]
         })
     end for
@@ -634,7 +702,7 @@ sub ShowSection(section as string)
             FillDetailBody()
         end if
     end if
-    if m.footer <> invalid then m.footer.visible = (section <> "book")
+    if m.footer <> invalid then m.footer.visible = FooterShown(section)
     if not onActivity then ReleaseCardImages()
     ShowQrFrame("badge", BadgeShown(section))
     ShowQrFrame("book", QrRemote("book") <> "")
@@ -751,6 +819,20 @@ sub PaintRail()
     FillChildMenu()
 end sub
 
+'' Things to Do labels are one line, so its rows are half the Quick Fixes height.
+sub SizeChildRows(depth as string)
+    if m.childMenu = invalid or m.childMenu.list = invalid then return
+    menuBox = MenuTitleBox()
+    tall = menuBox.h + 16
+    rows = 4
+    if depth = "todo"
+        tall = RailRowHeight()
+        rows = 6
+    end if
+    m.childMenu.list.itemSize = [menuBox.w + 64, tall]
+    m.childMenu.list.numRows = rows
+end sub
+
 sub FillChildMenu()
     if m.childMenu = invalid then return
     titles = []
@@ -778,6 +860,7 @@ sub FillChildMenu()
     key = MenuDepth() + ":" + titles.Count().ToStr()
     if m.childMenuKey = key then return
     m.childMenuKey = key
+    SizeChildRows(MenuDepth())
     root = CreateObject("roSGNode", "ContentNode")
     if root = invalid then return
     last = titles.Count() - 1

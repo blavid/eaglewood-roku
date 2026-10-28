@@ -37,7 +37,7 @@ sub fetchWifi()
     if WifiCacheOk(cached) and mode <> "coming-soon"
         print "Eaglewood: wifi png request sent"
         png = WifiHttp(pngUrl, RememberedWifiEtag("wifiPng"), WifiPngPath(), false)
-        print "Eaglewood: wifi png response code="; png.code
+        print "Eaglewood: wifi png response code="; png.code; " reason="; png.reason
         cached.pngCode = png.code
         if png.reason = "ok" or png.reason = "not-modified"
             shown = WifiPngPath()
@@ -231,6 +231,8 @@ function WifiHttp(url as string, etag as string, dest as string, wantJson as boo
             result.reason = "bad-json"
             return result
         end if
+        ' The guide task may not have made cachefs:/eaglewood yet on a cold start.
+        EnsureWifiDir()
         if WriteAsciiFile(dest, body) <> true
             result.reason = "cache-write"
             return result

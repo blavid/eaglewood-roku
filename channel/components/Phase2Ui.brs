@@ -37,49 +37,66 @@ end sub
 
 sub BuildHomePrompt(parent as object)
     if parent = invalid then return
+    strip = HomeStripRect()
+    w = strip.w
+    h = strip.h
     group = CreateObject("roSGNode", "Group")
-    group.translation = [ContentLeft(), 312]
-    AddRect(group, "0x00000055", 8, 8, 1132, 156)
-    m.promptOuter = AddRect(group, AmberColor(), 0, 0, 1132, 156)
-    m.promptInner = AddRect(group, "0xF4EFE3FF", 0, 0, 1132, 156)
+    group.translation = [strip.x, strip.y]
+    group.scaleRotateCenter = [w / 2, h / 2]
+    AddRect(group, "0x00000055", 8, 8, w, h)
+    ' Focus: 2px navy outer stroke, 6px amber ring, then the cream fill.
+    m.promptStroke = AddRect(group, PromptStrokeColor(), -2, -2, w + 4, h + 4)
+    m.promptStroke.visible = false
+    m.promptOuter = AddRect(group, AmberColor(), 0, 0, w, h)
+    m.promptInner = AddRect(group, "0xF4EFE3FF", 0, 0, w, h)
     pine = CreateObject("roSGNode", "Poster")
     pine.uri = "pkg:/images/decor-pine.png"
     pine.width = 44
     pine.height = 32
     pine.loadWidth = 72
     pine.loadHeight = 48
-    pine.translation = [18, 62]
+    pine.translation = [24, 42]
     group.appendChild(pine)
-    m.promptTitle = AddLabel(group, "Book your next stay direct and save!", "font:SmallBoldSystemFont", "0x1B4D38FF", 74, 12, 960, 96)
+    m.promptTitle = AddLabel(group, "Book your next stay direct and save!", "font:SmallBoldSystemFont", "0x1B4D38FF", 84, 16, w - 200, 88)
     m.promptTitle.horizAlign = "left"
     m.promptTitle.vertAlign = "center"
     m.promptTitle.maxLines = 2
-    m.promptSub = AddLabel(group, "", "font:SmallestSystemFont", "0x3E5348FF", 74, 108, 960, 40)
+    m.promptSub = AddLabel(group, "", "font:SmallestSystemFont", "0x3E5348FF", 84, 112, w - 200, 40)
+    SetFontSize(m.promptSub, 28)
     m.promptSub.horizAlign = "left"
-    m.promptSub.maxLines = 2
-    arrow = AddRect(group, AmberColor(), 1064, 58, 40, 40)
-    arrowText = AddLabel(group, ">", "font:SmallBoldSystemFont", InkOnAmber(), 1064, 58, 40, 40)
+    m.promptSub.maxLines = 1
+    arrowX = w - 72
+    arrow = AddRect(group, AmberColor(), arrowX, (h - 40) / 2, 40, 40)
+    arrowText = AddLabel(group, ">", "font:SmallBoldSystemFont", InkOnAmber(), arrowX, (h - 40) / 2, 40, 40)
     arrowText.horizAlign = "center"
     parent.appendChild(group)
     m.promptGroup = group
 end sub
 
+function PromptStrokeColor() as string
+    return "0x1B2A44FF"
+end function
+
+function PromptFocusScale() as float
+    return 1.03
+end function
+
 sub BuildBadge(parent as object)
     frame = BadgeFrame()
     group = CreateObject("roSGNode", "Group")
-    group.translation = [1304, 832]
+    group.translation = [frame.x, frame.y]
     group.visible = false
-    card = AddRect(group, "0xFFFFFFF2", 0, 0, frame.w, frame.h)
+    card = AddRect(group, BadgeCardColor(), 0, 0, frame.w, frame.h)
     card.visible = false
     m.badgeCard = card
-    m.badgeMark = AddRect(group, QrMarkColor(), 0, 0, frame.w, frame.h)
+    m.badgeMark = AddRect(group, QrMarkColor(), frame.qrX, frame.qrY, frame.qr, frame.qr)
     m.badgeMark.visible = false
     m.badgePoster = CreateObject("roSGNode", "Poster")
     m.badgePoster.id = "badgeQr"
     m.badgePoster.focusable = false
-    m.badgePoster.translation = [196, 8]
-    m.badgePoster.width = 128
-    m.badgePoster.height = 128
+    m.badgePoster.translation = [frame.qrX, frame.qrY]
+    m.badgePoster.width = frame.qr
+    m.badgePoster.height = frame.qr
     m.badgePoster.loadWidth = 256
     m.badgePoster.loadHeight = 256
     m.badgePoster.loadDisplayMode = "scaleToFit"
@@ -97,6 +114,7 @@ sub BuildBadge(parent as object)
     m.badgeDomain.visible = false
     parent.appendChild(group)
     m.badgeGroup = group
+    m.badgeFrameKey = "corner"
     m.badgeHint = AddLabel(parent, "", "font:SmallSystemFont", MuteColor(), 980, 800, 500, 28)
     m.badgeHint.horizAlign = "right"
     m.badgeHint.visible = false
@@ -195,11 +213,12 @@ function BuildWifiPane(parent as object) as object
     pane.visible = false
     parent.appendChild(pane)
     AddLabel(pane, "Join the Wi-Fi", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
-    m.wifiBacking = AddRect(pane, "0x1A2438FF", ContentLeft(), ContentTop() + 96, 400, 400)
+    top = WifiTop()
+    m.wifiBacking = AddRect(pane, "0x1A2438FF", ContentLeft(), top, 400, 400)
     m.wifiPoster = CreateObject("roSGNode", "Poster")
     m.wifiPoster.id = "wifiQr"
     m.wifiPoster.focusable = false
-    m.wifiPoster.translation = [ContentLeft() + 20, ContentTop() + 116]
+    m.wifiPoster.translation = [ContentLeft() + 20, top + 20]
     m.wifiPoster.width = 360
     m.wifiPoster.height = 360
     m.wifiPoster.loadWidth = 480
@@ -208,30 +227,132 @@ function BuildWifiPane(parent as object) as object
     m.wifiPoster.visible = false
     pane.appendChild(m.wifiPoster)
     m.wifiPoster.observeField("loadStatus", "onWifiPosterStatus")
-    m.wifiMissing = AddLabel(pane, "", "font:SmallSystemFont", "0xFFFFFFF2", ContentLeft() + 16, ContentTop() + 128, 368, 336)
+    m.wifiMissing = AddLabel(pane, "", "font:SmallSystemFont", "0xFFFFFFF2", ContentLeft() + 16, top + 32, 368, 336)
     m.wifiMissing.horizAlign = "center"
     m.wifiMissing.vertAlign = "top"
     m.wifiMissing.maxLines = 8
-    textX = ContentLeft() + 430
-    textW = 700
-    AddLabel(pane, "Network", "font:SmallSystemFont", MuteColor(), textX, ContentTop() + 96, textW, 36)
-    m.wifiSsidLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), textX, ContentTop() + 132, textW, 108)
+    BuildWifiStatusPanel(pane)
+    col = WifiColumn(false)
+    m.wifiNetworkHeading = AddLabel(pane, "Network", "font:SmallSystemFont", MuteColor(), col.x, top, col.w, 36)
+    m.wifiSsidLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), col.x, top + 36, col.w, 104)
+    SetFontSize(m.wifiSsidLabel, 40)
     m.wifiSsidLabel.vertAlign = "top"
-    m.wifiSsidLabel.maxLines = 3
-    m.wifiPasswordHeading = AddLabel(pane, "Password", "font:SmallSystemFont", MuteColor(), textX, ContentTop() + 248, textW, 36)
-    m.wifiPasswordLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), textX, ContentTop() + 284, textW, 156)
+    m.wifiSsidLabel.maxLines = 2
+    m.wifiPasswordHeading = AddLabel(pane, "Password", "font:SmallSystemFont", MuteColor(), col.x, top + 152, col.w, 36)
+    m.wifiPasswordLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), col.x, top + 188, col.w, 156)
     m.wifiPasswordLabel.vertAlign = "top"
-    m.wifiPasswordLabel.maxLines = 6
-    m.wifiHint = AddLabel(pane, "Point your phone camera at the code and tap the banner to join.", "font:SmallSystemFont", MuteColor(), textX, ContentTop() + 460, textW, 110)
+    m.wifiPasswordLabel.maxLines = 4
+    m.wifiHint = AddLabel(pane, "Point your phone camera at the code and tap the banner to join.", "font:SmallSystemFont", MuteColor(), col.x, top + 364, col.w, 100)
     m.wifiHint.vertAlign = "top"
-    m.wifiHint.maxLines = 4
-    m.wifiRouter = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), 710, ContentWidth(), 180)
+    m.wifiHint.maxLines = 3
+    router = WifiRouterBox(false)
+    m.wifiRouter = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), router.x, router.y, router.w, router.h)
     m.wifiRouter.vertAlign = "top"
-    m.wifiRouter.maxLines = 6
+    m.wifiRouter.maxLines = router.maxLines
+    m.wifiColumnKey = ""
     m.wifiShown = ""
     m.wifiPaintToken = ""
     return pane
 end function
+
+function WifiTop() as integer
+    return ContentTop() + 80
+end function
+
+function WifiPanelWidth() as integer
+    return 480
+end function
+
+' The text column moves right when the 480px status panel replaces the QR.
+function WifiColumn(statusPanel as boolean) as object
+    x = ContentLeft() + 430
+    if statusPanel = true then x = ContentLeft() + WifiPanelWidth() + 40
+    return { x: x, w: HomeRight() - x }
+end function
+
+' Sized for the pessimistic wrap of the fallback copy at 28px.
+function WifiStatusBodyBox() as object
+    return { x: 32, y: 184, w: WifiPanelWidth() - 64, h: 376, maxLines: 9, size: 28 }
+end function
+
+function WifiStatusHeadingBox() as object
+    return { x: 32, y: 80, w: WifiPanelWidth() - 64, h: 96, maxLines: 2, size: 34 }
+end function
+
+function WifiPanelHeight() as integer
+    body = WifiStatusBodyBox()
+    return body.y + body.h + 24
+end function
+
+' Router tip. With the status panel it goes in the right column under the
+' Password row. With the QR it goes under the QR and the scan hint, full width.
+' The corner booking QR is off on Wi-Fi, so the only code there is the join code.
+function WifiRouterBox(statusPanel as boolean) as object
+    if statusPanel = true
+        col = WifiColumn(true)
+        return { x: col.x, y: WifiTop() + 256, w: col.w, h: 320, maxLines: 8, size: 27 }
+    end if
+    return { x: ContentLeft(), y: WifiTop() + 488, w: HomeRight() - ContentLeft(), h: 240, maxLines: 6, size: 27 }
+end function
+
+function WifiStatusHeading() as string
+    return "Wi-Fi details didn't load"
+end function
+
+function WifiUnavailableText() as string
+    return "Unavailable"
+end function
+
+' Pixel b27: a status panel, not a box where the QR would be. 4px amber left
+' border, a 32px warning mark, a 34px heading, then the body left-aligned.
+sub BuildWifiStatusPanel(pane as object)
+    panel = CreateObject("roSGNode", "Group")
+    panel.translation = [ContentLeft(), WifiTop()]
+    panel.visible = false
+    w = WifiPanelWidth()
+    h = WifiPanelHeight()
+    AddRect(panel, "0x1A2438FF", 0, 0, w, h)
+    AddRect(panel, AmberColor(), 0, 0, 4, h)
+    AddRect(panel, AmberColor(), 32, 32, 32, 32)
+    mark = AddLabel(panel, "!", "font:SmallBoldSystemFont", InkOnAmber(), 32, 28, 32, 40)
+    mark.horizAlign = "center"
+    mark.vertAlign = "center"
+    headBox = WifiStatusHeadingBox()
+    heading = AddLabel(panel, WifiStatusHeading(), "font:SmallBoldSystemFont", "0xFFFFFFFF", headBox.x, headBox.y, headBox.w, headBox.h)
+    SetFontSize(heading, headBox.size)
+    heading.maxLines = headBox.maxLines
+    heading.vertAlign = "top"
+    body = WifiStatusBodyBox()
+    m.wifiStatusBody = AddLabel(panel, "", "font:SmallSystemFont", "0xFFFFFFF2", body.x, body.y, body.w, body.h)
+    SetFontSize(m.wifiStatusBody, body.size)
+    m.wifiStatusBody.horizAlign = "left"
+    m.wifiStatusBody.vertAlign = "top"
+    m.wifiStatusBody.maxLines = body.maxLines
+    pane.appendChild(panel)
+    m.wifiStatusPanel = panel
+end sub
+
+sub PlaceWifiColumn(statusPanel as boolean)
+    key = "qr"
+    if statusPanel = true then key = "status"
+    if m.wifiColumnKey = key then return
+    m.wifiColumnKey = key
+    col = WifiColumn(statusPanel)
+    top = WifiTop()
+    nodes = [[m.wifiNetworkHeading, 0], [m.wifiSsidLabel, 36], [m.wifiPasswordHeading, 152], [m.wifiPasswordLabel, 188], [m.wifiHint, 364]]
+    for each pair in nodes
+        node = pair[0]
+        if node <> invalid
+            node.translation = [col.x, top + pair[1]]
+            node.width = col.w
+        end if
+    end for
+    router = WifiRouterBox(statusPanel)
+    if m.wifiRouter <> invalid
+        m.wifiRouter.translation = [router.x, router.y]
+        m.wifiRouter.width = router.w
+    end if
+end sub
 
 function BuildActivityPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
@@ -255,6 +376,7 @@ function BuildActivityPane(parent as object) as object
     m.activityEmpty.vertAlign = "top"
     m.activityEmpty.maxLines = 2
     m.activityEmpty.visible = false
+    BuildTodoPreview(pane)
     m.activityHint = AddLabel(pane, "Left menu    Arrows browse    OK open", "font:SmallSystemFont", MuteColor(), ContentLeft(), 752, 900, 32)
     return pane
 end function
@@ -344,14 +466,23 @@ sub PaintPrompt()
     m.promptSub.text = PromptSubline(BookText(m.book, "homePromptSub", "Up to about 10% less than Airbnb or Vrbo"))
     focused = (m.zone = "prompt" and m.section = "home")
     if m.promptInner = invalid then return
+    strip = HomeStripRect()
     if focused
-        m.promptInner.translation = [4, 4]
-        m.promptInner.width = 1124
-        m.promptInner.height = 148
+        m.promptInner.translation = [6, 6]
+        m.promptInner.width = strip.w - 12
+        m.promptInner.height = strip.h - 12
     else
         m.promptInner.translation = [0, 0]
-        m.promptInner.width = 1132
-        m.promptInner.height = 156
+        m.promptInner.width = strip.w
+        m.promptInner.height = strip.h
+    end if
+    if m.promptStroke <> invalid then m.promptStroke.visible = focused
+    if m.promptGroup <> invalid
+        if focused
+            m.promptGroup.scale = [PromptFocusScale(), PromptFocusScale()]
+        else
+            m.promptGroup.scale = [1.0, 1.0]
+        end if
     end if
 end sub
 
@@ -390,14 +521,14 @@ sub onBadgeStatus()
     poster = PosterForSlot("badge")
     if poster = invalid then return
     status = poster.loadStatus
-    if status <> "failed" and status <> "error" then return
-    if QrRemote("badge") <> "" and m.section <> "book"
-        if m.badgeGroup <> invalid then m.badgeGroup.visible = true
-        if m.badgeCard <> invalid then m.badgeCard.visible = true
-        if m.badgeDomain <> invalid then m.badgeDomain.visible = true
-        poster.visible = false
-        ShowQrMark("badge", true)
+    if status = "ready"
+        ' A drawn bitmap is enough; ShowBadgeFrame still drops it on Book Direct.
+        ShowBadgeFrame(true)
+        return
     end if
+    if status <> "failed" and status <> "error" then return
+    ' Failed bitmap: keep the card hidden (no empty box) and retry once.
+    ShowBadgeFrame(false)
     if m.qrAssigning = true then return
     if QrRetried("badge") then return
     ScheduleBadgeRetry()
@@ -437,6 +568,10 @@ end sub
 
 sub ShowBadgeFrame(show as boolean)
     if BadgeShown(m.section) <> true then show = false
+    ApplyBadgeFrame(m.section)
+    ' Pixel b27 P1: no empty card. Hide it until the QR bitmap has loaded.
+    if BadgeBitmapReady() <> true then show = false
+    LogBadgeCard(show)
     if m.badgeGroup <> invalid then m.badgeGroup.visible = show
     if m.badgeCard <> invalid then m.badgeCard.visible = show
     if m.badgeLabel <> invalid then m.badgeLabel.visible = show
@@ -631,18 +766,25 @@ sub PaintWifi()
         if lines.mode = "show"
             m.wifiPasswordLabel.text = lines.password
             m.wifiPasswordLabel.font = "font:SmallBoldSystemFont"
+            m.wifiPasswordLabel.color = InkColor()
+        else if lines.mode = "fallback"
+            m.wifiPasswordLabel.text = WifiUnavailableText()
+            m.wifiPasswordLabel.font = "font:SmallSystemFont"
+            m.wifiPasswordLabel.color = TileSubColor()
         else
             m.wifiPasswordLabel.text = ""
             m.wifiPasswordLabel.font = "font:SmallSystemFont"
         end if
     end if
-    if m.wifiPasswordHeading <> invalid then m.wifiPasswordHeading.visible = (lines.mode = "show")
+    statusPanel = (lines.mode = "fallback")
+    PlaceWifiColumn(statusPanel)
+    if m.wifiPasswordHeading <> invalid then m.wifiPasswordHeading.visible = (lines.mode = "show" or statusPanel)
     if m.wifiHint <> invalid then m.wifiHint.visible = (lines.mode = "show")
     if m.wifiPaintToken <> lines.mode
         m.wifiPaintToken = lines.mode
         print "Eaglewood: wifi screen mode="; lines.mode
     end if
-    if m.wifiRouter <> invalid then m.wifiRouter.text = RouterStep(m.issues)
+    if m.wifiRouter <> invalid then m.wifiRouter.text = FlushText(RouterStep(m.issues))
     pngReady = (m.wifiPng = "yes")
     poster = PosterForSlot("wifi")
     if poster = invalid then return
@@ -668,7 +810,18 @@ sub PaintWifi()
             m.wifiMissing.text = ""
             m.wifiMissing.visible = false
         end if
+        if m.wifiStatusPanel <> invalid then m.wifiStatusPanel.visible = false
+    else if lines.mode = "fallback" and notice <> "coming-soon"
+        poster.visible = false
+        if m.wifiBacking <> invalid then m.wifiBacking.visible = false
+        if m.wifiMissing <> invalid
+            m.wifiMissing.text = ""
+            m.wifiMissing.visible = false
+        end if
+        if m.wifiStatusBody <> invalid then m.wifiStatusBody.text = WifiFallbackMessage()
+        if m.wifiStatusPanel <> invalid then m.wifiStatusPanel.visible = true
     else
+        if m.wifiStatusPanel <> invalid then m.wifiStatusPanel.visible = false
         poster.visible = false
         if m.wifiBacking <> invalid
             m.wifiBacking.color = "0x1A2438FF"
@@ -711,8 +864,18 @@ function NetworkValue(text as string) as string
     return rest
 end function
 
+' Collapses runs of spaces and trims, so wrapped lines start flush left.
+function FlushText(text as string) as string
+    if text = invalid then return ""
+    out = text.Trim()
+    while Instr(1, out, "  ") > 0
+        out = out.Replace("  ", " ")
+    end while
+    return out
+end function
+
 function WifiFallbackMessage() as string
-    return "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Help)."
+    return "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Quick Fixes)."
 end function
 
 sub onWifiPosterStatus()
@@ -744,16 +907,92 @@ function WifiFallbackText() as string
     return ComingSoonWifi()
 end function
 
+' Pixel b27: Things to Do shows its categories as 280x160 cards, 24px
+' gutters, from y 260, in the Home tile style, the current season first.
+function TodoPreviewCard() as object
+    return { x: ContentLeft(), y: HomeSubheadY() + 64, w: 280, h: 160, gap: 24, columns: 3 }
+end function
+
+function TodoPreviewOrder(season as string) as object
+    order = []
+    menu = TodoMenu()
+    for each section in menu
+        if section = season then order.Push(section)
+    end for
+    for each section in menu
+        if section <> season then order.Push(section)
+    end for
+    return order
+end function
+
+function TodoPreviewLine(section as string) as string
+    if section = "dining" then return "Village & Bend"
+    if section = "hiking" then return "Trails nearby"
+    if section = "winter" then return "Winter picks"
+    if section = "summer" then return "Summer picks"
+    if section = "fishing" then return "On the water"
+    if section = "biking" then return "Rides nearby"
+    return ""
+end function
+
+sub BuildTodoPreview(pane as object)
+    group = CreateObject("roSGNode", "Group")
+    group.visible = false
+    card = TodoPreviewCard()
+    m.todoCards = []
+    for index = 0 to 5
+        col = index mod card.columns
+        row = index \ card.columns
+        cell = CreateObject("roSGNode", "Group")
+        cell.translation = [card.x + (col * (card.w + card.gap)), card.y + (row * (card.h + card.gap))]
+        AddRect(cell, "0x00000055", 8, 8, card.w, card.h)
+        AddRect(cell, TileColor(), 0, 0, card.w, card.h)
+        title = AddLabel(cell, "", "font:SmallBoldSystemFont", "0xFFFFFFFF", 24, 20, card.w - 48, 48)
+        SetFontSize(title, 34)
+        title.maxLines = 1
+        line = AddLabel(cell, "", "font:SmallSystemFont", TileSubColor(), 24, 68, card.w - 48, 84)
+        SetFontSize(line, 28)
+        line.wrap = true
+        line.vertAlign = "bottom"
+        line.maxLines = 2
+        group.appendChild(cell)
+        m.todoCards.Push({ cell: cell, title: title, line: line })
+    end for
+    pane.appendChild(group)
+    m.todoPreview = group
+end sub
+
+sub PaintTodoPreview(show as boolean)
+    if m.todoPreview = invalid then return
+    m.todoPreview.visible = show
+    if show <> true then return
+    order = TodoPreviewOrder(TodoSeason())
+    last = m.todoCards.Count() - 1
+    for index = 0 to last
+        entry = m.todoCards[index]
+        if index < order.Count()
+            entry.title.text = RailLabel(order[index])
+            entry.line.text = TodoPreviewLine(order[index])
+            entry.cell.visible = true
+        else
+            entry.cell.visible = false
+        end if
+    end for
+end sub
+
 sub PaintActivity()
     if m.activityTitle = invalid then return
     m.activityTitle.text = RailLabel(m.section)
     if m.activitySub <> invalid then m.activitySub.text = ActivitySubtitle()
     EnsureActivityGrid()
     count = CardCount()
+    preview = (m.section = "todo")
     if m.activityEmpty <> invalid
         if count = 0 then m.activityEmpty.text = ActivityEmptyText(m.section)
-        m.activityEmpty.visible = (count = 0)
+        ' The preview row replaces the OK hint on Things to Do.
+        m.activityEmpty.visible = (count = 0 and not preview)
     end if
+    PaintTodoPreview(preview)
     if m.activityGrid <> invalid then m.activityGrid.visible = (count > 0)
     if m.zone = "item"
         PaintDetail()
@@ -762,9 +1001,14 @@ sub PaintActivity()
     end if
 end sub
 
+' The season the subhead names ("Sorted for winter"); the preview row leads with it.
+function TodoSeason() as string
+    if m.activitySeason <> invalid and m.activitySeason <> "" then return m.activitySeason
+    return CurrentSeason()
+end function
+
 function ActivitySubtitle() as string
-    season = "winter"
-    if m.activitySeason <> invalid and m.activitySeason <> "" then season = m.activitySeason
+    season = TodoSeason()
     extra = "Seasonal picks"
     if m.section = "dining" then extra = "Village & Bend"
     if m.section = "hiking" then extra = "Trails nearby"
@@ -772,7 +1016,7 @@ function ActivitySubtitle() as string
     if m.section = "summer" then extra = "Summer picks"
     if m.section = "fishing" then extra = "On the water"
     if m.section = "biking" then extra = "Rides nearby"
-    if m.section = "todo" then extra = "OK to browse"
+    if m.section = "todo" then return "Sorted for " + season
     return "Sorted for " + season + "  ·  " + extra
 end function
 
@@ -924,8 +1168,8 @@ sub PaintDetail()
     end if
     qr = DetailQrForItem(item)
     if m.detailQrCaption <> invalid
-        if m.section = "dining" then m.detailQrCaption.text = "Scan for this restaurant"
-        else m.detailQrCaption.text = "Scan for this place"
+        ' Fits the 280px card on one line at the pessimistic width (no ellipsis).
+        m.detailQrCaption.text = "Scan for info"
     end if
     if qr = ""
         source = "none"
@@ -1051,6 +1295,8 @@ end function
 
 function BadgeShown(section as string) as boolean
     if section = "book" then return false
+    ' One QR per screen on Wi-Fi, so a guest cannot scan the booking code by mistake.
+    if section = "wifi" then return false
     return true
 end function
 
@@ -1219,15 +1465,12 @@ function QrCaptionColor() as string
 end function
 
 function CheckoutTileRect() as object
-    tileW = 362
-    tileH = 164
-    stride = 22
-    originY = 480
+    grid = HomeGrid()
     return {
-        x: ContentLeft() + (2 * (tileW + stride)),
-        y: originY + (tileH + stride),
-        w: tileW,
-        h: tileH
+        x: grid.x + (2 * (grid.w + grid.gap)),
+        y: grid.y + (grid.h + grid.gap),
+        w: grid.w,
+        h: grid.h
     }
 end function
 
@@ -1236,21 +1479,73 @@ function BadgeCaptionColor() as string
     return "0x8A5A00FF"
 end function
 
+'' Build 28 (Pixel b27 P1). A cream card with 16px padding, right edge 1717,
+' bottom 960 at most, inside title-safe. Home gets the 240px code beside the
+' tile grid; every other page gets the 128px corner card.
 function BadgeFrame() as object
+    return BadgeFrameFor(128, 960)
+end function
+
+function HomeBadgeFrame() as object
+    frame = BadgeFrameFor(240, 0)
+    frame.y = HomeStripRect().y + HomeStripRect().h + 24
+    return frame
+end function
+
+function BadgeFrameFor(qr as integer, bottom as integer) as object
+    pad = 16
+    w = 312
+    ' The caption box is wider than the card so no font can ellipsize the
+    ' domain; the text is centered, so the glyphs stay on the cream card.
+    captionW = 432
+    h = pad + qr + 8 + 40 + pad
     return {
-        x: 1304,
-        y: 832,
-        w: 520,
-        h: 188,
-        qrX: 196,
-        qrY: 8,
-        qr: 128,
-        captionX: 12,
-        captionY: 144,
-        captionW: 496,
+        x: HomeRight() - w,
+        y: bottom - h,
+        w: w,
+        h: h,
+        qrX: (w - qr) \ 2,
+        qrY: pad,
+        qr: qr,
+        captionX: (w - captionW) \ 2,
+        captionY: pad + qr + 8,
+        captionW: captionW,
         captionH: 40
     }
 end function
+
+function BadgeFrameForSection(section as string) as object
+    if section = "home" then return HomeBadgeFrame()
+    return BadgeFrame()
+end function
+
+function BadgeCardColor() as string
+    return "0xF4EFE3FF"
+end function
+
+sub ApplyBadgeFrame(section as string)
+    key = "corner"
+    if section = "home" then key = "home"
+    if m.badgeFrameKey = key then return
+    m.badgeFrameKey = key
+    frame = BadgeFrameForSection(section)
+    if m.badgeGroup <> invalid then m.badgeGroup.translation = [frame.x, frame.y]
+    if m.badgeCard <> invalid
+        m.badgeCard.width = frame.w
+        m.badgeCard.height = frame.h
+    end if
+    if m.badgeMark <> invalid
+        m.badgeMark.translation = [frame.qrX, frame.qrY]
+        m.badgeMark.width = frame.qr
+        m.badgeMark.height = frame.qr
+    end if
+    if m.badgePoster <> invalid
+        m.badgePoster.translation = [frame.qrX, frame.qrY]
+        m.badgePoster.width = frame.qr
+        m.badgePoster.height = frame.qr
+    end if
+    if m.badgeDomain <> invalid then m.badgeDomain.translation = [frame.captionX, frame.captionY]
+end sub
 
 function BadgeCaptionRect() as object
     frame = BadgeFrame()
@@ -1260,6 +1555,20 @@ function BadgeCaptionRect() as object
         w: frame.captionW,
         h: frame.captionH
     }
+end function
+
+sub LogBadgeCard(show as boolean)
+    shown = "false"
+    if show = true then shown = "true"
+    if m.badgeCardLogged = shown + m.section then return
+    m.badgeCardLogged = shown + m.section
+    print "Eaglewood: badge card shown="; shown; " section="; m.section
+end sub
+
+function BadgeBitmapReady() as boolean
+    poster = PosterForSlot("badge")
+    if poster = invalid then return false
+    return (poster.loadStatus = "ready")
 end function
 
 function BadgePosterFailed() as boolean
@@ -1279,7 +1588,8 @@ function DetailQrCardRect() as object
 end function
 
 function DetailBodyRect() as object
-    return { x: ContentLeft(), y: ContentTop() + 472, w: ContentWidth(), h: 200 }
+    ' Stops 24px short of the corner QR card.
+    return { x: ContentLeft(), y: ContentTop() + 472, w: BadgeFrame().x - 24 - ContentLeft(), h: 200 }
 end function
 
 function DetailQrPosterRect() as object
@@ -1294,7 +1604,7 @@ end function
 
 function DetailQrCaptionRect() as object
     card = DetailQrCardRect()
-    return { x: card.x, y: card.y + card.h - 32, w: card.w, h: 28 }
+    return { x: card.x, y: card.y + card.h - 38, w: card.w, h: 34 }
 end function
 
 function BookBodyRect() as object
