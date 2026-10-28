@@ -764,3 +764,8 @@ function RouterStep(issues as object) as string
     end for
     return ""
 end function
+
+' Build 31: the subhead names the season the screen is sorted by.
+function SeasonSubheadFor(screen as string, calendar as string) as string
+    return "Sorted for " + ScreenSortSeason(screen, calendar)
+end function

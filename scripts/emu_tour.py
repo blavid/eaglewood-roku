@@ -92,6 +92,8 @@ def screens() -> list[dict]:
     # Build 29: the detail body shows 5 lines and scrolls; Winter overflows.
     # Build 30: at 28px the Winter body fits, so the scroll proof uses Summer's float.
     add("summer-detail-scrolled", todo("summer") + ["Right", "Select"] + ["Down"] * 3, "First Summer detail (float), body scrolled")
+    # Build 31: QR host unreachable (stage "qrblocked" drops /blocked-qr/ connections).
+    add("summer-detail-qr-blocked", todo("summer") + ["Right", "Select"], "Float detail with the QR fetch blocked: no-link layout, no white plate", stage="qrblocked", wait=7)
     add("summer-detail-nolink", todo("summer") + ["Right"] + ["Down"] * 3 + ["Select"], "Elk Lake (no link): QR column collapsed, photo and body 1128px")
     add("rail-rules-focus", rail("rules"), "Rail House Rules focused")
     add("house-rules", rail("rules") + ["Select"], "House Rules page")
@@ -119,6 +121,10 @@ def screens() -> list[dict]:
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = self.path.split("?", 1)[0]
+        if path.startswith("/blocked-qr/"):
+            # Network blocked: drop the connection with no response.
+            self.close_connection = True
+            return
         target = FIX / path.lstrip("/")
         if not target.is_file():
             self.send_response(404)
@@ -203,6 +209,14 @@ def build_stage(name: str, key: str) -> Path:
         (FIX / LONG_FIX_PATH.lstrip("/")).write_text(long_fix_guide(), encoding="utf-8")
         task = stage / "components" / "GuideTask.brs"
         task.write_text(task.read_text(encoding="utf-8").replace("https://sunrivertownhome.com/data/guide.json", "https://sunrivertownhome.com" + LONG_FIX_PATH, 1), encoding="utf-8")
+    if name == "qrblocked":
+        acts = stage / "data" / "activities.json"
+        acts.write_text(acts.read_text(encoding="utf-8").replace("/data/qr/", "/blocked-qr/"), encoding="utf-8")
+        served = FIX / "data-qrblocked" / "activities.json"
+        served.parent.mkdir(parents=True, exist_ok=True)
+        served.write_text((FIX / "data" / "activities.json").read_text(encoding="utf-8").replace("/data/qr/", "/blocked-qr/"), encoding="utf-8")
+        task = stage / "components" / "GuideTask.brs"
+        task.write_text(task.read_text(encoding="utf-8").replace("https://sunrivertownhome.com/data/activities.json", "https://sunrivertownhome.com/data-qrblocked/activities.json", 1), encoding="utf-8")
     (stage / "emu").mkdir()
     (stage / "emu" / "enabled").write_text("screenshot harness\n", encoding="utf-8")
     (stage / "components" / "secrets.brs").write_text(
@@ -307,7 +321,7 @@ def launch_retrying(stage, keys) -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     build_fixtures()
-    stages = {"key": build_stage("key", FAKE_KEY), "nokey": build_stage("nokey", ""), "longfix": build_stage("longfix", FAKE_KEY)}
+    stages = {"key": build_stage("key", FAKE_KEY), "nokey": build_stage("nokey", ""), "longfix": build_stage("longfix", FAKE_KEY), "qrblocked": build_stage("qrblocked", FAKE_KEY)}
     threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", FIX_PORT), Handler).serve_forever, daemon=True).start()
     rows = []
     seen: dict[str, str] = {}

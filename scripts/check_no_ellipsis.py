@@ -137,7 +137,7 @@ def main() -> int:
         check("book savings", book["savingsText"], 680, 20, 5, 112)
     for perk in book.get("perks") or []:
         if isinstance(perk, str):
-            check(f"perk {perk[:24]}", "Outdoors" if perk.lower() == "outdoor adventures" else perk, 192, 26, 2, 72)
+            check(f"perk {perk[:24]}", "Outdoors" if perk.lower() == "outdoor adventures" else perk, 192, 26, 1, 56)
     check("detail qr caption", "Scan for info", 280, 20, 1, 34, False)
     check("badge domain", "sunrivertownhome.com", 520, 20, 1, 44, False)
     check("home badge domain", "sunrivertownhome.com", 520, 28, 1, 40, False)

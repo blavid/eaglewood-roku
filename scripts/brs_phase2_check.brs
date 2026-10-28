@@ -615,6 +615,7 @@ sub Main()
     failed = failed + ExpectBrandCopy()
     failed = failed + ExpectTextFit()
     failed = failed + ExpectSummerOrder()
+    failed = failed + ExpectSeasonSubhead()
     failed = failed + ExpectScroll()
     failed = failed + PrintNavTrace()
 
@@ -1139,5 +1140,32 @@ function ExpectSummerOrder() as integer
         end if
     end for
     if missed = 0 then print "summer order ok"
+    return missed
+end function
+
+' Build 31 regression: the subhead names the season the screen sorts by,
+' whatever grid was built last.
+function ExpectSeasonSubhead() as integer
+    missed = 0
+    cases = [["summer", "summer"], ["winter", "winter"], ["biking", "fall"], ["hiking", "fall"], ["dining", "fall"], ["todo", "fall"]]
+    for each c in cases
+        got = SeasonSubheadFor(c[0], "fall")
+        if got <> "Sorted for " + c[1]
+            print "FAIL subhead "; c[0]; " got "; got
+            missed = missed + 1
+        end if
+    end for
+    saved = m.section
+    for each screen in ["summer", "winter", "biking", "todo"]
+        m.section = screen
+        m.activitySeason = "winter"
+        want = SeasonSubheadFor(screen, CurrentSeason())
+        if Left(ActivitySubtitle(), Len(want)) <> want
+            print "FAIL subtitle "; screen; " got "; ActivitySubtitle()
+            missed = missed + 1
+        end if
+    end for
+    m.section = saved
+    if missed = 0 then print "season subhead ok"
     return missed
 end function

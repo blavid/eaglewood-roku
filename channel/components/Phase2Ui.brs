@@ -200,10 +200,12 @@ function BuildBookPane(parent as object) as object
     perkRow = BookPerkRow()
     for index = 0 to 4
         chip = CreateObject("roSGNode", "Group")
-        ' Pixel b28: 200x72 chips, 24px apart, all one navy with white text.
+        ' Pixel b30: plain tags, not buttons (they cannot take focus): 200x56,
+        ' 2px #3A4A66 outline, no fill, 26px #C9D1E0 text, 24px gaps.
         chip.translation = [perkRow.x + (index * (PerkChipW() + 24)), perkRow.y]
-        bg = AddRect(chip, PerkChipColor(), 0, 0, PerkChipW(), PerkChipH())
-        text = AddLabel(chip, "", "font:SmallestSystemFont", "0xFFFFFFFF", 4, 0, PerkChipW() - 8, PerkChipH())
+        AddRect(chip, PerkOutlineColor(), 0, 0, PerkChipW(), PerkChipH())
+        bg = AddRect(chip, PerkChipColor(), 2, 2, PerkChipW() - 4, PerkChipH() - 4)
+        text = AddLabel(chip, "", "font:SmallestSystemFont", PerkTextColor(), 4, 0, PerkChipW() - 8, PerkChipH())
         SetFontSize(text, PerkChipSize())
         text.horizAlign = "center"
         text.vertAlign = "center"
@@ -767,7 +769,7 @@ sub PaintPerks()
         raw = m.book.Lookup("perks")
         if IsList(raw) then perks = raw
     end if
-    ' The chips are not focusable, so they all share one navy and none looks focused.
+    ' The tags are not focusable, so they are all the same plain outline.
     last = m.perkGroups.Count() - 1
     for index = 0 to last
         chip = m.perkGroups[index]
@@ -780,7 +782,7 @@ sub PaintPerks()
             if IsAssoc(entry) then label = GuideLimitedText(entry.Lookup("label"), 40)
             chip.text.text = PerkLabel(label)
             chip.bg.color = PerkChipColor()
-            chip.text.color = "0xFFFFFFFF"
+            chip.text.color = PerkTextColor()
         end if
     end for
 end sub
@@ -1175,12 +1177,13 @@ end sub
 
 ' The season the subhead names ("Sorted for winter"); the preview row leads with it.
 function TodoSeason() as string
-    if m.activitySeason <> invalid and m.activitySeason <> "" then return m.activitySeason
+    ' Build 31 (Captain #1): never the last grid's season, which went stale.
     return CurrentSeason()
 end function
 
 function ActivitySubtitle() as string
-    season = TodoSeason()
+    ' Build 31 (Captain #1): SeasonSubheadFor uses ScreenSortSeason, the same
+    ' value EnsureActivityGrid sorts by.
     extra = "Seasonal picks"
     if m.section = "dining" then extra = "Village & Bend"
     if m.section = "hiking" then extra = "Trails nearby"
@@ -1188,8 +1191,8 @@ function ActivitySubtitle() as string
     if m.section = "summer" then extra = "Summer picks"
     if m.section = "fishing" then extra = "On the water"
     if m.section = "biking" then extra = "Rides nearby"
-    if m.section = "todo" then return "Sorted for " + season
-    return "Sorted for " + season + "  ·  " + extra
+    if m.section = "todo" then return SeasonSubheadFor(m.section, CurrentSeason())
+    return SeasonSubheadFor(m.section, CurrentSeason()) + "  ·  " + extra
 end function
 
 sub EnsureActivityGrid()
@@ -1202,7 +1205,6 @@ sub EnsureActivityGrid()
     ' rank (fall), so Hiking's high fall ranks led Summer. A season screen
     ' sorts by its own seasonRank key.
     season = ScreenSortSeason(m.section, CurrentSeason())
-    m.activitySeason = season
     token = 0
     if m.activitiesToken <> invalid then token = m.activitiesToken
     count = 0
@@ -1329,7 +1331,9 @@ sub PaintDetail()
         m.detailExtra.text = ""
         m.detailExtra.visible = false
     end if
-    LayoutDetailColumns(DetailQrForItem(item) <> "")
+    ArmDetailQrDeadline(DetailQrForItem(item))
+    ' Build 31 (Captain #2): the no-link layout until the QR has a bitmap.
+    LayoutDetailColumns(DetailQrShown())
     FillDetailBody()
     if m.detailCredit <> invalid then m.detailCredit.text = ItemText(item, "credit")
     if m.detailBack <> invalid then m.detailBack.text = "Back to " + RailLabel(m.section)
@@ -1494,14 +1498,21 @@ function DetailQrForItem(item as object) as string
 end function
 
 sub ShowDetailQr(show as boolean)
-    ready = DetailPosterReady()
+    if show
+        RevealDetailQr()
+        return
+    end if
+    SetDetailQrVisible(false)
+end sub
+
+sub SetDetailQrVisible(show as boolean)
     if m.detailQrCard <> invalid then m.detailQrCard.visible = show
     if m.detailPlace <> invalid then m.detailPlace.visible = show
     if m.detailSite <> invalid then m.detailSite.visible = show
     if m.detailQrCaption <> invalid then m.detailQrCaption.visible = show
-    if m.detailQr <> invalid then m.detailQr.visible = (show and ready)
+    if m.detailQr <> invalid then m.detailQr.visible = show
     if m.detailQrMissing <> invalid then m.detailQrMissing.visible = false
-    ShowQrMark("detail", show)
+    ShowQrMark("detail", false)
 end sub
 
 function DetailPosterReady() as boolean
@@ -1511,18 +1522,50 @@ function DetailPosterReady() as boolean
     return false
 end function
 
-' The poster stays hidden until it has a bitmap, so the cream rect stays visible.
-sub RevealDetailQr()
-    if QrRemote("detail") = "" then return
-    ready = DetailPosterReady()
-    if m.detailQrCard <> invalid then m.detailQrCard.visible = true
-    poster = PosterForSlot("detail")
-    if poster <> invalid then poster.visible = ready
-    if ready
-        ShowQrMark("detail", false)
-    else
-        ShowQrMark("detail", true)
+' Build 31 (Captain #2): the QR column exists only while this item's QR has a
+' bitmap that arrived inside the 5s deadline. Otherwise the page keeps the
+' no-link layout, so a guest never sees an empty white plate.
+function DetailQrShown() as boolean
+    if m.detailQrFor = invalid or m.detailQrFor = "" then return false
+    if m.detailQrTimedOut = true then return false
+    if QrRemote("detail") <> m.detailQrFor then return false
+    return DetailPosterReady()
+end function
+
+function DetailQrDeadlineSeconds() as float
+    return 5
+end function
+
+sub ArmDetailQrDeadline(qr as string)
+    if m.detailQrFor = qr then return
+    m.detailQrFor = qr
+    m.detailQrTimedOut = false
+    if m.detailQrTimer <> invalid then m.detailQrTimer.control = "stop"
+    if qr = "" or m.top = invalid then return
+    if m.detailQrTimer = invalid
+        m.detailQrTimer = CreateObject("roSGNode", "Timer")
+        m.detailQrTimer.repeat = false
+        m.detailQrTimer.observeField("fire", "onDetailQrDeadline")
+        m.top.appendChild(m.detailQrTimer)
     end if
+    m.detailQrTimer.duration = DetailQrDeadlineSeconds()
+    m.detailQrTimer.control = "start"
+end sub
+
+sub onDetailQrDeadline()
+    if DetailQrShown() then return
+    m.detailQrTimedOut = true
+    print "Eaglewood: qr detail fallback reason=timeout url="; SafeUri(m.detailQrFor)
+    RevealDetailQr()
+end sub
+
+sub RevealDetailQr()
+    shown = DetailQrShown()
+    if m.detailWide = shown
+        LayoutDetailColumns(shown)
+        if m.detailBody <> invalid then FillDetailBody()
+    end if
+    SetDetailQrVisible(shown)
 end sub
 
 function DetailMeta(item as object) as string
@@ -1599,6 +1642,12 @@ end sub
 
 sub onDetailQrStatus()
     NoteQrLoaded("detail")
+    poster = PosterForSlot("detail")
+    if poster <> invalid and poster.loadStatus = "failed"
+        m.detailQrTimedOut = true
+        print "Eaglewood: qr detail fallback reason=failed url="; SafeUri(m.detailQrFor)
+    end if
+    RevealDetailQr()
 end sub
 
 sub ApplyWifiResult(result as object)
@@ -1819,7 +1868,7 @@ sub LayoutDetailColumns(hasQr as boolean)
             m.detailCredit.horizAlign = "center"
         end if
     end if
-    if m.detailQrCard <> invalid and m.detailWide then m.detailQrCard.visible = false
+    if m.detailWide then SetDetailQrVisible(false)
     PlaceDetailScroll()
 end sub
 
@@ -1885,15 +1934,24 @@ function PerkChipW() as integer
 end function
 
 function PerkChipH() as integer
-    return 72
+    return 56
 end function
 
 function PerkChipSize() as integer
     return 26
 end function
 
+' No fill: the inner rect is the panel color, leaving a 2px outline.
 function PerkChipColor() as string
-    return "0x2A3B5CFF"
+    return BookPanelColor()
+end function
+
+function PerkOutlineColor() as string
+    return "0x3A4A66FF"
+end function
+
+function PerkTextColor() as string
+    return "0xC9D1E0FF"
 end function
 
 ' "Outdoor adventures" wraps in a 200px chip (Pixel b28), so it reads "Outdoors".
