@@ -224,7 +224,7 @@ function BuiltinMenu() as object
     fixes = { section: "fixes", label: "Quick Fixes", type: "quickfixes", children: [] }
     fixes["feed"] = "guide.troubleshooting"
     book = { section: "book", label: "Book Direct", type: "book", children: [] }
-    checkout = { section: "checkout", label: "Checkout Instructions", type: "checkout", children: [] }
+    checkout = { section: "checkout", label: "Checkout", type: "checkout", children: [] }
     menu["items"] = [home, wifi, things, rules, fixes, book, checkout]
     return menu
 end function

@@ -244,3 +244,15 @@ The tour writes one PNG per screen plus `index.tsv` (name, keys, sha256, note).
 Build 28 layout: H1 at y≈167 (ContentTop 154), one-line subhead, Book Direct
 strip full width over a 3x2 tile grid, cream booking QR card right of the
 grid on Home and in the corner (312 px) elsewhere, hidden on Wi-Fi.
+
+Build 29 layout (Pixel's b28 reviews): the corner booking QR shows on Home,
+House Rules and Checkout only. It is hidden on Book Direct, Wi-Fi, Things to Do
+grids and details (one "Scan for info" QR per detail, #8A5A00 caption) and
+Quick Fixes, so the steps panel can grow to y 960. H1s are 52px. Long copy
+(activity details and Quick Fixes) renders in `DetailScroll`. Each line is its
+own 30px label at a 42px pitch, pre-broken at spaces so no line starts with a
+space. Numbered steps get a 36px hanging indent. The scene moves `offset` on
+Up/Down, and the scrollbar and the Up/Down keycap appear only when the copy
+overflows. Season pills are one line of 24 characters or fewer (for example
+"Late Jun–Oct"). House Rules drops the check-in and check-out bullets because
+the subhead already gives the times.

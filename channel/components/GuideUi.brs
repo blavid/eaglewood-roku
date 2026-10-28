@@ -131,7 +131,15 @@ function RailChevron(section as string) as string
     return ""
 end function
 
+' Pixel b28: the rail says "Checkout" so it stays on one line; the page H1
+' keeps the full name (PageTitle).
+function PageTitle(section as string) as string
+    if section = "checkout" then return "Checkout Instructions"
+    return RailLabel(section)
+end function
+
 function RailLabel(section as string) as string
+    if section = "checkout" then return "Checkout"
     named = MenuLabel(section)
     if named <> "" then return named
     if section = "home" then return "Home"
@@ -145,7 +153,7 @@ function RailLabel(section as string) as string
     if section = "fishing" then return "Fishing"
     if section = "biking" then return "Biking"
     if section = "book" then return "Book Direct"
-    if section = "checkout" then return "Checkout Instructions"
+    if section = "checkout" then return "Checkout"
     if section = "wifi" then return "Wi-Fi"
     return "Home"
 end function
@@ -250,23 +258,34 @@ function CountWrapped(text as string, width as integer, charWidth as integer) as
 end function
 
 function ScrollFontSize() as integer
-    return 27
+    return 30
 end function
 
+' 42px leading at 30px.
 function ScrollLineSpacing() as integer
-    return 8
+    return 12
 end function
 
 function DetailTextWidth() as integer
     return ContentWidth() - 64
 end function
 
+' Quick Fixes panel: below the H1, grown to y 960 at most, 32px padding,
+' hint row 24px above the bottom (DetailScroll.AreaHeight).
+function FixPanelTop() as integer
+    return ContentTop() + 80
+end function
+
+function FixPanelMaxHeight() as integer
+    return 960 - FixPanelTop()
+end function
+
 function FixScrollViewport() as integer
-    return 320
+    return FixPanelMaxHeight() - 32 - 24 - 40 - 16
 end function
 
 function ActivityScrollViewport() as integer
-    return 128
+    return DetailBodyRect().h - 16 - 24 - 40 - 16
 end function
 
 function ScrollContentHeight(text as string, width as integer) as integer
@@ -284,6 +303,7 @@ function MenuTitleBox() as object
     return { w: 300, h: 160, maxLines: 4, size: 27 }
 end function
 
+' ActivityCard, build 29: 27px title, 20px meta, 24px season pill text.
 function CardNameBox() as object
     return { w: 332, h: 200, maxLines: 5, size: 27 }
 end function
@@ -293,7 +313,7 @@ function CardDistanceBox() as object
 end function
 
 function CardSeasonBox() as object
-    return { w: 332, h: 99, maxLines: 3, size: 20 }
+    return { w: 302, h: 111, maxLines: 3, size: 24 }
 end function
 
 function LabelFitsBox(text as string, fit as object) as boolean
@@ -318,13 +338,22 @@ end function
 ' Pixel b27: one 24px inner left padding and 20px top padding for both lines.
 function TileTitleBox() as object
     grid = HomeGrid()
-    return { x: 24, y: 20, w: grid.w - 48, h: 88 }
+    return { x: TilePad(), y: 20, w: grid.w - (2 * TilePad()), h: 88 }
 end function
 
 function TileSubBox() as object
     grid = HomeGrid()
     ' Bottom-anchored, two lines, so a long subtitle wraps instead of clipping.
-    return { x: 24, y: 72, w: grid.w - 48, h: 84, maxLines: 2, size: 28 }
+    return { x: TilePad(), y: 72, w: grid.w - (2 * TilePad()), h: 84, maxLines: 2, size: 28 }
+end function
+
+function TileTitleSize() as integer
+    return 32
+end function
+
+' Text inset inside a Home tile (Pixel b28: 18px each side).
+function TilePad() as integer
+    return 18
 end function
 
 function TileSubColor() as string
@@ -334,11 +363,13 @@ end function
 ' Home column, top to bottom: H1, subhead 12px under it, strip 32px under
 ' that, then a 3x2 grid with 24px gutters. The QR card sits right of the grid.
 function HomeSubheadY() as integer
-    return ContentTop() + 64 + 12
+    ' Pixel b28: the subhead glyphs sit 12px under the H1 glyphs.
+    return ContentTop() + 66
 end function
 
 function HomeStripRect() as object
-    return { x: ContentLeft(), y: HomeSubheadY() + 36 + 32, w: HomeRight() - ContentLeft(), h: 164 }
+    ' 32px from the subhead glyphs (box 40, glyph bottom about +34) to the strip.
+    return { x: ContentLeft(), y: HomeSubheadY() + 66, w: HomeRight() - ContentLeft(), h: 164 }
 end function
 
 function HomeRight() as integer
@@ -405,7 +436,7 @@ function TileTitleFits(section as string) as boolean
 end function
 
 function CheckoutHeadingFits() as boolean
-    return LabelLinesFit(RailLabel("checkout"), ContentWidth(), FallbackCharWidth(54), 1, 54, 64)
+    return LabelLinesFit(PageTitle("checkout"), ContentWidth(), FallbackCharWidth(54), 1, 54, 64)
 end function
 
 function RailClearsContent() as boolean
@@ -418,6 +449,8 @@ function TileTitle(section as string) as string
     if section = "fixes" then return "Quick Fixes"
     ' The tile column is narrower now; the rail and the page keep the full name.
     if section = "checkout" then return "Checkout"
+    ' "Things to Do" wraps in the 212px tile text box.
+    if section = "todo" then return "To Do"
     return RailLabel(section)
 end function
 
@@ -501,6 +534,7 @@ sub BuildShell()
     m.detailScroll.translation = [ContentLeft(), ContentTop()]
     m.detailScroll.visible = false
     shell.appendChild(m.detailScroll)
+    BuildFixesPage(shell)
 
     m.homePane = CreateObject("roSGNode", "Group")
     shell.appendChild(m.homePane)
@@ -532,6 +566,43 @@ sub BuildShell()
     RaiseBadge()
 end sub
 
+' Quick Fixes H1 at the standard H1 spot, and a rail-focus preview of the
+' first four issue titles (Pixel b28).
+sub BuildFixesPage(shell as object)
+    page = CreateObject("roSGNode", "Group")
+    page.visible = false
+    shell.appendChild(page)
+    m.fixesPage = page
+    m.fixesTitle = AddLabel(page, RailLabel("fixes"), "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 68)
+    SetFontSize(m.fixesTitle, PageH1Size())
+    m.fixesPreview = []
+    for index = 0 to 3
+        y = FixPanelTop() + 8 + (index * 64)
+        dot = AddRect(page, AmberColor(), ContentLeft() + 4, y + 13, 12, 12)
+        line = AddLabel(page, "", "font:SmallSystemFont", InkColor(), ContentLeft() + 32, y, ContentWidth() - 32, 40)
+        SetFontSize(line, 30)
+        line.maxLines = 1
+        m.fixesPreview.Push({ dot: dot, line: line })
+    end for
+end sub
+
+sub PaintFixesPage(section as string)
+    if m.fixesPage = invalid then return
+    show = (section = "fixes")
+    m.fixesPage.visible = show
+    preview = show and MenuDepth() = "top"
+    issues = []
+    if preview then issues = FixIssues()
+    for index = 0 to m.fixesPreview.Count() - 1
+        entry = m.fixesPreview[index]
+        text = ""
+        if index < issues.Count() then text = AsText(issues[index].Lookup("issue"))
+        entry.line.text = text
+        entry.line.visible = (text <> "")
+        entry.dot.visible = (text <> "")
+    end for
+end sub
+
 sub RaiseDetailScroll()
     if m.detailScroll = invalid or m.shell = invalid then return
     m.shell.removeChild(m.detailScroll)
@@ -550,12 +621,12 @@ sub BuildTiles(parent as object)
         y = grid.y + (row * (grid.h + grid.gap))
         group = CreateObject("roSGNode", "Group")
         group.translation = [x, y]
-        AddRect(group, "0x00000055", 8, 8, grid.w, grid.h)
+        ' No drop shadow: it made the 24px gutters read as 26 across and 19 down.
         outer = AddRect(group, TileColor(), 0, 0, grid.w, grid.h)
         inner = AddRect(group, TileColor(), 0, 0, grid.w, grid.h)
         titleBox = TileTitleBox()
         title = AddLabel(group, TileTitle(sections[index]), "font:SmallBoldSystemFont", "0xFFFFFFFF", titleBox.x, titleBox.y, titleBox.w, titleBox.h)
-        SetFontSize(title, 34)
+        SetFontSize(title, TileTitleSize())
         title.maxLines = 2
         title.vertAlign = "top"
         subBox = TileSubBox()
@@ -584,15 +655,55 @@ function BuildRulesPane(parent as object) as object
     parent.appendChild(pane)
     AddLabel(pane, "House Rules", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
     m.rulesMeta = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 68, ContentWidth(), 36)
+    ' Build 29 (Pixel b28): navy 70% scrim at x 588-1300 with 32px padding,
+    ' 12px gold round bullets, 30px text at a 56px pitch.
+    m.rulesScrim = AddRect(pane, "0x1B2A44B3", ContentLeft(), RulesTop(), RulesScrimWidth(), 120)
     m.ruleLabels = []
+    m.ruleDots = []
     last = VisibleRules() - 1
     for index = 0 to last
-        label = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), ContentLeft(), ContentTop() + 116 + (index * 72), ContentWidth(), 68)
+        dot = CreateObject("roSGNode", "Poster")
+        dot.uri = "pkg:/images/dot-gold.png"
+        dot.width = 12
+        dot.height = 12
+        dot.visible = false
+        pane.appendChild(dot)
+        m.ruleDots.Push(dot)
+        label = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), ContentLeft() + 32 + 28, RulesTop() + 32 + (index * 56), RuleTextWidth(), 40)
+        SetFontSize(label, 30)
         label.vertAlign = "top"
-        label.maxLines = 2
+        label.maxLines = 3
         m.ruleLabels.Push(label)
     end for
     return pane
+end function
+
+function CheckoutStepsTop() as integer
+    return ContentTop() + 124
+end function
+
+function RulesTop() as integer
+    return ContentTop() + 116
+end function
+
+function RulesScrimWidth() as integer
+    return 1300 - ContentLeft()
+end function
+
+function RuleTextWidth() as integer
+    return RulesScrimWidth() - 64 - 28
+end function
+
+' The subhead already gives check-in and check-out, so those bullets go.
+function ShownRules(rules as object) as object
+    out = []
+    if not IsList(rules) then return out
+    for each rule in rules
+        text = LCase(AsText(rule).Trim())
+        repeat = (Left(text, 8) = "check-in" or Left(text, 9) = "check-out" or Left(text, 8) = "checkout")
+        if not repeat then out.Push(rule)
+    end for
+    return out
 end function
 
 function BuildFixesPane(parent as object) as object
@@ -607,25 +718,40 @@ function BuildCheckoutPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
     parent.appendChild(pane)
-    AddLabel(pane, RailLabel("checkout"), "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
+    AddLabel(pane, PageTitle("checkout"), "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
     m.checkoutWhen = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 68, ContentWidth(), 36)
+    ' Build 29: the summary sentence repeated the subhead and steps, so it is
+    ' kept only as a hidden node.
     m.checkoutSummary = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), ContentLeft(), ContentTop() + 112, ContentWidth(), 110)
     m.checkoutSummary.vertAlign = "top"
     m.checkoutSummary.maxLines = 4
+    m.checkoutSummary.visible = false
     m.checkoutStepRows = []
     last = VisibleCheckoutSteps() - 1
     for index = 0 to last
         group = CreateObject("roSGNode", "Group")
-        group.translation = [ContentLeft(), ContentTop() + 236 + (index * 72)]
-        badge = AddRect(group, AmberColor(), 0, 8, 36, 36)
-        numberLabel = AddLabel(group, "", "font:SmallBoldSystemFont", InkOnAmber(), 0, 8, 36, 36)
+        group.translation = [ContentLeft(), CheckoutStepsTop() + (index * 72)]
+        ' 44px gold circle, 28px navy numeral, text 20px to the right.
+        badge = CreateObject("roSGNode", "Poster")
+        badge.uri = "pkg:/images/circle-gold.png"
+        badge.width = 44
+        badge.height = 44
+        group.appendChild(badge)
+        numberLabel = AddLabel(group, "", "font:SmallBoldSystemFont", "0x1B2A44FF", 0, 0, 44, 44)
+        SetFontSize(numberLabel, 28)
         numberLabel.horizAlign = "center"
-        body = AddLabel(group, "", "font:SmallSystemFont", InkColor(), 52, 0, ContentWidth() - 52, 68)
-        body.maxLines = 2
+        numberLabel.vertAlign = "center"
+        body = AddLabel(group, "", "font:SmallSystemFont", InkColor(), 64, 2, ContentWidth() - 64, 80)
+        SetFontSize(body, 30)
+        body.vertAlign = "top"
+        body.maxLines = 3
         pane.appendChild(group)
         m.checkoutStepRows.Push({ group: group, numberLabel: numberLabel, body: body })
     end for
-    m.checkoutHost = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), ContentLeft(), 860, ContentWidth(), 36)
+    ' Host line pinned at y 920, 26px #C9D1E0. The text (name and business
+    ' email) is unchanged.
+    m.checkoutHost = AddLabel(pane, "", "font:SmallSystemFont", "0xC9D1E0FF", ContentLeft(), 920, ContentWidth(), 40)
+    SetFontSize(m.checkoutHost, 26)
     return pane
 end function
 
@@ -703,6 +829,7 @@ sub ShowSection(section as string)
         end if
     end if
     if m.footer <> invalid then m.footer.visible = FooterShown(section)
+    PaintFixesPage(section)
     if not onActivity then ReleaseCardImages()
     ShowQrFrame("badge", BadgeShown(section))
     ShowQrFrame("book", QrRemote("book") <> "")
@@ -790,12 +917,17 @@ sub PaintRailRows(rows as object, menu as object, childPanel as boolean)
             if current = true
                 if m.zone = "rail" then focused = true
             end if
+            ' Quick Fixes keeps its row selected while its list and steps show.
+            if childPanel <> true and MenuDepth() = "fixes" and menu[index] = "fixes"
+                current = true
+                focused = false
+            end if
             if focused
                 row.bg.color = AmberColor()
                 row.label.color = InkOnAmber()
                 row.mark.color = InkOnAmber()
             else if current
-                row.bg.color = "0xFFFFFF2E"
+                row.bg.color = "0x3A4A66FF"
                 row.label.color = InkColor()
                 row.mark.color = InkColor()
             else
@@ -879,30 +1011,65 @@ end sub
 sub PlaceDetailScroll()
     if m.detailScroll = invalid then return
     if MenuDepth() = "fixes"
-        m.detailScroll.translation = [ContentLeft(), ContentTop()]
+        m.detailScroll.padding = 32
+        m.detailScroll.translation = [ContentLeft(), FixPanelTop()]
         m.detailScroll.frameWidth = ContentWidth()
-        m.detailScroll.frameHeight = FixScrollViewport() + 92
+        m.detailScroll.frameHeight = FixPanelMaxHeight()
         return
     end if
     body = DetailBodyRect()
+    m.detailScroll.padding = 16
     m.detailScroll.translation = [body.x, body.y]
     m.detailScroll.frameWidth = body.w
-    m.detailScroll.frameHeight = ActivityScrollViewport() + 92
+    m.detailScroll.frameHeight = body.h
 end sub
 
+' Quick Fixes: the panel hugs its content, 360px minimum, y 960 maximum.
+sub FitFixPanel()
+    if m.detailScroll = invalid then return
+    if MenuDepth() <> "fixes" then return
+    m.detailScroll.frameHeight = FixPanelMaxHeight()
+    need = m.detailScroll.contentHeight + 32 + 16 + 40 + 24
+    if need < 360 then need = 360
+    if need > FixPanelMaxHeight() then need = FixPanelMaxHeight()
+    m.detailScroll.frameHeight = need
+end sub
+
+function MoveBodyScroll(direction as integer) as boolean
+    if m.detailScroll = invalid then return true
+    nextOffset = m.detailScroll.offset + direction
+    if nextOffset < 0 or nextOffset > m.detailScroll.maxOffset then return true
+    m.detailScroll.offset = nextOffset
+    print "Eaglewood: body scroll offset="; nextOffset; " max="; m.detailScroll.maxOffset
+    return true
+end function
+
 function FixScrollText() as string
+    title = FixHeading()
+    steps = FixStepsText()
+    if steps = "" then return title
+    return title + Chr(10) + steps
+end function
+
+function FixHeading() as string
     issue = CurrentIssue()
     if issue = invalid then return "Nothing to show yet."
-    title = AsText(issue.Lookup("issue"))
+    return AsText(issue.Lookup("issue"))
+end function
+
+function FixStepsText() as string
+    issue = CurrentIssue()
+    if issue = invalid then return ""
     steps = issue.Lookup("steps")
-    text = title
-    if steps = invalid then return text
+    if steps = invalid then return ""
     kind = type(steps)
-    if kind <> "roArray" and kind <> "Array" then return text
+    if kind <> "roArray" and kind <> "Array" then return ""
+    text = ""
     last = steps.Count() - 1
-    if last < 0 then return text
+    if last < 0 then return ""
     for index = 0 to last
-        text = text + Chr(10) + (index + 1).ToStr() + ". " + AsText(steps[index])
+        if text <> "" then text = text + Chr(10)
+        text = text + (index + 1).ToStr() + ". " + AsText(steps[index]).Trim()
     end for
     return text
 end function
@@ -910,14 +1077,26 @@ end function
 sub FillDetailBody()
     if m.detailScroll = invalid then return
     text = ""
+    heading = ""
+    hint = ""
     if MenuDepth() = "fixes"
-        text = FixScrollText()
+        heading = FixHeading()
+        text = FixStepsText()
+        if m.zone = "detail"
+            hint = "Up/Down|Scroll|Left|Fixes list|Back|Menu"
+        else
+            hint = "Up/Down|Next fix|Right|Scroll steps|Back|Menu"
+        end if
     else
         if ActivitySection(m.section) = true
             if m.zone = "item" then text = ActivityScrollText()
         end if
+        hint = "Up/Down|Scroll|Back|Back to the list"
     end if
+    m.detailScroll.heading = heading
     m.detailScroll.body = text
+    m.detailScroll.hint = hint
+    FitFixPanel()
 end sub
 
 sub PaintTiles()
@@ -950,10 +1129,16 @@ function TileSubtitle(section as string) as string
     if section = "hiking" then return "Trails nearby"
     if section = "fixes" then return "How-tos"
     if section = "checkout"
-        if m.checkOut <> invalid and m.checkOut <> "" then return "Before " + m.checkOut
-        return "Before checkout"
+        if m.checkOut <> invalid and m.checkOut <> "" then return "By " + ShortClock(m.checkOut)
+        return "By checkout"
     end if
     return ""
+end function
+
+'' "11:00 AM" -> "11 AM"; "10:30 AM" stays. Keeps the Checkout tile on one line.
+function ShortClock(text as string) as string
+    if text = invalid then return ""
+    return text.Replace(":00 ", " ")
 end function
 
 function FixIssues() as object
@@ -1005,17 +1190,32 @@ sub PaintRules()
     start = WindowStart(RuleCount(), VisibleRules(), m.ruleScroll)
     last = m.ruleLabels.Count() - 1
     if last < 0 then return
+    y = RulesTop() + 32
+    shown = 0
     for index = 0 to last
         label = m.ruleLabels[index]
+        dot = m.ruleDots[index]
         text = ListText(m.rules, start + index)
-        if text = ""
+        lines = BreakLines(text, RuleTextWidth(), 30)
+        if text = "" or y + (lines.Count() * 40) > 940
             label.visible = false
             label.text = ""
+            dot.visible = false
         else
             label.visible = true
-            label.text = "-  " + text
+            label.text = JoinLines(lines)
+            label.translation = [ContentLeft() + 32 + 28, y]
+            label.height = lines.Count() * 40
+            dot.translation = [ContentLeft() + 32, y + 13]
+            dot.visible = true
+            y = y + 56 + ((lines.Count() - 1) * 40)
+            shown = shown + 1
         end if
     end for
+    if m.rulesScrim <> invalid
+        m.rulesScrim.visible = (shown > 0)
+        m.rulesScrim.height = (y - 56 + 40 + 32) - RulesTop()
+    end if
 end sub
 
 sub PaintFixes()
@@ -1088,6 +1288,7 @@ sub PaintCheckout()
     if m.checkoutScroll < 0 then m.checkoutScroll = 0
     start = WindowStart(CheckoutStepCount(), VisibleCheckoutSteps(), m.checkoutScroll)
     last = m.checkoutStepRows.Count() - 1
+    stepY = CheckoutStepsTop()
     for index = 0 to last
         row = m.checkoutStepRows[index]
         text = ListText(m.checkoutSteps, start + index)
@@ -1096,7 +1297,13 @@ sub PaintCheckout()
         else
             row.group.visible = true
             row.numberLabel.text = (start + index + 1).ToStr()
-            row.body.text = text
+            lines = BreakLines(text, ContentWidth() - 64, 30)
+            row.body.text = JoinLines(lines)
+            row.body.height = (lines.Count() * 40) + 8
+            row.group.translation = [ContentLeft(), stepY]
+            tall = lines.Count() * 40
+            if tall < 44 then tall = 44
+            stepY = stepY + tall + 28
         end if
     end for
 end sub
@@ -1182,7 +1389,7 @@ sub ApplyBundle(bundle as object)
     m.checkoutCode = OrText(bundle.checkoutCode, "0")
     m.checkoutVersion = OrText(bundle.checkoutVersion, "0")
     if bundle.rules <> invalid
-        m.rules = bundle.rules
+        m.rules = ShownRules(bundle.rules)
     else
         m.rules = []
     end if

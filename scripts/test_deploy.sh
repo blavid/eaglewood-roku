@@ -203,7 +203,7 @@ if ! unzip -p "$ROOT/dist/eaglewood.zip" components/GuestTask.xml | grep -F -q "
     echo "FAIL deploy.sh zip does not reference secrets.brs from the task"
     exit 1
 fi
-if ! unzip -p "$ROOT/dist/eaglewood.zip" manifest | grep -q "build_version=28"; then
+if ! unzip -p "$ROOT/dist/eaglewood.zip" manifest | grep -q "build_version=29"; then
     echo "FAIL deploy.sh zip is not build 26"
     exit 1
 fi

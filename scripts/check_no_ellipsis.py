@@ -81,10 +81,10 @@ def fetch(url: str) -> dict:
         return json.load(response)
 
 
-def paragraphs(text: str) -> int:
+def paragraphs(text: str, width: int = 1068) -> int:
     count = 0
     for part in text.split("\n"):
-        wrapped = wrap(part, 1068, pessimistic(27))
+        wrapped = wrap(part, width, pessimistic(30))
         count += max(1, len(wrapped)) if part else 1
     return count
 
@@ -111,7 +111,7 @@ def main() -> int:
         "House Rules": (288, 2, 88),
         "Quick Fixes": (288, 2, 88),
         "Book Direct": (288, 2, 88),
-        "Checkout Instructions": (332, 2, 88),
+        "Checkout": (332, 1, 44),
     }
     for label, (width, max_lines, height) in menu_labels.items():
         check(f"rail {label}", label, width, 27, max_lines, height)
@@ -128,7 +128,7 @@ def main() -> int:
 
     for rule in guide.get("houseRules") or []:
         if isinstance(rule, str):
-            check(f"rule {rule[:24]}", rule, 1132, 27, 2, 68)
+            check(f"rule {rule[:24]}", rule, 620, 30, 3, 120)
 
     book = guide.get("bookDirect") or {}
     if isinstance(book.get("body"), str):
@@ -137,9 +137,10 @@ def main() -> int:
         check("book savings", book["savingsText"], 680, 20, 5, 112)
     for perk in book.get("perks") or []:
         if isinstance(perk, str):
-            check(f"perk {perk[:24]}", perk, 198, 20, 2, 80)
+            check(f"perk {perk[:24]}", "Outdoors" if perk.lower() == "outdoor adventures" else perk, 192, 24, 2, 72)
     check("detail qr caption", "Scan for info", 280, 20, 1, 34, False)
-    check("badge domain", "sunrivertownhome.com", 432, 20, 1, 44, False)
+    check("badge domain", "sunrivertownhome.com", 520, 20, 1, 44, False)
+    check("home badge domain", "sunrivertownhome.com", 520, 28, 1, 40, False)
     fallback = "Wi-Fi details couldn't load right now. Please check your booking welcome message or contact your host (see Quick Fixes)."
     # Build 28 status panel body: 416 wide at 28px, 9 lines in 376.
     check("wifi fallback", fallback, 416, 28, 9, 376)
@@ -163,9 +164,10 @@ def main() -> int:
             print(problem)
         return 1
 
-    def scroll_report(label: str, text: str, viewport: int) -> None:
-        lines = paragraphs(text)
-        content_h = lines * (27 + 8)
+    # Build 29: DetailScroll lines are 30px at a 42px pitch.
+    def scroll_report(label: str, text: str, viewport: int, width: int) -> None:
+        lines = paragraphs(text, width)
+        content_h = lines * (30 + 12)
         span = max(0, content_h - viewport)
         print(
             f"scroll {label} lines={lines} contentH={content_h} viewport={viewport} range={span}"
@@ -177,8 +179,9 @@ def main() -> int:
             parts.append(f"{index + 1}. {step}")
         return "\n".join(parts)
 
-    longest_fix = max(visible, key=lambda issue: paragraphs(fix_body(issue)))
-    scroll_report("fixes", fix_body(longest_fix), 320)
+    longest_fix = max(visible, key=lambda issue: paragraphs(fix_body(issue), 1016))
+    # Panel y 234-960, 32px padding, hint row: 614px of text.
+    scroll_report("fixes", fix_body(longest_fix), 614, 1016)
     print(f"scroll fixes title={longest_fix.get('issue')}")
 
     dining = [item for item in items if item.get("_section") == "dining"]
@@ -190,8 +193,9 @@ def main() -> int:
             text = text + "\nTip: " + tip
         return text
 
-    longest_dining = max(dining, key=lambda item: paragraphs(dining_body(item)))
-    scroll_report("dining", dining_body(longest_dining), 128)
+    longest_dining = max(dining, key=lambda item: paragraphs(dining_body(item), 972))
+    # Detail body y 625-940, 16px padding, hint row: 219px (5 lines).
+    scroll_report("dining", dining_body(longest_dining), 219, 972)
     print(f"scroll dining title={longest_dining.get('name')}")
     print("ellipsis failures=0")
     return 0

@@ -244,8 +244,9 @@ sub Main()
         print "FAIL the Book Direct domain caption is narrower than its card"
         failed = failed + 1
     end if
-    if QrCaptionColor() <> AmberColor() or QrCaptionFont() <> "font:SmallestBoldSystemFont"
-        print "FAIL the QR captions do not share the gold caption style"
+    ' Build 29: "Scan for info" is #8A5A00 semibold (about 5.9:1 on cream).
+    if QrCaptionColor() <> "0x8A5A00FF" or QrCaptionFont() <> "font:SmallBoldSystemFont"
+        print "FAIL the QR captions do not use the high-contrast caption style"
         failed = failed + 1
     end if
     frame = BadgeFrame()
@@ -462,7 +463,7 @@ sub Main()
         print "FAIL the detail QR card overlaps the photo or description"
         failed = failed + 1
     end if
-    if RectsClear(BadgeFrame(), card, 0) <> true or RectsClear(BadgeFrame(), photo, 0) <> true or RectsClear(BadgeFrame(), body, 0) <> true
+    if BadgeShown("dining") = true and (RectsClear(BadgeFrame(), card, 0) <> true or RectsClear(BadgeFrame(), photo, 0) <> true or RectsClear(BadgeFrame(), body, 0) <> true)
         print "FAIL the corner badge overlaps the detail photo, description, or QR card"
         failed = failed + 1
     end if
@@ -486,8 +487,9 @@ sub Main()
         print "FAIL the detail QR covers its website label or gold caption"
         failed = failed + 1
     end if
-    if BadgeShown("home") <> true or BadgeShown("dining") <> true or BadgeShown("book") <> false
-        print "FAIL the corner badge visibility does not match build 20"
+    ' Build 29: one QR per detail, so Things to Do hides the corner badge.
+    if BadgeShown("home") <> true or BadgeShown("dining") <> false or BadgeShown("hiking") <> false or BadgeShown("book") <> false
+        print "FAIL the corner badge visibility does not match build 29"
         failed = failed + 1
     end if
     if BadgeNavigateReparents() <> false
@@ -604,7 +606,7 @@ sub Main()
         failed = failed + 1
     end if
     failed = failed + ExpectMenuFile()
-    if RailLabel("checkout") <> "Checkout Instructions" or TileTitle("checkout") <> "Checkout"
+    if RailLabel("checkout") <> "Checkout" or PageTitle("checkout") <> "Checkout Instructions" or TileTitle("checkout") <> "Checkout" or TileTitle("todo") <> "To Do"
         print "FAIL Checkout was not renamed"
         failed = failed + 1
     end if
@@ -771,8 +773,9 @@ function ExpectTextFit() as integer
     missed = 0
     fullSeason = "Year-round (seasonal trail conditions vary)"
     if SeasonChipText("Year-round") <> "Year-round" then missed = missed + 1
-    if SeasonChipText(fullSeason) <> fullSeason then missed = missed + 1
-    if ChipWidthFor("Year-round") < 168 then missed = missed + 1
+    if SeasonChipText(fullSeason) <> "Year-round" then missed = missed + 1
+    if ChipWidthFor("Year-round") > 330 then missed = missed + 1
+    if ChipWidthFor("Year-round") < 150 then missed = missed + 1
     text = ReadAsciiFile("pkg:/data/activities.json")
     norm = NormalizeActivities(ParseObjectText(text))
     if norm = invalid or not IsList(norm.items) then return missed + 1
@@ -789,7 +792,7 @@ function ExpectTextFit() as integer
             print "FIT distance "; ItemText(item, "distance")
             missed = missed + 1
         end if
-        if LabelFitsBox(ItemText(item, "seasonLabel"), CardSeasonBox()) <> true
+        if LabelFitsBox(SeasonChipText(ItemText(item, "seasonLabel")), CardSeasonBox()) <> true
             print "FIT season "; ItemText(item, "seasonLabel")
             missed = missed + 1
         end if

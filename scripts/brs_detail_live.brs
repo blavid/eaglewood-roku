@@ -67,7 +67,7 @@ sub Main()
         print "FAIL corner badge is outside 0..1920 x 0..1080"
         failed = failed + 1
     end if
-    if RectsClear(badge, card, 0) <> true or RectsClear(badge, photo, 0) <> true or RectsClear(badge, body, 0) <> true
+    if BadgeShown("dining") = true and (RectsClear(badge, card, 0) <> true or RectsClear(badge, photo, 0) <> true or RectsClear(badge, body, 0) <> true)
         print "FAIL corner badge intersects the detail photo, description, or QR card"
         failed = failed + 1
     end if

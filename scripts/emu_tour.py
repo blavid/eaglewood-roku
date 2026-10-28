@@ -66,7 +66,7 @@ def screens() -> list[dict]:
     add("home-tile-dining-focus", ["Down", "Right", "Right"], "Home, Dining tile focused")
     add("home-tile-hiking-focus", ["Down", "Down"], "Home, Hiking tile focused (bottom row)")
     add("home-tile-fixes-focus", ["Down", "Down", "Right"], "Home, Quick Fixes tile focused")
-    add("home-tile-checkout-focus", ["Down", "Down", "Right", "Right"], "Home, Checkout Instructions tile focused")
+    add("home-tile-checkout-focus", ["Down", "Down", "Right", "Right"], "Home, Checkout tile focused")
     add("rail-wifi-focus", rail("wifi"), "Rail Wi-Fi row focused, Wi-Fi preview")
     add("wifi-with-qr", rail("wifi") + ["Select"], "Wi-Fi with the local TestNet placeholder QR", need="qr wifi")
     add("wifi-error", rail("wifi") + ["Select"], "Wi-Fi with no guest key: status panel, Password Unavailable", stage="nokey")
@@ -83,20 +83,22 @@ def screens() -> list[dict]:
     for child in ["dining", "hiking", "winter", "summer", "biking"]:
         add(f"{child}-detail", todo(child) + ["Right", "Select"], f"First {child.title()} activity detail")
     add("dining-detail-second", todo("dining") + ["Right", "Right", "Select"], "Second Dining activity detail")
-    # Every detail body fits on one page, so there is no scrolled detail screen.
+    # Build 29: the detail body shows 5 lines and scrolls; Winter overflows.
+    add("winter-detail-scrolled", todo("winter") + ["Right", "Select"] + ["Down"] * 3, "First Winter activity detail, body scrolled")
     add("rail-rules-focus", rail("rules"), "Rail House Rules focused")
     add("house-rules", rail("rules") + ["Select"], "House Rules page")
     # All six rules fit on one page, so there is no scrolled House Rules screen.
     add("rail-fixes-focus", rail("fixes"), "Rail Quick Fixes focused")
     for index in range(12):
         add(f"fixes-detail-{index + 1:02d}", rail("fixes") + ["Select"] + ["Down"] * index, f"Quick Fixes issue {index + 1} with its steps")
-    add("fixes-detail-03-scrolled", rail("fixes") + ["Select", "Down", "Down", "Right"] + ["Down"] * 8, "Quick Fixes issue 3 steps scrolled")
-    add("fixes-detail-12-scrolled", rail("fixes") + ["Select"] + ["Down"] * 11 + ["Right"] + ["Down"] * 8, "Quick Fixes issue 12 steps scrolled")
+    # Build 29: the steps panel grows to y 960 and every issue fits (the
+    # longest, issue 12, is 13 lines in a 14-line viewport), so a scrolled frame
+    # is the same picture. Scrolling is covered by winter-detail-scrolled.
     add("rail-book-focus", rail("book"), "Rail Book Direct focused")
     add("book-direct", rail("book") + ["Select"], "Book Direct page")
-    add("rail-checkout-focus", rail("checkout"), "Rail Checkout Instructions focused")
+    add("rail-checkout-focus", rail("checkout"), "Rail Checkout focused")
     add("checkout", rail("checkout") + ["Select"], "Checkout Instructions page")
-    add("home-after-idle", rail("book") + ["Select"], "Home after the idle timer fired on Book Direct", wait=IDLE_SECONDS + 3)
+    add("home-after-idle", rail("book") + ["Select"], "Home after the idle timer fired on Book Direct", wait=IDLE_SECONDS + 3, same_as="book-direct")
     return s
 
 

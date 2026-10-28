@@ -9,9 +9,12 @@ sub init()
     m.bound = invalid
     m.shown = ""
     m.triedFallback = false
+    CardFontSize(m.chipText, 24)
+    CardFontSize(m.nameLabel, 27)
+    CardFontSize(m.distanceLabel, 20)
     if m.photo <> invalid
         m.photo.loadWidth = 354
-        m.photo.loadHeight = 150
+        m.photo.loadHeight = 200
         m.photo.observeField("loadStatus", "onPhotoStatus")
     end if
 end sub
@@ -51,20 +54,105 @@ sub paintCard()
     end if
     if m.ring <> invalid then m.ring.visible = focused
     if m.swatch <> invalid then m.swatch.color = swatch
-    if m.nameLabel <> invalid then m.nameLabel.text = title
-    if m.distanceLabel <> invalid then m.distanceLabel.text = distance
+    nameLines = CardBreak(title, 332, 17)
+    if nameLines.Count() > 5 then nameLines = [title]
+    if m.nameLabel <> invalid then m.nameLabel.text = CardJoin(nameLines)
+    count = nameLines.Count()
+    if count < 1 then count = 1
+    if m.distanceLabel <> invalid
+        m.distanceLabel.text = CardJoin(CardBreak(distance, 332, 12))
+        ' Meta pinned 16px under the title (Pixel b28), not at the card bottom.
+        m.distanceLabel.translation = [16, 221 + (count * 40) + 16]
+    end if
     PaintChip(SeasonChipText(season))
     ShowPoster(uri)
 end sub
 
+' The pill carries the short season ("Year-round", "Seasonal"); the detail
+' page shows the full line.
 function SeasonChipText(season as string) as string
     if season = invalid then return ""
-    return season
+    out = season
+    for each mark in [" — ", " (", ", ", " are ", " for "]
+        at = Instr(1, out, mark)
+        if at > 1 then out = Left(out, at - 1)
+    end for
+    out = out.Trim()
+    if Len(out) <= 24 then return out
+    ' Long ranges read as "Late Jun–Oct" (Pixel b28: one line, 24 characters).
+    out = out.Replace(" through ", "–")
+    months = [["January", "Jan"], ["February", "Feb"], ["March", "Mar"], ["April", "Apr"], ["June", "Jun"], ["July", "Jul"], ["August", "Aug"], ["September", "Sep"], ["October", "Oct"], ["November", "Nov"], ["December", "Dec"]]
+    for each pair in months
+        out = out.Replace(pair[0], pair[1])
+    end for
+    if Len(out) <= 24 then return out
+    words = out.Split(" ")
+    out = ""
+    for each word in words
+        if Len(out) + Len(word) + 1 > 24 then exit for
+        if out <> "" then out = out + " "
+        out = out + word
+    end for
+    return out
+end function
+
+' 14px per character at 24px plus 14px padding each side, at most the photo
+' width less the 12px insets.
+' One line: SeasonChipText caps the text at 24 characters.
+function ChipLines(season as string) as object
+    if season = invalid or season = "" then return []
+    return [season]
 end function
 
 function ChipWidthFor(season as string) as integer
     if season = invalid or season = "" then return 0
-    return 332
+    widest = 0
+    for each line in ChipLines(season)
+        if Len(line) > widest then widest = Len(line)
+    end for
+    width = (widest * 13) + 28
+    if width > 330 then width = 330
+    return width
+end function
+
+sub CardFontSize(label as object, size as integer)
+    if label = invalid then return
+    font = label.font
+    if font = invalid or type(font) <> "roSGNode" then return
+    font.size = size
+end sub
+
+' Breaks text at spaces for a per-character width, so no line starts with a
+' space (the label's own wrap in brs-node keeps it).
+function CardBreak(text as string, width as integer, charWidth as integer) as object
+    lines = []
+    if text = invalid or text = "" then return lines
+    perLine = width \ charWidth
+    if perLine < 4 then perLine = 4
+    line = ""
+    for each word in text.Split(" ")
+        if word <> ""
+            if line = ""
+                line = word
+            else if Len(line) + 1 + Len(word) <= perLine
+                line = line + " " + word
+            else
+                lines.Push(line)
+                line = word
+            end if
+        end if
+    end for
+    if line <> "" then lines.Push(line)
+    return lines
+end function
+
+function CardJoin(lines as object) as string
+    out = ""
+    for each line in lines
+        if out <> "" then out = out + Chr(10)
+        out = out + line
+    end for
+    return out
 end function
 
 sub PaintChip(season as string)
@@ -76,11 +164,12 @@ sub PaintChip(season as string)
         return
     end if
     width = ChipWidthFor(season)
+    lines = ChipLines(season)
     m.chip.width = width
-    m.chipText.width = width
+    m.chip.height = 36 * lines.Count()
     m.chip.visible = true
     m.chipText.visible = true
-    m.chipText.text = season
+    m.chipText.text = CardJoin(lines)
 end sub
 
 sub ShowPoster(uri as string)
@@ -90,7 +179,7 @@ sub ShowPoster(uri as string)
     m.shown = uri
     m.triedFallback = false
     m.photo.loadWidth = 354
-    m.photo.loadHeight = 150
+    m.photo.loadHeight = 200
     if uri = ""
         m.photo.uri = "pkg:/images/tv-placeholder.jpg"
         return
@@ -112,7 +201,7 @@ sub onPhotoStatus()
     if fallback <> "" and fallback <> m.shown
         m.shown = fallback
         m.photo.loadWidth = 354
-        m.photo.loadHeight = 150
+        m.photo.loadHeight = 200
         m.photo.uri = fallback
         return
     end if

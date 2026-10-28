@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 28 "; BuildCommit()
+    print "Eaglewood: build 29 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -426,7 +426,8 @@ function HandleVertical(direction as integer) as boolean
     if m.zone = "tiles" then return MoveTiles(direction)
     if m.zone = "grid" then return MoveCards(0, direction)
     if m.zone = "list" then return MoveIssue(direction)
-    if m.zone = "detail" then return MoveStepScroll(direction)
+    if m.zone = "detail" then return MoveBodyScroll(direction)
+    if m.zone = "item" then return MoveBodyScroll(direction)
     if m.zone = "panel" and m.section = "rules" then return MoveRuleScroll(direction)
     if m.zone = "panel" and m.section = "checkout" then return MoveCheckoutScroll(direction)
     return true

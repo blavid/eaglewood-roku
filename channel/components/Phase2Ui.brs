@@ -43,9 +43,9 @@ sub BuildHomePrompt(parent as object)
     group = CreateObject("roSGNode", "Group")
     group.translation = [strip.x, strip.y]
     group.scaleRotateCenter = [w / 2, h / 2]
-    AddRect(group, "0x00000055", 8, 8, w, h)
-    ' Focus: 2px navy outer stroke, 6px amber ring, then the cream fill.
-    m.promptStroke = AddRect(group, PromptStrokeColor(), -2, -2, w + 4, h + 4)
+    ' Focus (Pixel b28): 3px navy outer stroke, 6px amber ring, cream fill,
+    ' 1.03x scale. No drop shadow, so the 24px gutter under the strip reads true.
+    m.promptStroke = AddRect(group, PromptStrokeColor(), -3, -3, w + 6, h + 6)
     m.promptStroke.visible = false
     m.promptOuter = AddRect(group, AmberColor(), 0, 0, w, h)
     m.promptInner = AddRect(group, "0xF4EFE3FF", 0, 0, w, h)
@@ -128,19 +128,19 @@ function BuildBookPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
     parent.appendChild(pane)
-    panel = AddRect(pane, BookPanelColor(), 540, 36, 1320, 1000)
+    ' Pixel b28: the panel is the content box (x 588-1716, y 106-972), inside
+    ' title-safe and clear of the rail, so the rail chevrons stay whole.
+    panelBox = BookPanelRect()
+    panel = AddRect(pane, BookPanelColor(), panelBox.x, panelBox.y, panelBox.w, panelBox.h)
+    ' One 52px H1 replaces the three questions and the gold bar.
     m.bookLines = []
-    for index = 0 to 2
-        label = AddLabel(pane, "", "font:MediumBoldSystemFont", BookInkColor(), 588, 64 + (index * 44), 1100, 44)
-        label.horizAlign = "left"
-        m.bookLines.Push(label)
-    end for
-    banner = AddRect(pane, BookBannerColor(), 588, 214, 620, 64)
-    bannerText = AddLabel(pane, "", "font:MediumBoldSystemFont", InkOnAmber(), 588, 214, 620, 64)
-    bannerText.horizAlign = "center"
+    head = BookHeadRect()
+    bannerText = AddLabel(pane, "", "font:LargeBoldSystemFont", BookInkColor(), head.x, head.y, head.w, head.h)
+    SetFontSize(bannerText, 52)
+    bannerText.horizAlign = "left"
     m.bookBanner = bannerText
     m.bookPhoto = CreateObject("roSGNode", "Poster")
-    m.bookPhoto.translation = [588, 292]
+    m.bookPhoto.translation = [BookPhotoRect().x, BookPhotoRect().y]
     m.bookPhoto.width = 680
     m.bookPhoto.height = 200
     m.bookPhoto.loadWidth = 680
@@ -174,6 +174,7 @@ function BuildBookPane(parent as object) as object
     scan.visible = false
     m.bookScan = scan
     m.bookDomain = AddLabel(pane, DisplayDomain(), QrCaptionFont(), "0xF2A93BFF", slot.domainX, slot.domainY, slot.domainW, slot.domainH)
+    SetFontSize(m.bookDomain, 28)
     m.bookDomain.horizAlign = "center"
     m.bookDomain.visible = false
     m.bookQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", AmberColor(), slot.domainX, slot.domainY, slot.domainW, slot.domainH)
@@ -181,27 +182,34 @@ function BuildBookPane(parent as object) as object
     m.bookQrMissing.visible = false
     bodyRect = BookBodyRect()
     m.bookBody = AddLabel(pane, "", "font:SmallSystemFont", BookInkColor(), bodyRect.x, bodyRect.y, bodyRect.w, bodyRect.h)
+    SetFontSize(m.bookBody, BookBodySize())
+    m.bookBody.wrap = true
     m.bookBody.vertAlign = "top"
     m.bookBody.maxLines = 6
     saveRect = BookSavingsRect()
-    m.bookSavings = AddLabel(pane, "", "font:SmallestSystemFont", BookInkColor(), saveRect.x, saveRect.y, saveRect.w, saveRect.h)
+    m.bookSavings = AddLabel(pane, "", "font:SmallSystemFont", BookInkColor(), saveRect.x, saveRect.y, saveRect.w, saveRect.h)
+    SetFontSize(m.bookSavings, BookBodySize())
+    m.bookSavings.wrap = true
     m.bookSavings.vertAlign = "top"
     m.bookSavings.maxLines = 5
     m.perkGroups = []
     perkRow = BookPerkRow()
     for index = 0 to 4
         chip = CreateObject("roSGNode", "Group")
-        chip.translation = [perkRow.x + (index * 226), perkRow.y]
-        bg = AddRect(chip, BookCardColor(), 0, 0, 214, 88)
-        text = AddLabel(chip, "", "font:SmallestSystemFont", BookInkColor(), 8, 4, 198, 80)
+        ' Pixel b28: 200x72 chips, 24px apart, all one navy with white text.
+        chip.translation = [perkRow.x + (index * (PerkChipW() + 24)), perkRow.y]
+        bg = AddRect(chip, PerkChipColor(), 0, 0, PerkChipW(), PerkChipH())
+        text = AddLabel(chip, "", "font:SmallestSystemFont", "0xFFFFFFFF", 4, 0, PerkChipW() - 8, PerkChipH())
+        SetFontSize(text, PerkChipSize())
         text.horizAlign = "center"
         text.vertAlign = "center"
         text.maxLines = 2
         pane.appendChild(chip)
         m.perkGroups.Push({ group: chip, bg: bg, text: text })
     end for
-    m.bookSign = AddLabel(pane, "", "font:SmallBoldSystemFont", BookInkColor(), 1288, 888, 300, 36)
-    m.bookSign.horizAlign = "right"
+    sign = BookSignRect()
+    m.bookSign = AddLabel(pane, "", "font:SmallBoldSystemFont", BookInkColor(), sign.x, sign.y, sign.w, sign.h)
+    m.bookSign.horizAlign = "center"
     m.bookPhotoUri = ""
     m.bookQrUri = ""
     m.bookFile = ""
@@ -233,21 +241,31 @@ function BuildWifiPane(parent as object) as object
     m.wifiMissing.maxLines = 8
     BuildWifiStatusPanel(pane)
     col = WifiColumn(false)
-    m.wifiNetworkHeading = AddLabel(pane, "Network", "font:SmallSystemFont", MuteColor(), col.x, top, col.w, 36)
-    m.wifiSsidLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), col.x, top + 36, col.w, 104)
-    SetFontSize(m.wifiSsidLabel, 40)
+    ' Pixel b28: 24px #C9D1E0 labels, 8px to the value, 40px between pairs.
+    m.wifiNetworkHeading = AddLabel(pane, "Network", "font:SmallSystemFont", TileSubColor(), col.x, top, col.w, 32)
+    SetFontSize(m.wifiNetworkHeading, WifiLabelSize())
+    m.wifiSsidLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), col.x, top + 40, col.w, 104)
+    SetFontSize(m.wifiSsidLabel, WifiSsidSize())
     m.wifiSsidLabel.vertAlign = "top"
+    m.wifiSsidLabel.wrap = true
     m.wifiSsidLabel.maxLines = 2
-    m.wifiPasswordHeading = AddLabel(pane, "Password", "font:SmallSystemFont", MuteColor(), col.x, top + 152, col.w, 36)
-    m.wifiPasswordLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), col.x, top + 188, col.w, 156)
+    m.wifiPasswordHeading = AddLabel(pane, "Password", "font:SmallSystemFont", TileSubColor(), col.x, top + 184, col.w, 32)
+    SetFontSize(m.wifiPasswordHeading, WifiLabelSize())
+    m.wifiPasswordLabel = AddLabel(pane, "", "font:SmallBoldSystemFont", InkColor(), col.x, top + 224, col.w, 156)
+    SetFontSize(m.wifiPasswordLabel, WifiValueSize())
     m.wifiPasswordLabel.vertAlign = "top"
-    m.wifiPasswordLabel.maxLines = 4
-    m.wifiHint = AddLabel(pane, "Point your phone camera at the code and tap the banner to join.", "font:SmallSystemFont", MuteColor(), col.x, top + 364, col.w, 100)
+    m.wifiPasswordLabel.wrap = true
+    m.wifiPasswordLabel.maxLines = 3
+    m.wifiHint = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), col.x, top + 364, WifiTextWidth(), 100)
+    SetFontSize(m.wifiHint, WifiBodySize())
     m.wifiHint.vertAlign = "top"
-    m.wifiHint.maxLines = 3
+    m.wifiHint.wrap = true
+    m.wifiHint.maxLines = 4
     router = WifiRouterBox(false)
     m.wifiRouter = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), router.x, router.y, router.w, router.h)
+    SetFontSize(m.wifiRouter, router.size)
     m.wifiRouter.vertAlign = "top"
+    m.wifiRouter.wrap = true
     m.wifiRouter.maxLines = router.maxLines
     m.wifiColumnKey = ""
     m.wifiShown = ""
@@ -270,6 +288,67 @@ function WifiColumn(statusPanel as boolean) as object
     return { x: x, w: HomeRight() - x }
 end function
 
+function WifiLabelSize() as integer
+    return 24
+end function
+
+function WifiSsidSize() as integer
+    return 40
+end function
+
+' "Unavailable" and the password share the network-name weight at 34px.
+function WifiValueSize() as integer
+    return 34
+end function
+
+function WifiBodySize() as integer
+    return 27
+end function
+
+' Pixel b28: hint and router tip are at most 620px wide.
+function WifiTextWidth() as integer
+    return 620
+end function
+
+function WifiHintText() as string
+    return "Point your phone camera at the code and tap the banner to join."
+end function
+
+' Line pitch the column uses for a label at this size.
+function WifiPitch(size as integer) as integer
+    return size + 12
+end function
+
+' The right column, top to bottom, with the line counts the labels will get.
+function WifiColumnLayout(statusPanel as boolean, ssid as string, password as string, hint as boolean) as object
+    col = WifiColumn(statusPanel)
+    y = WifiTop()
+    out = { x: col.x, w: col.w, network: y }
+    y = y + 32 + 8
+    out.ssid = y
+    ssidLines = BreakLines(ssid, col.w, WifiSsidSize()).Count()
+    if ssidLines < 1 then ssidLines = 1
+    if ssidLines > 2 then ssidLines = 2
+    out.ssidH = ssidLines * WifiPitch(WifiSsidSize())
+    y = y + out.ssidH + 40
+    out.passwordHeading = y
+    y = y + 32 + 8
+    out.password = y
+    pwLines = BreakLines(password, col.w, WifiValueSize()).Count()
+    if pwLines < 1 then pwLines = 1
+    if pwLines > 3 then pwLines = 3
+    out.passwordH = pwLines * WifiPitch(WifiValueSize())
+    y = y + out.passwordH + 40
+    out.hint = y
+    out.hintH = 0
+    if hint = true
+        out.hintH = BreakLines(WifiHintText(), WifiTextWidth(), WifiBodySize()).Count() * WifiPitch(WifiBodySize())
+        y = y + out.hintH + 32
+    end if
+    out.router = y
+    return out
+end function
+
 ' Sized for the pessimistic wrap of the fallback copy at 28px.
 function WifiStatusBodyBox() as object
     return { x: 32, y: 184, w: WifiPanelWidth() - 64, h: 376, maxLines: 9, size: 28 }
@@ -279,20 +358,29 @@ function WifiStatusHeadingBox() as object
     return { x: 32, y: 80, w: WifiPanelWidth() - 64, h: 96, maxLines: 2, size: 34 }
 end function
 
+' Worst case (pessimistic) panel height; PaintWifi shrinks it to the content.
 function WifiPanelHeight() as integer
     body = WifiStatusBodyBox()
     return body.y + body.h + 24
 end function
 
-' Router tip. With the status panel it goes in the right column under the
-' Password row. With the QR it goes under the QR and the scan hint, full width.
-' The corner booking QR is off on Wi-Fi, so the only code there is the join code.
+' Pixel b28: content plus 32px padding.
+function WifiPanelFitHeight(bodyLines as integer, headLines as integer) as object
+    head = WifiStatusHeadingBox()
+    headH = headLines * WifiPitch(head.size)
+    bodyY = head.y + headH + 24
+    bodyH = bodyLines * WifiPitch(WifiStatusBodyBox().size)
+    return { bodyY: bodyY, bodyH: bodyH, h: bodyY + bodyH + 32 }
+end function
+
+' Router tip in the right column under the hint (QR) or the password (panel),
+' at most 620px wide, ending inside title-safe (972). The y here is the one
+' layout gives for a one-line network name and password.
 function WifiRouterBox(statusPanel as boolean) as object
-    if statusPanel = true
-        col = WifiColumn(true)
-        return { x: col.x, y: WifiTop() + 256, w: col.w, h: 320, maxLines: 8, size: 27 }
-    end if
-    return { x: ContentLeft(), y: WifiTop() + 488, w: HomeRight() - ContentLeft(), h: 240, maxLines: 6, size: 27 }
+    layout = WifiColumnLayout(statusPanel, "Eaglewood Escape Guest", WifiUnavailableText(), statusPanel = false)
+    w = WifiTextWidth()
+    if layout.w < w then w = layout.w
+    return { x: layout.x, y: layout.router, w: w, h: 972 - layout.router, maxLines: 9, size: WifiBodySize() }
 end function
 
 function WifiStatusHeading() as string
@@ -311,15 +399,16 @@ sub BuildWifiStatusPanel(pane as object)
     panel.visible = false
     w = WifiPanelWidth()
     h = WifiPanelHeight()
-    AddRect(panel, "0x1A2438FF", 0, 0, w, h)
-    AddRect(panel, AmberColor(), 0, 0, 4, h)
+    m.wifiPanelFill = AddRect(panel, "0x1A2438FF", 0, 0, w, h)
+    m.wifiPanelBorder = AddRect(panel, AmberColor(), 0, 0, 4, h)
     AddRect(panel, AmberColor(), 32, 32, 32, 32)
     mark = AddLabel(panel, "!", "font:SmallBoldSystemFont", InkOnAmber(), 32, 28, 32, 40)
     mark.horizAlign = "center"
     mark.vertAlign = "center"
     headBox = WifiStatusHeadingBox()
-    heading = AddLabel(panel, WifiStatusHeading(), "font:SmallBoldSystemFont", "0xFFFFFFFF", headBox.x, headBox.y, headBox.w, headBox.h)
+    heading = AddLabel(panel, JoinLines(BreakLines(WifiStatusHeading(), headBox.w, headBox.size)), "font:SmallBoldSystemFont", "0xFFFFFFFF", headBox.x, headBox.y, headBox.w, headBox.h)
     SetFontSize(heading, headBox.size)
+    heading.wrap = true
     heading.maxLines = headBox.maxLines
     heading.vertAlign = "top"
     body = WifiStatusBodyBox()
@@ -327,30 +416,31 @@ sub BuildWifiStatusPanel(pane as object)
     SetFontSize(m.wifiStatusBody, body.size)
     m.wifiStatusBody.horizAlign = "left"
     m.wifiStatusBody.vertAlign = "top"
+    m.wifiStatusBody.wrap = true
     m.wifiStatusBody.maxLines = body.maxLines
     pane.appendChild(panel)
     m.wifiStatusPanel = panel
 end sub
 
-sub PlaceWifiColumn(statusPanel as boolean)
-    key = "qr"
-    if statusPanel = true then key = "status"
+sub PlaceWifiColumn(statusPanel as boolean, ssid as string, password as string, hint as boolean)
+    layout = WifiColumnLayout(statusPanel, ssid, password, hint)
+    key = layout.x.ToStr() + "/" + layout.ssidH.ToStr() + "/" + layout.passwordH.ToStr() + "/" + layout.hintH.ToStr()
     if m.wifiColumnKey = key then return
     m.wifiColumnKey = key
-    col = WifiColumn(statusPanel)
-    top = WifiTop()
-    nodes = [[m.wifiNetworkHeading, 0], [m.wifiSsidLabel, 36], [m.wifiPasswordHeading, 152], [m.wifiPasswordLabel, 188], [m.wifiHint, 364]]
-    for each pair in nodes
-        node = pair[0]
+    nodes = [[m.wifiNetworkHeading, layout.network, 32, layout.w], [m.wifiSsidLabel, layout.ssid, layout.ssidH, layout.w], [m.wifiPasswordHeading, layout.passwordHeading, 32, layout.w], [m.wifiPasswordLabel, layout.password, layout.passwordH, layout.w], [m.wifiHint, layout.hint, layout.hintH + 8, WifiTextWidth()]]
+    for each row in nodes
+        node = row[0]
         if node <> invalid
-            node.translation = [col.x, top + pair[1]]
-            node.width = col.w
+            node.translation = [layout.x, row[1]]
+            node.width = row[3]
+            node.height = row[2]
         end if
     end for
     router = WifiRouterBox(statusPanel)
     if m.wifiRouter <> invalid
-        m.wifiRouter.translation = [router.x, router.y]
+        m.wifiRouter.translation = [layout.x, layout.router]
         m.wifiRouter.width = router.w
+        m.wifiRouter.height = 972 - layout.router
     end if
 end sub
 
@@ -358,10 +448,11 @@ function BuildActivityPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
     parent.appendChild(pane)
-    m.activityTitle = AddLabel(pane, "", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 64)
-    m.activitySub = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 64, ContentWidth(), 36)
+    m.activityTitle = AddLabel(pane, "", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 68)
+    SetFontSize(m.activityTitle, PageH1Size())
+    m.activitySub = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 70, ContentWidth(), 36)
     grid = CreateObject("roSGNode", "MarkupGrid")
-    grid.translation = [ContentLeft(), ContentTop() + 104]
+    grid.translation = [ContentLeft(), ContentTop() + 112]
     grid.itemComponentName = "ActivityCard"
     grid.itemSize = [364, 488]
     grid.itemSpacing = [18, 16]
@@ -372,12 +463,17 @@ function BuildActivityPane(parent as object) as object
     grid.vertFocusAnimationStyle = "floatingFocus"
     pane.appendChild(grid)
     m.activityGrid = grid
-    m.activityEmpty = AddLabel(pane, ActivityEmptyText(""), "font:MediumSystemFont", MuteColor(), ContentLeft(), ContentTop() + 180, ContentWidth(), 72)
+    ' Empty category: a 480px navy card at 588,260 with 32px padding (Pixel b28).
+    m.activityEmptyCard = AddRect(pane, "0x1B2A44FF", ContentLeft(), 260, 480, 148)
+    m.activityEmptyCard.visible = false
+    m.activityEmpty = AddLabel(pane, ActivityEmptyText(""), "font:SmallSystemFont", InkColor(), ContentLeft() + 32, 292, 416, 84)
+    SetFontSize(m.activityEmpty, 30)
     m.activityEmpty.vertAlign = "top"
+    m.activityEmpty.wrap = true
     m.activityEmpty.maxLines = 2
     m.activityEmpty.visible = false
     BuildTodoPreview(pane)
-    m.activityHint = AddLabel(pane, "Left menu    Arrows browse    OK open", "font:SmallSystemFont", MuteColor(), ContentLeft(), 752, 900, 32)
+    m.activityHint = AddLabel(pane, "Left menu    Arrows browse    OK open", "font:SmallSystemFont", MuteColor(), ContentLeft(), 776, 900, 32)
     return pane
 end function
 
@@ -385,9 +481,10 @@ function BuildDetailPane(parent as object) as object
     pane = CreateObject("roSGNode", "Group")
     pane.visible = false
     parent.appendChild(pane)
-    m.detailName = AddLabel(pane, "", "font:MediumBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 132)
+    m.detailName = AddLabel(pane, "", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 136)
+    SetFontSize(m.detailName, PageH1Size())
     m.detailName.vertAlign = "top"
-    m.detailName.maxLines = 3
+    m.detailName.maxLines = 2
     m.detailPhoto = CreateObject("roSGNode", "Poster")
     photo = DetailPhotoRect()
     m.detailPhoto.translation = [photo.x, photo.y]
@@ -428,6 +525,7 @@ function BuildDetailPane(parent as object) as object
     m.detailQr.observeField("loadStatus", "onDetailQrStatus")
     captionRect = DetailQrCaptionRect()
     m.detailQrCaption = AddLabel(pane, "", QrCaptionFont(), QrCaptionColor(), captionRect.x, captionRect.y, captionRect.w, captionRect.h)
+    SetFontSize(m.detailQrCaption, 28)
     m.detailQrCaption.horizAlign = "center"
     m.detailQrCaption.visible = false
     m.detailQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", "0x1C1408FF", cardX, cardY + card.h - 32, card.w, 28)
@@ -444,8 +542,12 @@ function BuildDetailPane(parent as object) as object
     m.detailExtra = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 732, 700, 44)
     m.detailExtra.vertAlign = "top"
     m.detailExtra.maxLines = 2
-    m.detailCredit = AddLabel(pane, "", "font:SmallestSystemFont", MuteColor(), ContentLeft() + 420, 900, 280, 28)
+    ' Photo credit sits under the QR card; the Back keycap in the scroll hint
+    ' replaces the old "Back to ..." line.
+    m.detailCredit = AddLabel(pane, "", "font:SmallestSystemFont", MuteColor(), card.x, card.y + card.h + 12, card.w, 28)
+    m.detailCredit.horizAlign = "center"
     m.detailBack = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), 900, 400, 28)
+    m.detailBack.visible = false
     m.detailPhotoUri = ""
     m.detailQrUri = ""
     m.detailFile = ""
@@ -611,9 +713,9 @@ sub PaintBook()
             m.bookLines[index].visible = (text <> "")
         end for
     end if
-    if m.bookBanner <> invalid then m.bookBanner.text = BookText(m.book, "banner", "Book direct and save!")
-    if m.bookBody <> invalid then m.bookBody.text = BookText(m.book, "body", "")
-    if m.bookSavings <> invalid then m.bookSavings.text = BookText(m.book, "savingsText", DefaultSavingsText())
+    if m.bookBanner <> invalid then m.bookBanner.text = BookHeading(BookText(m.book, "banner", "Book direct and save"))
+    if m.bookBody <> invalid then m.bookBody.text = JoinLines(BreakLines(BookText(m.book, "body", ""), BookBodyRect().w, BookBodySize()))
+    if m.bookSavings <> invalid then m.bookSavings.text = JoinLines(BreakLines(BookText(m.book, "savingsText", DefaultSavingsText()), BookSavingsRect().w, BookBodySize()))
     if m.section = "book" then LogBookBody()
     if m.bookSign <> invalid then m.bookSign.text = BookText(m.book, "signOff", "Thanks for staying!")
     if m.bookDomain <> invalid then m.bookDomain.text = DisplayDomain()
@@ -657,8 +759,7 @@ sub PaintPerks()
         raw = m.book.Lookup("perks")
         if IsList(raw) then perks = raw
     end if
-    colors = [BookBannerColor(), BookCardColor(), BookBannerColor(), BookCardColor(), BookBannerColor()]
-    inks = [InkOnAmber(), BookInkColor(), InkOnAmber(), BookInkColor(), InkOnAmber()]
+    ' The chips are not focusable, so they all share one navy and none looks focused.
     last = m.perkGroups.Count() - 1
     for index = 0 to last
         chip = m.perkGroups[index]
@@ -669,9 +770,9 @@ sub PaintPerks()
             label = ""
             entry = perks[index]
             if IsAssoc(entry) then label = GuideLimitedText(entry.Lookup("label"), 40)
-            chip.text.text = label
-            chip.bg.color = colors[index]
-            chip.text.color = inks[index]
+            chip.text.text = PerkLabel(label)
+            chip.bg.color = PerkChipColor()
+            chip.text.color = "0xFFFFFFFF"
         end if
     end for
 end sub
@@ -761,30 +862,32 @@ sub PaintWifi()
     password = ""
     if m.wifiPassword <> invalid then password = m.wifiPassword
     lines = WifiLines(notice, ssid, password)
-    m.wifiSsidLabel.text = lines.network
+    colW = WifiColumn(lines.mode = "fallback").w
+    m.wifiSsidLabel.text = JoinLines(BreakLines(lines.network, colW, WifiSsidSize()))
         if m.wifiPasswordLabel <> invalid
         if lines.mode = "show"
-            m.wifiPasswordLabel.text = lines.password
-            m.wifiPasswordLabel.font = "font:SmallBoldSystemFont"
+            m.wifiPasswordLabel.text = JoinLines(BreakLines(lines.password, colW, WifiValueSize()))
             m.wifiPasswordLabel.color = InkColor()
         else if lines.mode = "fallback"
             m.wifiPasswordLabel.text = WifiUnavailableText()
-            m.wifiPasswordLabel.font = "font:SmallSystemFont"
             m.wifiPasswordLabel.color = TileSubColor()
         else
             m.wifiPasswordLabel.text = ""
-            m.wifiPasswordLabel.font = "font:SmallSystemFont"
         end if
     end if
     statusPanel = (lines.mode = "fallback")
-    PlaceWifiColumn(statusPanel)
+    shownPassword = ""
+    if lines.mode = "show" then shownPassword = lines.password
+    if statusPanel then shownPassword = WifiUnavailableText()
+    PlaceWifiColumn(statusPanel, lines.network, shownPassword, lines.mode = "show")
+    if m.wifiHint <> invalid then m.wifiHint.text = JoinLines(BreakLines(WifiHintText(), WifiTextWidth(), WifiBodySize()))
     if m.wifiPasswordHeading <> invalid then m.wifiPasswordHeading.visible = (lines.mode = "show" or statusPanel)
     if m.wifiHint <> invalid then m.wifiHint.visible = (lines.mode = "show")
     if m.wifiPaintToken <> lines.mode
         m.wifiPaintToken = lines.mode
         print "Eaglewood: wifi screen mode="; lines.mode
     end if
-    if m.wifiRouter <> invalid then m.wifiRouter.text = FlushText(RouterStep(m.issues))
+    if m.wifiRouter <> invalid then m.wifiRouter.text = JoinLines(BreakLines(FlushText(RouterStep(m.issues)), WifiRouterBox(statusPanel).w, WifiBodySize()))
     pngReady = (m.wifiPng = "yes")
     poster = PosterForSlot("wifi")
     if poster = invalid then return
@@ -818,7 +921,7 @@ sub PaintWifi()
             m.wifiMissing.text = ""
             m.wifiMissing.visible = false
         end if
-        if m.wifiStatusBody <> invalid then m.wifiStatusBody.text = WifiFallbackMessage()
+        FitWifiPanel()
         if m.wifiStatusPanel <> invalid then m.wifiStatusPanel.visible = true
     else
         if m.wifiStatusPanel <> invalid then m.wifiStatusPanel.visible = false
@@ -864,6 +967,20 @@ function NetworkValue(text as string) as string
     return rest
 end function
 
+'' Pixel b28: the panel is the content plus 32px padding, not a fixed 585px.
+sub FitWifiPanel()
+    if m.wifiStatusBody = invalid then return
+    body = WifiStatusBodyBox()
+    bodyLines = BreakLines(WifiFallbackMessage(), body.w, body.size)
+    headLines = BreakLines(WifiStatusHeading(), WifiStatusHeadingBox().w, WifiStatusHeadingBox().size)
+    fit = WifiPanelFitHeight(bodyLines.Count(), headLines.Count())
+    m.wifiStatusBody.text = JoinLines(bodyLines)
+    m.wifiStatusBody.translation = [body.x, fit.bodyY]
+    m.wifiStatusBody.height = fit.bodyH + 8
+    if m.wifiPanelFill <> invalid then m.wifiPanelFill.height = fit.h
+    if m.wifiPanelBorder <> invalid then m.wifiPanelBorder.height = fit.h
+end sub
+
 ' Collapses runs of spaces and trims, so wrapped lines start flush left.
 function FlushText(text as string) as string
     if text = invalid then return ""
@@ -871,6 +988,45 @@ function FlushText(text as string) as string
     while Instr(1, out, "  ") > 0
         out = out.Replace("  ", " ")
     end while
+    return out
+end function
+
+'' Build 29: break text ourselves so no wrapped line starts with a space (the
+' label wrap in brs-node keeps the space). The width per character is 0.6 of
+' the size, wider than the Roku system font's average, so a broken line is
+' never wider than the label and the label does not wrap it again.
+function BreakCharWidth(size as integer) as integer
+    width = (size * 3) \ 5
+    if width < 1 then return 1
+    return width
+end function
+
+function BreakLines(text as string, width as integer, size as integer) as object
+    out = []
+    if text = invalid then return out
+    for each para in FlushParagraphs(text)
+        for each line in WrapGreeting(para, width, invalid, BreakCharWidth(size))
+            if line <> "overflow" then out.Push(line.Trim())
+        end for
+    end for
+    return out
+end function
+
+function FlushParagraphs(text as string) as object
+    out = []
+    for each part in text.Split(Chr(10))
+        clean = FlushText(part)
+        if clean <> "" then out.Push(clean)
+    end for
+    return out
+end function
+
+function JoinLines(lines as object) as string
+    out = ""
+    for each line in lines
+        if out <> "" then out = out + Chr(10)
+        out = out + line
+    end for
     return out
 end function
 
@@ -988,9 +1144,10 @@ sub PaintActivity()
     count = CardCount()
     preview = (m.section = "todo")
     if m.activityEmpty <> invalid
-        if count = 0 then m.activityEmpty.text = ActivityEmptyText(m.section)
+        if count = 0 then m.activityEmpty.text = JoinLines(BreakLines(ActivityEmptyText(m.section), 416, 30))
         ' The preview row replaces the OK hint on Things to Do.
         m.activityEmpty.visible = (count = 0 and not preview)
+        if m.activityEmptyCard <> invalid then m.activityEmptyCard.visible = m.activityEmpty.visible
     end if
     PaintTodoPreview(preview)
     if m.activityGrid <> invalid then m.activityGrid.visible = (count > 0)
@@ -1140,7 +1297,7 @@ end sub
 sub PaintDetail()
     LogDetailOpen()
     item = ActivityAt(m.sortedCards, m.cardIndex)
-    if m.detailName <> invalid then m.detailName.text = ItemText(item, "name")
+    if m.detailName <> invalid then m.detailName.text = JoinLines(BreakLines(ItemText(item, "name"), ContentWidth(), PageH1Size()))
     if m.detailMeta <> invalid then m.detailMeta.text = DetailMeta(item)
     if m.detailBody <> invalid
         m.detailBody.text = ""
@@ -1297,6 +1454,11 @@ function BadgeShown(section as string) as boolean
     if section = "book" then return false
     ' One QR per screen on Wi-Fi, so a guest cannot scan the booking code by mistake.
     if section = "wifi" then return false
+    ' Things to Do grids and details: one QR per detail and a 32px gap under
+    ' the cards (Pixel b28).
+    if ActivitySection(section) then return false
+    ' Quick Fixes: the steps panel grows to y 960, where the badge sat.
+    if section = "fixes" then return false
     return true
 end function
 
@@ -1457,11 +1619,16 @@ function QrMarkColor() as string
 end function
 
 function QrCaptionFont() as string
-    return "font:SmallestBoldSystemFont"
+    return "font:SmallBoldSystemFont"
 end function
 
+' #8A5A00 on the cream card is about 5.9:1 (Pixel b28); gold was 1.7:1.
 function QrCaptionColor() as string
-    return AmberColor()
+    return "0x8A5A00FF"
+end function
+
+function PageH1Size() as integer
+    return 52
 end function
 
 function CheckoutTileRect() as object
@@ -1486,9 +1653,17 @@ function BadgeFrame() as object
     return BadgeFrameFor(128, 960)
 end function
 
+' Pixel b28: the Home card spans both tile rows (2 x 168 + 24), so its top
+' and bottom line up with the grid. The code and caption are centered in it.
 function HomeBadgeFrame() as object
     frame = BadgeFrameFor(240, 0)
     frame.y = HomeStripRect().y + HomeStripRect().h + 24
+    tall = (2 * 168) + 24
+    shift = (tall - frame.h) \ 2
+    frame.h = tall
+    frame.qrY = frame.qrY + shift
+    frame.captionY = frame.captionY + shift
+    frame.captionSize = 28
     return frame
 end function
 
@@ -1497,7 +1672,7 @@ function BadgeFrameFor(qr as integer, bottom as integer) as object
     w = 312
     ' The caption box is wider than the card so no font can ellipsize the
     ' domain; the text is centered, so the glyphs stay on the cream card.
-    captionW = 432
+    captionW = 520
     h = pad + qr + 8 + 40 + pad
     return {
         x: HomeRight() - w,
@@ -1510,7 +1685,8 @@ function BadgeFrameFor(qr as integer, bottom as integer) as object
         captionX: (w - captionW) \ 2,
         captionY: pad + qr + 8,
         captionW: captionW,
-        captionH: 40
+        captionH: 40,
+        captionSize: 20
     }
 end function
 
@@ -1544,7 +1720,10 @@ sub ApplyBadgeFrame(section as string)
         m.badgePoster.width = frame.qr
         m.badgePoster.height = frame.qr
     end if
-    if m.badgeDomain <> invalid then m.badgeDomain.translation = [frame.captionX, frame.captionY]
+    if m.badgeDomain <> invalid
+        m.badgeDomain.translation = [frame.captionX, frame.captionY]
+        SetFontSize(m.badgeDomain, frame.captionSize)
+    end if
 end sub
 
 function BadgeCaptionRect() as object
@@ -1587,9 +1766,11 @@ function DetailQrCardRect() as object
     return { x: ContentLeft() + 740, y: ContentTop() + 140, w: 280, h: 280 }
 end function
 
+' Build 29: y 625-940 under the photo and QR card, as wide as photo + card,
+' 5 lines at 30/42 before it scrolls.
 function DetailBodyRect() as object
-    ' Stops 24px short of the corner QR card.
-    return { x: ContentLeft(), y: ContentTop() + 472, w: BadgeFrame().x - 24 - ContentLeft(), h: 200 }
+    card = DetailQrCardRect()
+    return { x: ContentLeft(), y: 625, w: card.x + card.w - ContentLeft(), h: 315 }
 end function
 
 function DetailQrPosterRect() as object
@@ -1607,16 +1788,77 @@ function DetailQrCaptionRect() as object
     return { x: card.x, y: card.y + card.h - 38, w: card.w, h: 34 }
 end function
 
+' Book Direct, build 29 (Pixel b28). Everything sits in the content box with
+' 16px side padding: H1, photo, 24px gap, 30px body, then the chip row and a
+' centered sign-off near the bottom.
+function BookPanelRect() as object
+    return { x: ContentLeft(), y: 106, w: HomeRight() - ContentLeft(), h: 972 - 106 }
+end function
+
+function BookInnerX() as integer
+    return BookPanelRect().x + 16
+end function
+
+function BookHeadRect() as object
+    return { x: BookInnerX(), y: BookPanelRect().y + 24, w: 1000, h: 64 }
+end function
+
+function BookPhotoRect() as object
+    return { x: BookInnerX(), y: BookHeadRect().y + 64 + 24, w: 680, h: 200 }
+end function
+
+function BookBodySize() as integer
+    return 30
+end function
+
 function BookBodyRect() as object
-    return { x: 588, y: 500, w: 680, h: 160 }
+    photo = BookPhotoRect()
+    return { x: BookInnerX(), y: photo.y + photo.h + 24, w: 680, h: 168 }
 end function
 
 function BookSavingsRect() as object
-    return { x: 588, y: 668, w: 680, h: 112 }
+    body = BookBodyRect()
+    return { x: BookInnerX(), y: body.y + body.h + 16, w: 680, h: 168 }
 end function
 
 function BookPerkRow() as object
-    return { x: ContentLeft(), y: 788, w: 1132, h: 88 }
+    return { x: BookInnerX(), y: BookSignRect().y - 24 - PerkChipH(), w: (5 * PerkChipW()) + (4 * 24), h: PerkChipH() }
+end function
+
+function BookSignRect() as object
+    panelBox = BookPanelRect()
+    return { x: panelBox.x, y: panelBox.y + panelBox.h - 24 - 40, w: panelBox.w, h: 40 }
+end function
+
+function PerkChipW() as integer
+    return 200
+end function
+
+function PerkChipH() as integer
+    return 72
+end function
+
+function PerkChipSize() as integer
+    return 24
+end function
+
+function PerkChipColor() as string
+    return "0x2A3B5CFF"
+end function
+
+' "Outdoor adventures" wraps in a 200px chip (Pixel b28), so it reads "Outdoors".
+function PerkLabel(label as string) as string
+    if LCase(label) = "outdoor adventures" then return "Outdoors"
+    return label
+end function
+
+function BookHeading(text as string) as string
+    out = FlushText(text)
+    while Len(out) > 0 and Right(out, 1) = "!"
+        out = Left(out, Len(out) - 1)
+    end while
+    if out = "" then return "Book direct and save"
+    return out
 end function
 
 function RectOnScreen(rect as object) as boolean
@@ -1645,8 +1887,8 @@ end function
 ' Scan me card, poster, label, and domain. All of it sits inside the card
 ' and inside 1920x1080.
 function BookQrSlot() as object
-    cardX = 1296
-    cardY = 292
+    cardX = BookPanelRect().x + BookPanelRect().w - 16 - 360
+    cardY = BookPhotoRect().y
     cardW = 360
     cardH = 280
     qrW = 220
