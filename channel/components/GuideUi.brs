@@ -453,8 +453,11 @@ sub BuildShell()
     m.soonPane = BuildSoonPane(shell)
     BuildPhase2(shell)
 
-    m.footer = AddLabel(shell, FooterLine(), "font:SmallSystemFont", MuteColor(), ContentLeft(), 928, ContentWidth() - 300, 36)
-    m.offline = AddLabel(shell, "", "font:SmallSystemFont", AmberColor(), ContentLeft() + ContentWidth() - 280, 928, 280, 36)
+    footerW = BadgeFrame().x - ContentLeft() - 16
+    m.footer = AddLabel(shell, FooterLine(), "font:SmallSystemFont", MuteColor(), ContentLeft(), 848, footerW, 88)
+    m.footer.maxLines = 2
+    m.footer.vertAlign = "top"
+    m.offline = AddLabel(shell, "", "font:SmallSystemFont", AmberColor(), ContentLeft(), 968, 280, 32)
     m.offline.horizAlign = "right"
     m.offline.visible = false
 
@@ -485,6 +488,7 @@ sub BuildTiles(parent as object)
         y = originY + (row * (tileH + 22))
         group = CreateObject("roSGNode", "Group")
         group.translation = [x, y]
+        AddRect(group, "0x00000055", 8, 8, tileW, tileH)
         outer = AddRect(group, TileColor(), 0, 0, tileW, tileH)
         inner = AddRect(group, TileColor(), 0, 0, tileW, tileH)
         titleBox = TileTitleBox()
@@ -632,7 +636,7 @@ sub ShowSection(section as string)
     end if
     if m.footer <> invalid then m.footer.visible = (section <> "book")
     if not onActivity then ReleaseCardImages()
-    ShowQrFrame("badge", QrRemote("badge") <> "")
+    ShowQrFrame("badge", BadgeShown(section))
     ShowQrFrame("book", QrRemote("book") <> "")
     ShowQrFrame("detail", QrRemote("detail") <> "")
     ReassignStoredQrs()

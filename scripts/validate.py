@@ -75,7 +75,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "26",
+    "build_version": "27",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -532,10 +532,10 @@ def check_phase2() -> None:
     if 'print "Eaglewood: qr "; slot; " error="' not in diag:
         fail("a caught QR error must be logged")
     stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
-    if 'return "unknown"' not in stamp or "build 26 · " not in stamp:
+    if 'return "unknown"' not in stamp or "build 27 · " not in stamp:
         fail("the build label must keep a package-time commit placeholder")
-    if 'print "Eaglewood: build 26 "' not in scene:
-        fail("startup must log build 26 and the commit")
+    if 'print "Eaglewood: build 27 "' not in scene:
+        fail("startup must log build 27 and the commit")
     if "decor-heart" in phase2:
         fail("the Book Direct heart poster is still in the scene")
     qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
@@ -606,9 +606,9 @@ def check_phase2() -> None:
         fail("the detail poster must be appended after its placeholder")
     if "function DetailQrCardRect(" not in phase2 or "DetailQrCardRect()" not in detail:
         fail("the detail QR card must use one screen rect")
-    if "group.translation = [1380, 832]" not in badge:
+    if "group.translation = [1304, 832]" not in badge:
         fail("the badge group must stay at the wide bottom-right card")
-    if "m.badgePoster.translation = [196, 12]" not in badge or "m.badgePoster.width = 128" not in badge:
+    if "m.badgePoster.translation = [196, 8]" not in badge or "m.badgePoster.width = 128" not in badge:
         fail("the badge QR must stay 128 by 128 and centered in the wide card")
     if "BadgeCaptionColor()" not in badge or "0x8A5A00FF" not in phase2:
         fail("the badge caption must use the dark gold that clears the cream tile")

@@ -249,15 +249,15 @@ sub Main()
         failed = failed + 1
     end if
     frame = BadgeFrame()
-    if frame.x <> 1380 or frame.y <> 832 or frame.w <> 520 or frame.h <> 200 or frame.qr <> 128
+    if frame.x <> 1304 or frame.y <> 832 or frame.w <> 520 or frame.h <> 188 or frame.qr <> 128
         print "FAIL the corner badge is not the wide bottom-right card"
         failed = failed + 1
     end if
-    if frame.qrX <> 196 or frame.qrY <> 12
+    if frame.qrX <> 196 or frame.qrY <> 8
         print "FAIL the corner QR is not centered in the wide card"
         failed = failed + 1
     end if
-    if frame.captionY <> 148 or frame.captionH <> 44 or frame.captionW <> 496 or frame.captionY < frame.qrY + frame.qr
+    if frame.captionY <> 144 or frame.captionH <> 40 or frame.captionW <> 496 or frame.captionY < frame.qrY + frame.qr
         print "FAIL the domain caption is not directly under the corner QR"
         failed = failed + 1
     end if
@@ -449,7 +449,7 @@ sub Main()
         print "FAIL navigation still reparents the corner badge"
         failed = failed + 1
     end if
-    if frame.x <> 1380 or frame.y <> 832
+    if frame.x <> 1304 or frame.y <> 832
         print "FAIL the corner badge translation left the wide card"
         failed = failed + 1
     end if

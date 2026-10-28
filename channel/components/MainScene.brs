@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 26 "; BuildCommit()
+    print "Eaglewood: build 27 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -812,37 +812,40 @@ end sub
 
 sub RunRailSlide(opening as boolean)
     if m.railTop = invalid or m.railChild = invalid then return
-    m.railChild.visible = true
-    peek = PeekX()
     wide = RailW()
-    parentFrom = [0, 0]
-    parentTo = [0, 0]
-    childFrom = [wide, 0]
-    childTo = [wide, 0]
+    m.railTop.translation = [0, 0]
     if opening = true
-        parentTo = [peek, 0]
-        childFrom = [wide, 0]
-        childTo = [0, 0]
+        ' The parent used to peek in from the left and its labels were cut off.
+        m.railTop.visible = false
+        m.railChild.visible = true
+        m.railChild.translation = [wide, 0]
+        StartVectorSlide("railChild.translation", [wide, 0], [0, 0])
     else
-        parentFrom = [peek, 0]
-        childFrom = [0, 0]
-        childTo = [wide, 0]
+        m.railChild.visible = true
+        StartVectorSlide("railChild.translation", [0, 0], [wide, 0])
     end if
-    m.railTop.translation = parentFrom
-    m.railChild.translation = childFrom
-    StartVectorSlide("railTop.translation", parentFrom, parentTo, "railChild.translation", childFrom, childTo)
 end sub
 
 sub RunFixesSlide()
     if m.fixesPane = invalid then return
     m.fixesPane.translation = [56, 0]
-    StartVectorSlide("fixesPane.translation", [56, 0], [0, 0], "", [0, 0], [0, 0])
+    StartVectorSlide("fixesPane.translation", [56, 0], [0, 0])
 end sub
 
-sub StartVectorSlide(firstField as string, firstFrom as object, firstTo as object, secondField as string, secondFrom as object, secondTo as object)
+function SimulatorRun() as boolean
+    info = CreateObject("roDeviceInfo")
+    if info = invalid then return false
+    return info.hasFeature("simulation_engine")
+end function
+
+sub StartVectorSlide(firstField as string, firstFrom as object, firstTo as object)
+    if SimulatorRun()
+        ApplySlideEnd(firstField, firstTo, "", [0, 0])
+        return
+    end if
     anim = CreateObject("roSGNode", "Animation")
     if anim = invalid
-        ApplySlideEnd(firstField, firstTo, secondField, secondTo)
+        ApplySlideEnd(firstField, firstTo, "", [0, 0])
         return
     end if
     anim.duration = 0.22
@@ -850,22 +853,13 @@ sub StartVectorSlide(firstField as string, firstFrom as object, firstTo as objec
     anim.repeat = false
     first = CreateObject("roSGNode", "Vector2DFieldInterpolator")
     if first = invalid
-        ApplySlideEnd(firstField, firstTo, secondField, secondTo)
+        ApplySlideEnd(firstField, firstTo, "", [0, 0])
         return
     end if
     first.key = [0.0, 1.0]
     first.keyValue = [firstFrom, firstTo]
     first.fieldToInterp = firstField
     anim.appendChild(first)
-    if secondField <> ""
-        second = CreateObject("roSGNode", "Vector2DFieldInterpolator")
-        if second <> invalid
-            second.key = [0.0, 1.0]
-            second.keyValue = [secondFrom, secondTo]
-            second.fieldToInterp = secondField
-            anim.appendChild(second)
-        end if
-    end if
     if m.menuAnim <> invalid
         m.menuAnim.control = "stop"
         if m.top <> invalid then m.top.removeChild(m.menuAnim)
@@ -878,18 +872,34 @@ sub StartVectorSlide(firstField as string, firstFrom as object, firstTo as objec
 end sub
 
 sub ApplySlideEnd(firstField as string, firstTo as object, secondField as string, secondTo as object)
-    if firstField = "railTop.translation" and m.railTop <> invalid then m.railTop.translation = firstTo
+    if firstField = "railChild.translation" and m.railChild <> invalid then m.railChild.translation = firstTo
     if firstField = "fixesPane.translation" and m.fixesPane <> invalid then m.fixesPane.translation = firstTo
     if secondField = "railChild.translation" and m.railChild <> invalid then m.railChild.translation = secondTo
     m.menuBusy = false
-    if m.slideOpen <> true and m.railChild <> invalid then m.railChild.visible = false
+    if m.slideOpen = true
+        if m.railTop <> invalid then m.railTop.visible = false
+    else
+        if m.railTop <> invalid
+            m.railTop.visible = true
+            m.railTop.translation = [0, 0]
+        end if
+        if m.railChild <> invalid then m.railChild.visible = false
+    end if
 end sub
 
 sub onMenuSlideState()
     if m.menuAnim = invalid then return
     if m.menuAnim.state <> "stopped" then return
     m.menuBusy = false
-    if m.slideOpen <> true and m.railChild <> invalid then m.railChild.visible = false
+    if m.slideOpen = true
+        if m.railTop <> invalid then m.railTop.visible = false
+    else
+        if m.railTop <> invalid
+            m.railTop.visible = true
+            m.railTop.translation = [0, 0]
+        end if
+        if m.railChild <> invalid then m.railChild.visible = false
+    end if
     if m.top <> invalid then m.top.removeChild(m.menuAnim)
     m.menuAnim = invalid
 end sub

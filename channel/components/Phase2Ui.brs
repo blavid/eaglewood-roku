@@ -39,6 +39,7 @@ sub BuildHomePrompt(parent as object)
     if parent = invalid then return
     group = CreateObject("roSGNode", "Group")
     group.translation = [ContentLeft(), 312]
+    AddRect(group, "0x00000055", 8, 8, 1132, 156)
     m.promptOuter = AddRect(group, AmberColor(), 0, 0, 1132, 156)
     m.promptInner = AddRect(group, "0xF4EFE3FF", 0, 0, 1132, 156)
     pine = CreateObject("roSGNode", "Poster")
@@ -66,7 +67,7 @@ end sub
 sub BuildBadge(parent as object)
     frame = BadgeFrame()
     group = CreateObject("roSGNode", "Group")
-    group.translation = [1380, 832]
+    group.translation = [1304, 832]
     group.visible = false
     card = AddRect(group, "0xFFFFFFF2", 0, 0, frame.w, frame.h)
     card.visible = false
@@ -76,7 +77,7 @@ sub BuildBadge(parent as object)
     m.badgePoster = CreateObject("roSGNode", "Poster")
     m.badgePoster.id = "badgeQr"
     m.badgePoster.focusable = false
-    m.badgePoster.translation = [196, 12]
+    m.badgePoster.translation = [196, 8]
     m.badgePoster.width = 128
     m.badgePoster.height = 128
     m.badgePoster.loadWidth = 256
@@ -626,10 +627,14 @@ sub PaintWifi()
     if m.wifiPassword <> invalid then password = m.wifiPassword
     lines = WifiLines(notice, ssid, password)
     m.wifiSsidLabel.text = lines.network
-    if m.wifiPasswordLabel <> invalid
-        m.wifiPasswordLabel.text = lines.password
-        if lines.mode = "fallback" then m.wifiPasswordLabel.font = "font:SmallSystemFont"
-        else m.wifiPasswordLabel.font = "font:SmallBoldSystemFont"
+        if m.wifiPasswordLabel <> invalid
+        if lines.mode = "show"
+            m.wifiPasswordLabel.text = lines.password
+            m.wifiPasswordLabel.font = "font:SmallBoldSystemFont"
+        else
+            m.wifiPasswordLabel.text = ""
+            m.wifiPasswordLabel.font = "font:SmallSystemFont"
+        end if
     end if
     if m.wifiPasswordHeading <> invalid then m.wifiPasswordHeading.visible = (lines.mode = "show")
     if m.wifiHint <> invalid then m.wifiHint.visible = (lines.mode = "show")
@@ -1233,17 +1238,17 @@ end function
 
 function BadgeFrame() as object
     return {
-        x: 1380,
+        x: 1304,
         y: 832,
         w: 520,
-        h: 200,
+        h: 188,
         qrX: 196,
-        qrY: 12,
+        qrY: 8,
         qr: 128,
         captionX: 12,
-        captionY: 148,
+        captionY: 144,
         captionW: 496,
-        captionH: 44
+        captionH: 40
     }
 end function
 
