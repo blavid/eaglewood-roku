@@ -137,7 +137,7 @@ def main() -> int:
         check("book savings", book["savingsText"], 680, 20, 5, 112)
     for perk in book.get("perks") or []:
         if isinstance(perk, str):
-            check(f"perk {perk[:24]}", "Outdoors" if perk.lower() == "outdoor adventures" else perk, 192, 24, 2, 72)
+            check(f"perk {perk[:24]}", "Outdoors" if perk.lower() == "outdoor adventures" else perk, 192, 26, 2, 72)
     check("detail qr caption", "Scan for info", 280, 20, 1, 34, False)
     check("badge domain", "sunrivertownhome.com", 520, 20, 1, 44, False)
     check("home badge domain", "sunrivertownhome.com", 520, 28, 1, 40, False)
@@ -154,8 +154,14 @@ def main() -> int:
             items.append(item)
     for item in items:
         name = item.get("name") or ""
-        check(f"card {name}", name, 332, 27, 5, 200)
-        check(f"distance {name}", item.get("distance") or "", 332, 20, 2, 66)
+        # Build 30: cards pre-break at 0.6 em (18px at 30, 15px at 24) and
+        # the photo shrinks 38px per title line past 3 (420px card).
+        name_lines = wrap(name, 332, 18)
+        meta_lines = wrap(item.get("distance") or "", 332, 15)
+        photo = 200 - 38 * max(0, len(name_lines) - 3)
+        bottom = 5 + photo + 16 + max(1, len(name_lines)) * 38 + 12 + len(meta_lines) * 32
+        if bottom > 415 or photo < 124 or len(meta_lines) > 2:
+            problems.append(f"card {name}: bottom={bottom} photo={photo}")
         check(f"season {name}", item.get("seasonLabel") or "", 332, 20, 3, 99)
 
     if problems:

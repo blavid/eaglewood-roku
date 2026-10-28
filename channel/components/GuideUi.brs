@@ -76,8 +76,21 @@ end function
 
 function TodoMenu() as object
     ids = TodoMenuIds()
-    if ids.Count() < 1 then return ["dining", "hiking", "winter", "summer", "fishing", "biking"]
-    return ids
+    if ids.Count() < 1 then ids = ["dining", "hiking", "winter", "summer", "fishing", "biking"]
+    return NonEmptyTodo(ids)
+end function
+
+' Build 30 (Captain #7): a category with no items is left out of the rail and
+' the preview. With no activities loaded yet, every category stays.
+function NonEmptyTodo(ids as object) as object
+    if not IsList(m.activities) then return ids
+    if m.activities.Count() < 1 then return ids
+    kept = []
+    for each id in ids
+        if ActivitiesForScreen(m.activities, id).Count() > 0 then kept.Push(id)
+    end for
+    if kept.Count() < 1 then return ids
+    return kept
 end function
 
 function RailSections() as object
@@ -303,17 +316,19 @@ function MenuTitleBox() as object
     return { w: 300, h: 160, maxLines: 4, size: 27 }
 end function
 
-' ActivityCard, build 29: 27px title, 20px meta, 24px season pill text.
+' ActivityCard, build 30: 30px title, 24px meta, 22px season pill text.
 function CardNameBox() as object
-    return { w: 332, h: 200, maxLines: 5, size: 27 }
+    return { w: 332, h: 190, maxLines: 5, size: 30 }
 end function
 
 function CardDistanceBox() as object
-    return { w: 332, h: 66, maxLines: 2, size: 20 }
+    return { w: 332, h: 74, maxLines: 2, size: 24 }
 end function
 
 function CardSeasonBox() as object
-    return { w: 302, h: 111, maxLines: 3, size: 24 }
+    ' The pill draws one line (about 0.55 em per character); the pessimistic
+    ' width allows a second line so no label can ellipsize.
+    return { w: 306, h: 72, maxLines: 2, size: 22 }
 end function
 
 function LabelFitsBox(text as string, fit as object) as boolean
@@ -944,6 +959,7 @@ sub PaintRailRows(rows as object, menu as object, childPanel as boolean)
 end sub
 
 sub PaintRail()
+    if m.bookFocusFrame <> invalid then m.bookFocusFrame.visible = (m.section = "book" and m.zone <> "rail")
     heading = RailLabel("todo")
     if MenuDepth() = "fixes" then heading = RailLabel("fixes")
     if m.childHeader <> invalid then m.childHeader.text = "<  " + heading
@@ -1010,7 +1026,10 @@ end sub
 
 sub PlaceDetailScroll()
     if m.detailScroll = invalid then return
+    ' Build 30 (Pixel b29 P3): 28px body; 42px pitch in Quick Fixes, 40 in details.
+    m.detailScroll.fontSize = 28
     if MenuDepth() = "fixes"
+        m.detailScroll.pitch = 42
         m.detailScroll.padding = 32
         m.detailScroll.translation = [ContentLeft(), FixPanelTop()]
         m.detailScroll.frameWidth = ContentWidth()
@@ -1018,6 +1037,7 @@ sub PlaceDetailScroll()
         return
     end if
     body = DetailBodyRect()
+    m.detailScroll.pitch = 40
     m.detailScroll.padding = 16
     m.detailScroll.translation = [body.x, body.y]
     m.detailScroll.frameWidth = body.w
@@ -1082,7 +1102,9 @@ sub FillDetailBody()
     if MenuDepth() = "fixes"
         heading = FixHeading()
         text = FixStepsText()
-        if m.zone = "detail"
+        ' Build 30 (Captain #8): Right from the fix list lands in zone "item",
+        ' where Up/Down scroll the steps, so that zone gets the scroll hint.
+        if m.zone = "detail" or m.zone = "item"
             hint = "Up/Down|Scroll|Left|Fixes list|Back|Menu"
         else
             hint = "Up/Down|Next fix|Right|Scroll steps|Back|Menu"

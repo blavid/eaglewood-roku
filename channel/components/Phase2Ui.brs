@@ -131,7 +131,11 @@ function BuildBookPane(parent as object) as object
     ' Pixel b28: the panel is the content box (x 588-1716, y 106-972), inside
     ' title-safe and clear of the rail, so the rail chevrons stay whole.
     panelBox = BookPanelRect()
-    panel = AddRect(pane, BookPanelColor(), panelBox.x, panelBox.y, panelBox.w, panelBox.h)
+    ' Build 30 (Captain #3): after OK the page holds focus, shown by a 4px
+    ' gold frame (the chips are not focusable, so none of them lights up).
+    m.bookFocusFrame = AddRect(pane, AmberColor(), panelBox.x - 4, panelBox.y - 4, panelBox.w + 8, panelBox.h + 8)
+    m.bookFocusFrame.visible = false
+    AddRect(pane, BookPanelColor(), panelBox.x, panelBox.y, panelBox.w, panelBox.h)
     ' One 52px H1 replaces the three questions and the gold bar.
     m.bookLines = []
     head = BookHeadRect()
@@ -262,6 +266,9 @@ function BuildWifiPane(parent as object) as object
     m.wifiHint.wrap = true
     m.wifiHint.maxLines = 4
     router = WifiRouterBox(false)
+    ' Build 30 (Pixel b29 #2): navy 80% backing so the tip reads over the snow.
+    m.wifiRouterScrim = AddRect(pane, "0x1B2A44CC", router.x - 24, router.y - 24, router.w + 48, 120)
+    m.wifiRouterScrim.visible = false
     m.wifiRouter = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), router.x, router.y, router.w, router.h)
     SetFontSize(m.wifiRouter, router.size)
     m.wifiRouter.vertAlign = "top"
@@ -450,11 +457,12 @@ function BuildActivityPane(parent as object) as object
     parent.appendChild(pane)
     m.activityTitle = AddLabel(pane, "", "font:LargeBoldSystemFont", InkColor(), ContentLeft(), ContentTop(), ContentWidth(), 68)
     SetFontSize(m.activityTitle, PageH1Size())
-    m.activitySub = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 70, ContentWidth(), 36)
+    m.activitySub = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 80, ContentWidth(), 36)
+    ' Build 30 (Pixel b29 P3): 12px under the H1, grid 8px under the subhead.
     grid = CreateObject("roSGNode", "MarkupGrid")
-    grid.translation = [ContentLeft(), ContentTop() + 112]
+    grid.translation = [ContentLeft(), ContentTop() + 124]
     grid.itemComponentName = "ActivityCard"
-    grid.itemSize = [364, 488]
+    grid.itemSize = [364, 420]
     grid.itemSpacing = [18, 16]
     grid.numColumns = 3
     grid.numRows = 1
@@ -887,7 +895,11 @@ sub PaintWifi()
         m.wifiPaintToken = lines.mode
         print "Eaglewood: wifi screen mode="; lines.mode
     end if
-    if m.wifiRouter <> invalid then m.wifiRouter.text = JoinLines(BreakLines(FlushText(RouterStep(m.issues)), WifiRouterBox(statusPanel).w, WifiBodySize()))
+    if m.wifiRouter <> invalid
+        routerLines = BreakLines(FlushText(RouterStep(m.issues)), WifiRouterBox(statusPanel).w, WifiBodySize())
+        m.wifiRouter.text = JoinLines(routerLines)
+        PlaceRouterScrim(routerLines.Count())
+    end if
     pngReady = (m.wifiPng = "yes")
     poster = PosterForSlot("wifi")
     if poster = invalid then return
@@ -935,7 +947,10 @@ sub PaintWifi()
         else if lines.mode = "fallback"
             plate = WifiFallbackMessage()
         else
-            plate = "Join code unavailable"
+            ' Build 30 (Captain #1): a working password never sits next to an
+            ' "unavailable" box; the QR area stays empty until the code is drawn.
+            plate = ""
+            if m.wifiBacking <> invalid then m.wifiBacking.visible = false
         end if
         if m.wifiMissing <> invalid
             m.wifiMissing.color = "0xFFFFFFF2"
@@ -1183,7 +1198,10 @@ sub EnsureActivityGrid()
         m.cardIndex = 0
         m.jumpedIndex = -1
     end if
-    season = CurrentSeason()
+    ' Build 30 root cause: Summer and Winter sorted by the calendar season's
+    ' rank (fall), so Hiking's high fall ranks led Summer. A season screen
+    ' sorts by its own seasonRank key.
+    season = ScreenSortSeason(m.section, CurrentSeason())
     m.activitySeason = season
     token = 0
     if m.activitiesToken <> invalid then token = m.activitiesToken
@@ -1311,6 +1329,7 @@ sub PaintDetail()
         m.detailExtra.text = ""
         m.detailExtra.visible = false
     end if
+    LayoutDetailColumns(DetailQrForItem(item) <> "")
     FillDetailBody()
     if m.detailCredit <> invalid then m.detailCredit.text = ItemText(item, "credit")
     if m.detailBack <> invalid then m.detailBack.text = "Back to " + RailLabel(m.section)
@@ -1770,8 +1789,39 @@ end function
 ' 5 lines at 30/42 before it scrolls.
 function DetailBodyRect() as object
     card = DetailQrCardRect()
-    return { x: ContentLeft(), y: 625, w: card.x + card.w - ContentLeft(), h: 315 }
+    w = card.x + card.w - ContentLeft()
+    if m.detailWide = true then w = DetailWideWidth()
+    return { x: ContentLeft(), y: 625, w: w, h: 315 }
 end function
+
+' Build 30 (Captain #6, Pixel b29 TtD #3): with no link the QR column
+' collapses; photo and body run 1128px wide (to x 1716, title-safe).
+function DetailWideWidth() as integer
+    return 1128
+end function
+
+sub LayoutDetailColumns(hasQr as boolean)
+    m.detailWide = (hasQr <> true)
+    photo = DetailPhotoRect()
+    card = DetailQrCardRect()
+    if m.detailPhoto <> invalid
+        m.detailPhoto.width = photo.w
+        if m.detailWide then m.detailPhoto.width = DetailWideWidth()
+    end if
+    if m.detailCredit <> invalid
+        if m.detailWide
+            m.detailCredit.translation = [ContentLeft() + DetailWideWidth() - 480, photo.y + photo.h + 12]
+            m.detailCredit.width = 480
+            m.detailCredit.horizAlign = "right"
+        else
+            m.detailCredit.translation = [card.x, card.y + card.h + 12]
+            m.detailCredit.width = card.w
+            m.detailCredit.horizAlign = "center"
+        end if
+    end if
+    if m.detailQrCard <> invalid and m.detailWide then m.detailQrCard.visible = false
+    PlaceDetailScroll()
+end sub
 
 function DetailQrPosterRect() as object
     card = DetailQrCardRect()
@@ -1839,7 +1889,7 @@ function PerkChipH() as integer
 end function
 
 function PerkChipSize() as integer
-    return 24
+    return 26
 end function
 
 function PerkChipColor() as string
@@ -2219,4 +2269,17 @@ sub LogQrFormat(slot as string)
     text = ""
     if m.qrFormats <> invalid then text = AsText(m.qrFormats.Lookup(slot))
     if text <> "" then print "Eaglewood: qr "; slot; " format "; text
+end sub
+
+sub PlaceRouterScrim(count as integer)
+    if m.wifiRouterScrim = invalid or m.wifiRouter = invalid then return
+    if count < 1
+        m.wifiRouterScrim.visible = false
+        return
+    end if
+    at = m.wifiRouter.translation
+    m.wifiRouterScrim.translation = [at[0] - 24, at[1] - 24]
+    m.wifiRouterScrim.width = m.wifiRouter.width + 48
+    m.wifiRouterScrim.height = (count * WifiPitch(WifiBodySize())) + 48
+    m.wifiRouterScrim.visible = true
 end sub

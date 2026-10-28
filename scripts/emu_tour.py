@@ -42,7 +42,7 @@ FIX = WORK / "fixtures"
 
 # Rail rows, from menu.json order. Keys start on Home with the Book Direct strip focused.
 RAIL = {"home": 0, "wifi": 1, "todo": 2, "rules": 3, "fixes": 4, "book": 5, "checkout": 6}
-TODO = ["dining", "hiking", "winter", "summer", "fishing", "biking"]
+TODO = ["dining", "hiking", "winter", "summer", "biking"]
 
 
 def rail(section: str) -> list[str]:
@@ -81,10 +81,18 @@ def screens() -> list[dict]:
     add("dining-grid-row2", todo("dining") + ["Right", "Down"], "Dining grid, second row focused")
     add("dining-grid-deep", todo("dining") + ["Right"] + ["Down"] * 4, "Dining grid scrolled to a later row")
     for child in ["dining", "hiking", "winter", "summer", "biking"]:
-        add(f"{child}-detail", todo(child) + ["Right", "Select"], f"First {child.title()} activity detail")
+        add(f"{child}-detail", todo(child) + ["Right", "Select"], f"First {child.title()} activity detail", need="qr detail" if child == "summer" else "")
+    # Build 30: Summer sorts by seasonRank.summer; Web's seven picks each get
+    # a detail capture with its QR.
+    add("summer-grid-row2", todo("summer") + ["Right", "Down"], "Summer grid, second row focused")
+    add("summer-grid-row3", todo("summer") + ["Right", "Down", "Down"], "Summer grid, third row focused")
+    for k in range(1, 7):
+        add(f"summer-detail-{k + 1:02d}", todo("summer") + ["Right"] + ["Right"] * (k % 3) + ["Down"] * (k // 3) + ["Select"], f"Summer pick {k + 1} detail with its QR", need="qr detail")
     add("dining-detail-second", todo("dining") + ["Right", "Right", "Select"], "Second Dining activity detail")
     # Build 29: the detail body shows 5 lines and scrolls; Winter overflows.
-    add("winter-detail-scrolled", todo("winter") + ["Right", "Select"] + ["Down"] * 3, "First Winter activity detail, body scrolled")
+    # Build 30: at 28px the Winter body fits, so the scroll proof uses Summer's float.
+    add("summer-detail-scrolled", todo("summer") + ["Right", "Select"] + ["Down"] * 3, "First Summer detail (float), body scrolled")
+    add("summer-detail-nolink", todo("summer") + ["Right"] + ["Down"] * 3 + ["Select"], "Elk Lake (no link): QR column collapsed, photo and body 1128px")
     add("rail-rules-focus", rail("rules"), "Rail House Rules focused")
     add("house-rules", rail("rules") + ["Select"], "House Rules page")
     # All six rules fit on one page, so there is no scrolled House Rules screen.
@@ -94,6 +102,12 @@ def screens() -> list[dict]:
     # Build 29: the steps panel grows to y 960 and every issue fits (the
     # longest, issue 12, is 13 lines in a 14-line viewport), so a scrolled frame
     # is the same picture. Scrolling is covered by winter-detail-scrolled.
+    # Build 30: an emulator-only fixture fix (stage "longfix") is long enough
+    # to overflow, so these prove Right then Down scroll inside a fix.
+    add("fixes-long-top", rail("fixes") + ["Select"], "Fixture long fix, list zone: Right Scroll steps keycap and scrollbar", stage="longfix")
+    add("fixes-long-detail", rail("fixes") + ["Select", "Right"], "Fixture long fix after Right: detail zone hint Up/Down Scroll", stage="longfix")
+    add("fixes-long-scrolled", rail("fixes") + ["Select", "Right", "Down", "Down", "Down"], "Fixture long fix after Right then Down x3: steps scrolled", stage="longfix")
+    add("fixes-long-left", rail("fixes") + ["Select", "Right", "Down", "Left"], "Fixture long fix, Left from the steps returns to the fix list", stage="longfix")
     add("rail-book-focus", rail("book"), "Rail Book Direct focused")
     add("book-direct", rail("book") + ["Select"], "Book Direct page")
     add("rail-checkout-focus", rail("checkout"), "Rail Checkout focused")
@@ -167,9 +181,28 @@ def build_fixtures() -> None:
     qr_png("WIFI:T:WPA;S:TestNet;P:placeholder;;", wifi / "wifi.png")
 
 
+LONG_FIX_PATH = "/data-longfix/guide.json"
+
+
+def long_fix_guide() -> str:
+    """guide.json with one emulator-only fix first whose steps overflow the panel."""
+    guide = json.loads((ROOT / "channel/data/guide.json").read_text(encoding="utf-8"))
+    steps = []
+    for issue in guide.get("troubleshooting") or []:
+        steps += issue.get("steps") or []
+    guide["troubleshooting"].insert(0, {"issue": "Emulator fixture: long steps", "steps": steps[:14]})
+    return json.dumps(guide, ensure_ascii=False).replace("https://sunrivertownhome.com", ORIGIN)
+
+
 def build_stage(name: str, key: str) -> Path:
     stage = WORK / f"stage-{name}"
     shutil.copytree(ROOT / "channel", stage)
+    if name == "longfix":
+        (stage / "data" / "guide.json").write_text(long_fix_guide(), encoding="utf-8")
+        (FIX / LONG_FIX_PATH.lstrip("/")).parent.mkdir(parents=True, exist_ok=True)
+        (FIX / LONG_FIX_PATH.lstrip("/")).write_text(long_fix_guide(), encoding="utf-8")
+        task = stage / "components" / "GuideTask.brs"
+        task.write_text(task.read_text(encoding="utf-8").replace("https://sunrivertownhome.com/data/guide.json", "https://sunrivertownhome.com" + LONG_FIX_PATH, 1), encoding="utf-8")
     (stage / "emu").mkdir()
     (stage / "emu" / "enabled").write_text("screenshot harness\n", encoding="utf-8")
     (stage / "components" / "secrets.brs").write_text(
@@ -274,7 +307,7 @@ def launch_retrying(stage, keys) -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     build_fixtures()
-    stages = {"key": build_stage("key", FAKE_KEY), "nokey": build_stage("nokey", "")}
+    stages = {"key": build_stage("key", FAKE_KEY), "nokey": build_stage("nokey", ""), "longfix": build_stage("longfix", FAKE_KEY)}
     threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", FIX_PORT), Handler).serve_forever, daemon=True).start()
     rows = []
     seen: dict[str, str] = {}
@@ -283,6 +316,7 @@ def main() -> None:
     try:
         for item in plan:
             note = ""
+            digest = ""
             try:
                 tries = 0
                 while True:
@@ -311,12 +345,13 @@ def main() -> None:
                 status, note = "fail", str(err).splitlines()[0]
             if status == "fail":
                 failed += 1
-            rows.append((item["slug"], f"{item['slug']}.png", item["shows"], "-".join(item["keys"]) or "(none)", status, note))
+            sha = digest if status != "fail" or "same pixels" in note else ""
+            rows.append((item["slug"], f"{item['slug']}.png", item["shows"], "-".join(item["keys"]) or "(none)", status, note, sha))
             print(f"{status:8} {item['slug']} {note}", flush=True)
     finally:
         stop()
         index = OUT / ("index.tsv" if not ONLY else "index-partial.tsv")
-        lines = ["screen\tfile\tshows\tkeys\tstatus\tnotes\n"]
+        lines = ["screen\tfile\tshows\tkeys\tstatus\tnotes\tsha256\n"]
         lines += ["\t".join(r) + "\n" for r in rows]
         index.write_text("".join(lines), encoding="utf-8")
     print(f"{len(rows)} screens, {len(seen)} unique, {failed} failed")

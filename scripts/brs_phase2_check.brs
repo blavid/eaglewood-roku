@@ -614,6 +614,7 @@ sub Main()
     failed = failed + ExpectActivityMenus()
     failed = failed + ExpectBrandCopy()
     failed = failed + ExpectTextFit()
+    failed = failed + ExpectSummerOrder()
     failed = failed + ExpectScroll()
     failed = failed + PrintNavTrace()
 
@@ -775,23 +776,31 @@ function ExpectTextFit() as integer
     if SeasonChipText("Year-round") <> "Year-round" then missed = missed + 1
     if SeasonChipText(fullSeason) <> "Year-round" then missed = missed + 1
     if ChipWidthFor("Year-round") > 330 then missed = missed + 1
-    if ChipWidthFor("Year-round") < 150 then missed = missed + 1
+    if ChipWidthFor("Year-round") < 140 then missed = missed + 1
+    for each pair in [["April through October", "Apr–Oct"], ["June through September", "Jun–Sep"], ["July through September", "Jul–Sep"], ["November through May", "Nov–May"]]
+        if SeasonChipText(pair[0]) <> pair[1]
+            print "FIT pill "; pair[0]; " -> "; SeasonChipText(pair[0])
+            missed = missed + 1
+        end if
+    end for
     text = ReadAsciiFile("pkg:/data/activities.json")
     norm = NormalizeActivities(ParseObjectText(text))
     if norm = invalid or not IsList(norm.items) then return missed + 1
     last = norm.items.Count() - 1
     for index = 0 to last
         item = norm.items[index]
-        if LabelFitsBox(ItemText(item, "name"), CardNameBox()) <> true
-            shown = ItemText(item, "name")
-            wrapped = WrapGreeting(shown, CardNameBox().w, invalid, PessimisticCharWidth(27))
-            print "FIT name "; shown; " lines="; wrapped.Count(); " word="; LongestWordWidth(shown, PessimisticCharWidth(27))
+        ' Build 30: CardLayout pre-breaks at 0.6 em and shrinks the photo.
+        card = CardLayout(ItemText(item, "name"), ItemText(item, "distance"))
+        if card.bottom > 415 or card.photoH < 124 or card.name.Count() > 5 or card.meta.Count() > 2
+            print "FIT card "; ItemText(item, "name"); " bottom="; card.bottom
             missed = missed + 1
         end if
-        if LabelFitsBox(ItemText(item, "distance"), CardDistanceBox()) <> true
-            print "FIT distance "; ItemText(item, "distance")
-            missed = missed + 1
-        end if
+        for each line in card.name
+            if Len(line) * 18 > 332 then missed = missed + 1
+        end for
+        for each line in card.meta
+            if Len(line) * 15 > 332 then missed = missed + 1
+        end for
         if LabelFitsBox(SeasonChipText(ItemText(item, "seasonLabel")), CardSeasonBox()) <> true
             print "FIT season "; ItemText(item, "seasonLabel")
             missed = missed + 1
@@ -1103,4 +1112,32 @@ function ExpectDay(seconds as integer, year as integer, month as integer, day as
         return 1
     end if
     return 0
+end function
+
+' Build 30 regression: Summer sorts all ranked activities by seasonRank.summer,
+' not by the calendar season (which put Hiking first).
+function ExpectSummerOrder() as integer
+    missed = 0
+    if ScreenSortSeason("summer", "fall") <> "summer" then missed = missed + 1
+    if ScreenSortSeason("winter", "fall") <> "winter" then missed = missed + 1
+    if ScreenSortSeason("hiking", "fall") <> "fall" then missed = missed + 1
+    norm = NormalizeActivities(ParseObjectText(ReadAsciiFile("pkg:/data/activities.json")))
+    if norm = invalid or not IsList(norm.items) then return missed + 1
+    picked = ActivitiesForScreen(norm.items, "summer")
+    ordered = SortActivities(picked, ScreenSortSeason("summer", "fall"))
+    want = ["deschutes-float", "standup-paddle-deschtues", "sharc", "sunriver-paths", "village-sunriver", "stargazing", "woodlands-golf"]
+    if ordered.Count() < want.Count() then return missed + 1
+    for index = 0 to want.Count() - 1
+        id = ItemText(ordered[index], "id")
+        if id <> want[index]
+            print "FAIL summer order "; index; " got "; id; " want "; want[index]
+            missed = missed + 1
+        end if
+        if ActivityHasQr(ordered[index]) <> true
+            print "FAIL summer qr "; id
+            missed = missed + 1
+        end if
+    end for
+    if missed = 0 then print "summer order ok"
+    return missed
 end function

@@ -9,9 +9,10 @@ sub init()
     m.bound = invalid
     m.shown = ""
     m.triedFallback = false
-    CardFontSize(m.chipText, 24)
-    CardFontSize(m.nameLabel, 27)
-    CardFontSize(m.distanceLabel, 20)
+    ' Build 30 (Pixel b29 ruling a): 30px title, 24px meta, 22px pill.
+    CardFontSize(m.chipText, 22)
+    CardFontSize(m.nameLabel, 30)
+    CardFontSize(m.distanceLabel, 24)
     if m.photo <> invalid
         m.photo.loadWidth = 354
         m.photo.loadHeight = 200
@@ -54,15 +55,18 @@ sub paintCard()
     end if
     if m.ring <> invalid then m.ring.visible = focused
     if m.swatch <> invalid then m.swatch.color = swatch
-    nameLines = CardBreak(title, 332, 17)
-    if nameLines.Count() > 5 then nameLines = [title]
-    if m.nameLabel <> invalid then m.nameLabel.text = CardJoin(nameLines)
-    count = nameLines.Count()
-    if count < 1 then count = 1
+    layout = CardLayout(title, distance)
+    if m.photo <> invalid then m.photo.height = layout.photoH
+    if m.swatch <> invalid then m.swatch.height = layout.photoH
+    if m.nameLabel <> invalid
+        m.nameLabel.text = CardJoin(layout.name)
+        m.nameLabel.translation = [16, layout.nameY]
+        m.nameLabel.height = layout.nameH
+    end if
     if m.distanceLabel <> invalid
-        m.distanceLabel.text = CardJoin(CardBreak(distance, 332, 12))
-        ' Meta pinned 16px under the title (Pixel b28), not at the card bottom.
-        m.distanceLabel.translation = [16, 221 + (count * 40) + 16]
+        m.distanceLabel.text = CardJoin(layout.meta)
+        m.distanceLabel.translation = [16, layout.metaY]
+        m.distanceLabel.height = layout.metaH
     end if
     PaintChip(SeasonChipText(season))
     ShowPoster(uri)
@@ -72,12 +76,14 @@ end sub
 ' page shows the full line.
 function SeasonChipText(season as string) as string
     if season = invalid then return ""
+    range = MonthRange(season)
+    if range <> "" then return range
     out = season
     for each mark in [" — ", " (", ", ", " are ", " for "]
         at = Instr(1, out, mark)
         if at > 1 then out = Left(out, at - 1)
     end for
-    out = out.Trim()
+    out = SeasonDash(out.Trim())
     if Len(out) <= 24 then return out
     ' Long ranges read as "Late Jun–Oct" (Pixel b28: one line, 24 characters).
     out = out.Replace(" through ", "–")
@@ -110,7 +116,7 @@ function ChipWidthFor(season as string) as integer
     for each line in ChipLines(season)
         if Len(line) > widest then widest = Len(line)
     end for
-    width = (widest * 13) + 28
+    width = (widest * 12) + 24
     if width > 330 then width = 330
     return width
 end function
@@ -217,3 +223,55 @@ sub UsePlaceholder()
     m.photo.loadHeight = 64
     m.photo.uri = held
 end sub
+
+' Build 30: the photo gives up 38px per title line past 3, so a 30px title
+' and 24px meta always fit the 420px card without ellipsis.
+function CardLayout(title as string, distance as string) as object
+    name = CardBreak(title, 332, 18)
+    meta = CardBreak(distance, 332, 15)
+    extra = name.Count() - 3
+    if extra < 0 then extra = 0
+    photoH = 200 - (extra * 38)
+    nameY = 5 + photoH + 16
+    nameH = name.Count() * 38
+    if nameH < 38 then nameH = 38
+    metaY = nameY + nameH + 12
+    metaH = meta.Count() * 32
+    return { name: name, meta: meta, photoH: photoH, nameY: nameY, nameH: nameH, metaY: metaY, metaH: metaH, bottom: metaY + metaH }
+end function
+
+' "April through October (full Rim Drive)" reads "Apr–Oct" (Pixel b29 b).
+function MonthRange(season as string) as string
+    text = season
+    at = Instr(1, text, " (")
+    if at > 1 then text = Left(text, at - 1)
+    parts = text.Trim().Split(" through ")
+    if parts.Count() <> 2 then return ""
+    left = MonthShort(parts[0])
+    right = MonthShort(parts[1])
+    if left = "" or right = "" then return ""
+    return left + "–" + right
+end function
+
+function MonthShort(word as string) as string
+    prefix = ""
+    text = word.Trim()
+    if Left(text, 5) = "Late " or Left(text, 6) = "Early "
+        at = Instr(1, text, " ")
+        prefix = Left(text, at)
+        text = Mid(text, at + 1)
+    end if
+    for each month in ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"]
+        if text = month then return prefix + Left(month, 3)
+    end for
+    return ""
+end function
+
+' "Spring through fall" reads "Spring–fall"; a multi-word side keeps spaces
+' ("Late spring – early fall") so it can break between words.
+function SeasonDash(text as string) as string
+    parts = text.Split(" through ")
+    if parts.Count() <> 2 then return text
+    if Instr(1, parts[0], " ") > 0 or Instr(1, parts[1], " ") > 0 then return parts[0] + " – " + parts[1]
+    return parts[0] + "–" + parts[1]
+end function

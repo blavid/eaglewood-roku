@@ -9,8 +9,8 @@
     <script type="text/brightscript" uri="pkg:/components/ActivityCard.brs" />
 
     <children>
-        <Rectangle id="ring" width="364" height="488" color="0xF2A93BFF" visible="false" />
-        <Rectangle id="fill" translation="[5, 5]" width="354" height="478" color="0x1A2438F2" />
+        <Rectangle id="ring" width="364" height="420" color="0xF2A93BFF" visible="false" />
+        <Rectangle id="fill" translation="[5, 5]" width="354" height="410" color="0x1A2438F2" />
         <Rectangle id="swatch" translation="[5, 5]" width="354" height="200" color="0x5C4033FF" />
         <!-- Build 29 (Pixel b28): full-height photo, a small season pill on it,
              the title, then the meta 16px under the title. -->
@@ -27,7 +27,7 @@
         <Rectangle id="chip" translation="[17, 17]" width="200" height="36" color="0xF2A93BFF" />
         <Label
             id="chipText"
-            translation="[31, 17]"
+            translation="[29, 19]"
             width="302"
             height="111"
             horizAlign="left"
@@ -40,17 +40,17 @@
             id="name"
             translation="[16, 221]"
             width="332"
-            height="200"
+            height="114"
             wrap="true"
-            maxLines="5"
+            maxLines="6"
             vertAlign="top"
             color="0xFFFFFFFF"
             font="font:SmallBoldSystemFont" />
         <Label
             id="distance"
-            translation="[16, 412]"
+            translation="[16, 309]"
             width="332"
-            height="66"
+            height="64"
             wrap="true"
             maxLines="2"
             vertAlign="top"

@@ -163,6 +163,13 @@ function SortActivities(items as object, season as string) as object
     return ordered
 end function
 
+'' The seasonRank key a screen sorts by: its own season for Summer/Winter,
+' otherwise the calendar season.
+function ScreenSortSeason(screen as string, calendar as string) as string
+    if screen = "summer" or screen = "winter" then return screen
+    return calendar
+end function
+
 function ActivitiesForScreen(items as object, screen as string) as object
     picked = []
     if not IsList(items) then return picked
@@ -178,6 +185,9 @@ end function
 function ItemOnScreen(item as object, screen as string) as boolean
     if not IsAssoc(item) then return false
     if screen = "todo" then return false
+    if screen = "summer" or screen = "winter"
+        if RankFor(item, screen) > 0 then return true
+    end if
     rule = MenuChild(screen)
     if rule <> invalid then return ItemMatchesRule(item, rule)
     section = GuideLimitedText(AaField(item, "sectionId"), 80)

@@ -731,8 +731,11 @@ sub OpenSection(section as string)
     FinishNav(OpenTarget(section))
 end sub
 
+' Build 30 (Captain #8): Right opens the steps only when they overflow, the
+' same rule DetailScroll uses to show the "Right Scroll steps" keycap.
 function OpenStepScroll() as boolean
-    if StepCount() <= VisibleSteps() then return true
+    if m.detailScroll = invalid then return true
+    if m.detailScroll.maxOffset < 1 then return true
     m.zone = "detail"
     if m.stepScroll < 0 then m.stepScroll = 0
     print "Eaglewood: screen="; m.section; " zone=detail"
