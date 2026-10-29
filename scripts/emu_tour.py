@@ -100,7 +100,7 @@ def screens() -> list[dict]:
     add("fx-steps-long", rail("fixes") + ["Right", "Right"], "Fixture long fix steps, top", stage="longfix", card="hidden")
     add("fx-steps-scrolled", rail("fixes") + ["Right", "Right", "Down", "Down", "Down"], "Fixture long fix steps scrolled", stage="longfix", card="hidden")
     add("fx-steps-back", rail("fixes") + ["Right", "Down", "Right", "Left"], "Left from the steps slides back to the fix list on issue 2", same_as="fx-list-02")
-    add("fx-list-back", rail("fixes") + ["Right", "Down", "Back"], "Back from the fix list returns to the rail on Quick Fixes")
+    add("fx-list-back", rail("fixes") + ["Right", "Down", "Back"], "Back from the fix list returns to the rail on Quick Fixes", same_as="rail-fixes-focus")
     # Build 32: Blake's TV path, sent as real ECP key presses so they go
     # through roSGScreen focus and onKeyEvent. Each press must log focus=scene.
     blake = ["Left", "Down", "Down", "Select", "Down", "Down", "Up", "Up", "Right", "Right", "Down", "Up", "Left", "Left", "Down", "Up", "Back",
