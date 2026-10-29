@@ -327,7 +327,7 @@ def send_ecp(keys: list[str]) -> None:
             time.sleep(1)
     for key in keys:
         urlopen(Request(f"http://127.0.0.1:{PORT}/keypress/{ECP_NAMES[key]}", data=b"", method="POST"), timeout=5).read()
-        time.sleep(0.9)
+        time.sleep(float(os.environ.get("EMU_ECP_GAP", "1.6")))
 
 
 def focus_problems(keys: list[str], visits: list[str]) -> str:
@@ -471,6 +471,7 @@ def main() -> None:
                     status, note = "fail", "; ".join(errors[:2])
             except Exception as err:  # keep going; the row records it
                 status, note = "fail", str(err).splitlines()[0]
+                (OUT / f"{item['slug']}.log").write_text(log_text(), encoding="utf-8")
             if status == "fail":
                 failed += 1
             sha = digest if status != "fail" or "same pixels" in note else ""
