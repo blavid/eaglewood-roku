@@ -114,7 +114,7 @@ def screens() -> list[dict]:
     add("ad-2", ["adnext"], "Home with the second corner ad (rotation frame 2)")
     add("ad-3", ["adnext", "adnext"], "Home with the third corner ad (rotation frame 3)")
     add("wifi-stale-etag", rail("wifi") + ["Select"], "Stale etags seeded, cache files missing: 304 refetches without the etag, TestNet shown", stage="staleetag", need="qr wifi", same_as="wifi-with-qr")
-    add("rail-book-focus", rail("book"), "Rail Book Direct focused")
+    add("rail-book-focus", rail("book"), "Rail Book Direct focused, corner ad hidden (page has the QR)", card="hidden")
     add("book-direct", rail("book") + ["Select"], "Book Direct page, corner ad hidden", card="hidden")
     add("rail-checkout-focus", rail("checkout"), "Rail Checkout focused")
     add("checkout", rail("checkout") + ["Select"], "Checkout Instructions page")
@@ -430,8 +430,13 @@ def card_problem(data: bytes, want: str) -> str:
     stats = f"black {black:.3f} white {white:.3f} bright {bright:.2f}"
     if want == "qr" and (black < 0.02 or white < 0.02 or bright < 0.15):
         return f"corner ad blank or missing its QR ({stats})"
-    if want == "hidden" and (black > 0.01 and white > 0.02):
-        return f"corner ad still drawn with the rail collapsed ({stats})"
+    if want == "hidden":
+        # The baked domain line (#F2A93B, x 200-534, y 925-965) is the ad's
+        # signature; card photos can be white or dark but not this gold run.
+        img = Image.open(BytesIO(data)).convert("RGB").crop((200, 925, 534, 965))
+        gold = sum(1 for p in img.getdata() if abs(p[0] - 0xF2) < 20 and abs(p[1] - 0xA9) < 20 and abs(p[2] - 0x3B) < 30)
+        if gold > 300:
+            return f"corner ad still drawn where it should be hidden (gold {gold}; {stats})"
     return ""
 
 
