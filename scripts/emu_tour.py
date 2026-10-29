@@ -75,7 +75,7 @@ def screens() -> list[dict]:
     # Build 34: Things to Do is the Roku "For You" grid: one card row per
     # non-empty category (Fishing has none, so it has no row).
     add("rail-todo-focus", rail("todo"), "Rail Things to Do focused: For You rows preview beside the expanded rail")
-    add("fy-grid", fy(), "For You grid: rail collapsed to icons, Dining row first card focused, 1 of N")
+    add("fy-grid", fy(), "For You grid: rail collapsed to icons, Dining row first card focused, 1 of N; corner ad hidden", card="hidden")
     add("fy-move-right", fy() + ["Right"], "For You grid, second Dining card focused, 2 of N", card="hidden")
     add("fy-move-right3", fy() + ["Right"] * 3, "For You grid, fourth Dining card, row scrolled", card="hidden")
     for k, child in enumerate(TODO[1:], 1):
