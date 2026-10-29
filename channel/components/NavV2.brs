@@ -16,19 +16,33 @@ function Nav2FyLeft(collapsed as boolean) as integer
 end function
 
 function Nav2Right() as integer
-    return 1824
+    ' Build 35: action-safe right edge (FHD x 1822).
+    return 1822
 end function
 
 function Nav2CardW() as integer
-    return 300
+    ' Build 35: five cards fit inside action-safe on the collapsed grid.
+    return 288
 end function
 
 function Nav2CardH() as integer
-    return 169
+    return 162
 end function
 
 function Nav2CardGap() as integer
     return 28
+end function
+
+function Nav2CountRight() as integer
+    return 1726
+end function
+
+function Nav2NameLine() as integer
+    return 36
+end function
+
+function Nav2NameGap() as integer
+    return 8
 end function
 
 function Nav2FxListX(deep as boolean) as integer
@@ -46,8 +60,8 @@ end function
 
 function Nav2AdRect() as object
     ' Same width as the expanded rail, ~15% of 1080, equal left and bottom margins.
-    h = 162
-    return { x: RailX(), y: 1080 - RailX() - h, w: RailW(), h: h }
+    ' Build 35 (pixel review): 438x214 at x 96-534, y 758-972, bottom on title-safe.
+    return { x: RailX(), y: 758, w: 438, h: 214 }
 end function
 
 sub EnsureNav2()
@@ -176,8 +190,8 @@ sub BuildForYou(parent as object)
     m.fySub = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), 0, 72, 1100, 40)
     SetFontSize(m.fySub, 28)
     m.fySub.maxLines = 1
-    m.fyCount = AddLabel(pane, "", "font:SmallBoldSystemFont", MuteColor(), 0, 24, 240, 40)
-    SetFontSize(m.fyCount, 28)
+    m.fyCount = AddLabel(pane, "", "font:SmallBoldSystemFont", "0xF4EFE3FF", 0, 24, 240, 40)
+    SetFontSize(m.fyCount, 26)
     m.fyCount.horizAlign = "right"
     m.fyCount.maxLines = 1
     m.fyBody = CreateObject("roSGNode", "Group")
@@ -186,7 +200,7 @@ sub BuildForYou(parent as object)
     m.fyFocus = CreateObject("roSGNode", "Group")
     m.fyFocus.visible = false
     pane.appendChild(m.fyFocus)
-    m.fyName = AddLabel(m.fyFocus, "", "font:SmallBoldSystemFont", InkColor(), 0, 0, 640, 86)
+    m.fyName = AddLabel(m.fyFocus, "", "font:SmallBoldSystemFont", "0xFFFFFFFF", 0, 0, 640, 86)
     SetFontSize(m.fyName, 30)
     m.fyName.vertAlign = "top"
     m.fyName.maxLines = 2
@@ -259,7 +273,8 @@ sub PaintForYou()
     m.fyTitle.translation = [0, ContentTop()]
     m.fySub.translation = [0, ContentTop() + 72]
     m.fySub.text = FySubtitle()
-    m.fyCount.translation = [width - 240, ContentTop() + 20]
+    ' Build 35: right-aligned so the counter ends on title-safe x 1726.
+    m.fyCount.translation = [Nav2CountRight() - left - 240, ContentTop() + 20]
     pitch = Nav2CardW() + Nav2CardGap()
     perRow = (width + Nav2CardGap()) \ pitch
     if perRow < 1 then perRow = 1
@@ -303,10 +318,11 @@ function PaintFyRow(r as integer, y as integer, grid as boolean, width as intege
         card = row.cards[c]
         slot = c - row.first
         card.group.translation = [slot * pitch, 52]
-        onScreen = (slot >= 0 and slot <= perRow)
-        card.group.visible = onScreen and (slot * pitch < width + 40)
+        ' Build 35: only whole cards, so the row ends inside action-safe.
+        card.group.visible = (slot >= 0 and slot * pitch + Nav2CardW() <= width)
         focused = focusedRow and c = row.col
         card.ring.visible = focused
+        card.group.scaleRotateCenter = [Nav2CardW() / 2, Nav2CardH() / 2]
         if focused
             card.group.scale = [1.08, 1.08]
         else
@@ -332,11 +348,12 @@ function PaintFyRow(r as integer, y as integer, grid as boolean, width as intege
         nameLines = BreakLines(ItemText(item, "name"), detailW, 30).Count()
         if nameLines < 1 then nameLines = 1
         if nameLines > 2 then nameLines = 2
-        m.fyMeta.translation = [0, nameLines * 42 + 4]
+        ' Build 35: 30px bold title, 24px meta, 8px between them.
+        m.fyMeta.translation = [0, nameLines * Nav2NameLine() + Nav2NameGap()]
         m.fyMeta.text = JoinLines(BreakLines(FyMetaText(item), detailW, 24))
         m.fyFocus.visible = true
         m.fyCount.text = (row.col + 1).ToStr() + " of " + row.items.Count().ToStr()
-        y = y + 26 + nameLines * 42 + 4 + 40
+        y = y + 26 + nameLines * Nav2NameLine() + Nav2NameGap() + 40
     end if
     return y
 end function
@@ -687,6 +704,8 @@ sub PaintAd()
     show = true
     if Nav2Collapsed() then show = false
     if m.nav2 = "fxSteps" then show = false
+    ' Build 35: Book Direct already shows the site QR.
+    if m.section = "book" then show = false
     if m.ads = invalid or m.ads.Count() < 1 then show = false
     if m.adGroup.visible <> show then print "Eaglewood: ad visible="; show; " nav="; m.nav2; " section="; m.section
     m.adGroup.visible = show

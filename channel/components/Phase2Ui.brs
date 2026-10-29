@@ -541,7 +541,11 @@ function BuildDetailPane(parent as object) as object
     m.detailQrMissing = AddLabel(pane, "", "font:SmallestSystemFont", "0x1C1408FF", cardX, cardY + card.h - 32, card.w, 28)
     m.detailQrMissing.horizAlign = "center"
     m.detailQrMissing.visible = false
-    m.detailMeta = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), ContentTop() + 432, ContentWidth(), 36)
+    ' Build 35 (pixel b34 TtD #4): the meta line sits on a scrim with 16px
+    ' clearance above the body panel, not on the bright snow.
+    metaY = DetailBodyRect().y - 16 - DetailMetaH()
+    m.detailMetaScrim = AddRect(pane, "0x1A233699", ContentLeft() - 12, metaY, DetailBodyRect().w + 12, DetailMetaH())
+    m.detailMeta = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft(), metaY + 2, ContentWidth(), DetailMetaH() - 4)
     body = DetailBodyRect()
     m.detailBody = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), body.x, body.y, body.w, body.h)
     m.detailBody.vertAlign = "top"
@@ -1996,6 +2000,10 @@ end function
 
 ' Build 29: y 625-940 under the photo and QR card, as wide as photo + card,
 ' 5 lines at 30/42 before it scrolls.
+function DetailMetaH() as integer
+    return 40
+end function
+
 function DetailBodyRect() as object
     card = DetailQrCardRect()
     w = card.x + card.w - ContentLeft()

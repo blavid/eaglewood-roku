@@ -25,7 +25,7 @@ function RailW() as integer
 end function
 
 function RailH() as integer
-    return 700
+    return 664
 end function
 
 function VisibleIssueRows() as integer
@@ -393,11 +393,16 @@ end function
 
 function HomeGrid() as object
     strip = HomeStripRect()
-    card = HomeBadgeFrame()
     gap = 24
-    span = card.x - gap - ContentLeft()
+    ' Build 35 (pixel b34 Home #3): the QR card is gone, so the three tiles
+    ' span the Book Direct strip and end on its right edge (x 1699).
+    span = HomeGridRight() - ContentLeft()
     w = (span - (2 * gap)) \ 3
     return { x: ContentLeft(), y: strip.y + strip.h + gap, w: w, h: 168, gap: gap }
+end function
+
+function HomeGridRight() as integer
+    return HomeRight()
 end function
 
 function HomeGridBottom() as integer
