@@ -414,11 +414,73 @@ def near(rgb, want, tol):
     return all(abs(a - b) <= tol for a, b in zip(rgb, want))
 
 
+RAIL_X = (110, 520)
+
+
+def rail_expanded(img) -> bool:
+    """The expanded rail shows its brand line ("Eaglewood 19") at top left."""
+    return ink_box(img, (120, 70, 330, 112), lambda p: min(p) > 230) is not None
+
+
+def rail_problem(img) -> str:
+    """Pixel b35 Home #1: the last rail pill ends at y <= 726 and the panel
+    ends at y 742, above the corner ad at 758."""
+    im = img.convert("RGB")
+    px = im.load()
+    xs = range(RAIL_X[0], RAIL_X[1], 4)
+    pill = [(0xF2, 0xA9, 0x3B), (0x3A, 0x4A, 0x66)]
+    last_pill = None
+    for y in range(560, 758):
+        hits = sum(1 for x in xs if any(near(px[x, y], c, 12) for c in pill))
+        if hits >= len(xs) // 2:
+            last_pill = y
+    if last_pill is not None and last_pill + 1 > 726:
+        return f"rail pill ends at y {last_pill + 1}, want <= 726"
+    text = ink_box(im, (180, 727, 520, 757), lambda p: min(p) > 200)
+    if text is not None:
+        return f"rail row ink below y 726 ({text})"
+
+    def lum(y):
+        return sum(sum(px[x, y]) for x in xs) / len(xs)
+
+    drops = [(lum(y - 1) - lum(y), y) for y in range(728, 758)]
+    drop, edge = max(drops)
+    if drop < 15 or edge != 742:
+        return f"rail panel ends at y {edge} (step {drop:.0f}), want 742"
+    return ""
+
+
+def scrim_span_problem(img) -> str:
+    """The meta scrim (y 571-608) darkens the backdrop relative to the 16px
+    gap under it (y 611-622); find where that darkening stops on the right."""
+    px = img.load()
+
+    def dark(x):
+        strip = sum(sum(px[x, y]) for y in range(580, 600)) / 20
+        gap = sum(sum(px[x, y]) for y in range(612, 621)) / 9
+        return gap - strip > 12
+
+    right = max((x for x in range(1500, 1760) if dark(x)), default=None)
+    left = min((x for x in range(560, 700) if dark(x)), default=None)
+    if right is None or left is None or abs(right - 1715) > 2 or abs(left - 588) > 2:
+        return f"detail meta strip spans x {left}-{right}, want 588-1716"
+    return ""
+
+
 def geometry_problem(slug: str, data: bytes) -> str:
     """Build 35 pixel-position assertions for the pixel review P1/P2 fixes."""
     from io import BytesIO
     from PIL import Image
     img = Image.open(BytesIO(data)).convert("RGB")
+    if rail_expanded(img):
+        problem = rail_problem(img)
+        if problem:
+            return problem
+    if slug == "fy-detail-qr-blocked":
+        # Pixel b35 TtD #1: with no QR the meta strip spans x 588-1716.
+        problem = scrim_span_problem(img)
+        if problem:
+            return problem
     if slug in ("fy-grid", "fy-move-right3", "fy-row-biking"):
         # P1: the N of M counter ends on title-safe x 1726.
         box = ink_box(img, (1400, 150, 1919, 240), lambda p: near(p, (0xF4, 0xEF, 0xE3), 40))
