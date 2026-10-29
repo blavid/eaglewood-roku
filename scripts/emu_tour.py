@@ -405,6 +405,13 @@ def geometry_problem(slug: str, data: bytes) -> str:
         below = ink_box(img, (AD["x0"], 973, AD["x1"], 1000), lambda p: min(p) > 245 or near(p, (0xF2, 0xA9, 0x3B), 30))
         if below is not None:
             return f"ad ink below title-safe y 972 ({below})"
+    if slug in ("fy-detail", "fy-detail-second"):
+        # P3: the detail meta line draws on its scrim, >= 16px above the body panel (y 625).
+        meta = ink_box(img, (588, 560, 1300, 624), lambda p: min(p) > 150)
+        if meta is None:
+            return "detail meta line not drawn"
+        if meta[3] > 625 - 16:
+            return f"detail meta ink ends at y {meta[3]}, want <= 609"
     if slug == "fy-move-right3":
         # P2: focused card title 30px bold white, meta 24px #C9D1E0, gap >= 8px.
         title = ink_box(img, (1180, 520, 1720, 570), lambda p: min(p) > 240)

@@ -545,7 +545,9 @@ function BuildDetailPane(parent as object) as object
     ' clearance above the body panel, not on the bright snow.
     metaY = DetailBodyRect().y - 16 - DetailMetaH()
     m.detailMetaScrim = AddRect(pane, "0x1A233699", ContentLeft(), metaY, DetailBodyRect().w, DetailMetaH())
-    m.detailMeta = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft() + 10, metaY + 2, DetailBodyRect().w - 20, DetailMetaH() - 4)
+    ' Label as tall as the scrim: a box shorter than the font draws nothing.
+    m.detailMeta = AddLabel(pane, "", "font:SmallSystemFont", MuteColor(), ContentLeft() + 10, metaY, DetailBodyRect().w - 20, DetailMetaH())
+    m.detailMeta.vertAlign = "center"
     body = DetailBodyRect()
     m.detailBody = AddLabel(pane, "", "font:SmallSystemFont", InkColor(), body.x, body.y, body.w, body.h)
     m.detailBody.vertAlign = "top"
@@ -2001,7 +2003,7 @@ end function
 ' Build 29: y 625-940 under the photo and QR card, as wide as photo + card,
 ' 5 lines at 30/42 before it scrolls.
 function DetailMetaH() as integer
-    return 36
+    return 38
 end function
 
 function DetailBodyRect() as object
