@@ -209,7 +209,7 @@ def long_fix_guide() -> str:
     steps = []
     for issue in guide.get("troubleshooting") or []:
         steps += issue.get("steps") or []
-    guide["troubleshooting"].insert(0, {"issue": "Emulator fixture: long steps", "steps": (steps * 3)[:24]})
+    guide["troubleshooting"].insert(0, {"issue": "Emulator fixture: long steps", "steps": [" ".join(steps[i:i + 3]) for i in range(0, 24, 3)]})
     return json.dumps(guide, ensure_ascii=False).replace("https://sunrivertownhome.com", ORIGIN)
 
 
@@ -315,6 +315,16 @@ ECP_NAMES = {"Left": "Left", "Right": "Right", "Up": "Up", "Down": "Down", "Sele
 
 
 def send_ecp(keys: list[str]) -> None:
+    # The ECP listener can come up a few seconds after zone=prompt.
+    deadline = time.time() + 30
+    while True:
+        try:
+            urlopen(f"http://127.0.0.1:{PORT}/query/device-info", timeout=3).read()
+            break
+        except Exception:
+            if time.time() > deadline:
+                raise
+            time.sleep(1)
     for key in keys:
         urlopen(Request(f"http://127.0.0.1:{PORT}/keypress/{ECP_NAMES[key]}", data=b"", method="POST"), timeout=5).read()
         time.sleep(0.9)

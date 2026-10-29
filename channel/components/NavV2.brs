@@ -814,9 +814,13 @@ function Nav2ToRail(section as string) as boolean
     m.menuDepth = "top"
     m.railIndex = MenuIndex(TopMenu(), section)
     print "Eaglewood: screen="; section; " zone=rail"
+    ' Clear the nav state before the legacy paint so the rail row gets its
+    ' expanded (gold) focus, then tween from the collapsed snapshot.
+    before = Nav2Snapshot()
+    m.nav2 = ""
     ShowSection(m.section)
     PaintAll()
-    Nav2Transition("")
+    Nav2Tween(before, Nav2Snapshot())
     return true
 end function
 
