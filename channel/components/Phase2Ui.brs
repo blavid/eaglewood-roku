@@ -2039,6 +2039,11 @@ sub LayoutDetailColumns(hasQr as boolean)
         end if
     end if
     if m.detailWide then SetDetailQrVisible(false)
+    ' Build 36 (Pixel b35 TtD #1): the meta strip spans the body panel,
+    ' x 588-1716 with no QR, x 588-1608 with one.
+    body = DetailBodyRect()
+    if m.detailMetaScrim <> invalid then m.detailMetaScrim.width = body.w
+    if m.detailMeta <> invalid then m.detailMeta.width = body.w - 20
     PlaceDetailScroll()
 end sub
 

@@ -24,7 +24,14 @@ function RailW() as integer
     return 440
 end function
 
+' Build 36 (Pixel b35 Home #1): the top panel ends at y 742 (64 + 678),
+' 16px under the Checkout pill and 16px above the corner ad at y 758.
 function RailH() as integer
+    return 678
+end function
+
+' The Quick Fixes child panel keeps its b35 height.
+function RailChildH() as integer
     return 664
 end function
 
@@ -201,8 +208,10 @@ function RailStride() as integer
     return 84
 end function
 
+' Build 36: rows start 22px higher so the 7th (Checkout) pill spans
+' y 646-726 on screen (64 + 78 + 6*84 + 80 = 726).
 function ParentRowY(index as integer) as integer
-    return 100 + (index * RailStride())
+    return 78 + (index * RailStride())
 end function
 
 function ChildRowY(index as integer) as integer
@@ -524,8 +533,8 @@ sub BuildShell()
     m.railTop.translation = [0, 0]
     m.railDock.appendChild(m.railTop)
     AddRect(m.railTop, GlassColor(), 0, 0, RailW(), RailH())
-    m.railBrand = AddLabel(m.railTop, ShownBrand("Eaglewood"), "font:MediumBoldSystemFont", InkColor(), 24, 18, RailW() - 48, 40)
-    m.railPlace = AddLabel(m.railTop, "Sunriver, Oregon", "font:SmallSystemFont", MuteColor(), 24, 58, RailW() - 48, 32)
+    m.railBrand = AddLabel(m.railTop, ShownBrand("Eaglewood"), "font:MediumBoldSystemFont", InkColor(), 24, 8, RailW() - 48, 40)
+    m.railPlace = AddLabel(m.railTop, "Sunriver, Oregon", "font:SmallSystemFont", MuteColor(), 24, 44, RailW() - 48, 32)
 
     m.railItems = []
     last = MenuSlotCount() - 1
@@ -538,7 +547,7 @@ sub BuildShell()
     m.railChild.translation = [RailW(), 0]
     m.railChild.visible = false
     m.railDock.appendChild(m.railChild)
-    AddRect(m.railChild, GlassColor(), 0, 0, RailW(), RailH())
+    AddRect(m.railChild, GlassColor(), 0, 0, RailW(), RailChildH())
     m.childHeader = AddLabel(m.railChild, "<  Things to Do", "font:SmallBoldSystemFont", AmberColor(), 16, 8, RailW() - 32, 52)
     m.childMenu = CreateObject("roSGNode", "MenuPanel")
     m.railChild.appendChild(m.childMenu)
