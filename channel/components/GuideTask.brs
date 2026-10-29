@@ -145,6 +145,21 @@ function FetchRemote(kind as string) as object
     response = HttpGet(url, etag)
     print "Eaglewood: "; kind; " response code="; response.code
     if kind = "activities" then response = ActivitiesResponse(url, cachePath, response)
+    ' Build 34 (Blake b33 TV log, GuideTask.brs:327): 304 with no cache file.
+    ' Forget the etag and fetch the full body once instead of failing.
+    if response.reason = "not-modified" and ParseObjectText(ReadText(cachePath)) = invalid
+        print "Eaglewood: "; kind; " cache-miss refetch"
+        ForgetEtag(prefix)
+        etag = ""
+        response = HttpGet(url, "")
+        print "Eaglewood: "; kind; " response code="; response.code
+    end if
+    if kind = "menu" and response.code = 404
+        ' No menu.json on the site yet: the packaged menu is the menu. Not a failure.
+        print "Eaglewood: menu remote absent code=404 using="; "local"
+        ForgetEtag(prefix)
+        return invalid
+    end if
     if response.reason = "not-modified"
         cachedText = ReadText(cachePath)
         parsed = ParseObjectText(cachedText)
@@ -172,9 +187,16 @@ function FetchRemote(kind as string) as object
             return invalid
         end if
     end if
-    WriteText(cachePath, response.body)
+    wrote = WriteText(cachePath, response.body)
     stored = response.etag
     if stored = "" then stored = etag
+    ' Build 34 root cause: the etag was kept even when the cache write failed,
+    ' so the next launch got a 304 for a file that was never written.
+    if wrote <> true
+        print "Eaglewood: "; kind; " cache-write failed, etag not kept"
+        stored = ""
+        ForgetEtag(prefix)
+    end if
     if response.etag <> ""
         print "Eaglewood: "; kind; " etag stored"
     else
@@ -369,6 +391,13 @@ sub DeleteActivitiesCache()
     if section = invalid then return
     section.Delete("activitiesEtag")
     section.Write("activitiesEtag", "")
+    section.Flush()
+end sub
+
+sub ForgetEtag(prefix as string)
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section = invalid then return
+    section.Delete(prefix + "Etag")
     section.Flush()
 end sub
 

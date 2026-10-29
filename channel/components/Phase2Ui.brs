@@ -1791,6 +1791,12 @@ end sub
 
 sub ApplyWifiResult(result as object)
     if result = invalid then return
+    ' Build 34: never replace a real SSID with an empty one (Blake b33 TV log).
+    incomingSsid = AsText(AaField(result, "ssid"))
+    if incomingSsid = "" and m.wifiSsid <> "" and AsText(result.notice) <> "coming-soon"
+        print "Eaglewood: wifi kept ssid len="; Len(m.wifiSsid); " reason=empty-result"
+        return
+    end if
     m.wifiSsid = AsText(AaField(result, "ssid"))
     m.wifiPassword = AsText(AaField(result, "password"))
     m.wifiPng = AsText(AaField(result, "png"))

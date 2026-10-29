@@ -22,6 +22,15 @@ sub fetchWifi()
     print "Eaglewood: wifi request sent"
     remote = WifiHttp(jsonUrl, RememberedWifiEtag("wifiJson"), WifiJsonPath(), true)
     print "Eaglewood: wifi response code="; remote.code
+    ' Build 34 (Blake b33 TV log): a 304 means "your copy is current", but the
+    ' copy can be gone (cachefs is evicted). Drop the etag and fetch the body.
+    if remote.reason = "not-modified" and not WifiCacheOk(ReadWifiCache())
+        print "Eaglewood: wifi cache-miss refetch"
+        ForgetWifiEtag("wifiJson")
+        ForgetWifiEtag("wifiPng")
+        remote = WifiHttp(jsonUrl, "", WifiJsonPath(), true)
+        print "Eaglewood: wifi response code="; remote.code
+    end if
     mode = WifiScreenMode(remote.code, WifiCacheOk(cached))
     if mode = "show" and remote.reason = "ok"
         cached = { ssid: remote.ssid, password: remote.password, png: "no", pngBytes: 0, source: "network", notice: "", jsonCode: remote.code }
@@ -37,6 +46,11 @@ sub fetchWifi()
     if WifiCacheOk(cached) and mode <> "coming-soon"
         print "Eaglewood: wifi png request sent"
         png = WifiHttp(pngUrl, RememberedWifiEtag("wifiPng"), WifiPngPath(), false)
+        if png.reason = "not-modified" and PngFileBytes(WifiPngPath()) < 1
+            print "Eaglewood: wifi png cache-miss refetch"
+            ForgetWifiEtag("wifiPng")
+            png = WifiHttp(pngUrl, "", WifiPngPath(), false)
+        end if
         print "Eaglewood: wifi png response code="; png.code; " reason="; png.reason
         cached.pngCode = png.code
         if png.reason = "ok" or png.reason = "not-modified"
@@ -233,9 +247,11 @@ function WifiHttp(url as string, etag as string, dest as string, wantJson as boo
         end if
         ' The guide task may not have made cachefs:/eaglewood yet on a cold start.
         EnsureWifiDir()
+        ' Build 34: a failed cache write still shows the SSID, but keeps no
+        ' etag, so the next launch cannot get a 304 for a file that is not there.
         if WriteAsciiFile(dest, body) <> true
-            result.reason = "cache-write"
-            return result
+            print "Eaglewood: wifi cache-write failed, etag not kept"
+            result.etag = ""
         end if
         result.ssid = parsed.ssid
         result.password = parsed.password
@@ -345,6 +361,13 @@ function RememberedWifiEtag(prefix as string) as string
     if section = invalid then return ""
     return GuideLimitedText(section.Read(prefix + "Etag"), 180)
 end function
+
+sub ForgetWifiEtag(prefix as string)
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section = invalid then return
+    section.Delete(prefix + "Etag")
+    section.Flush()
+end sub
 
 sub RememberWifiFetch(prefix as string, etag as string)
     if etag = invalid or etag = "" then return

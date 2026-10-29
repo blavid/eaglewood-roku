@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "rotateSeconds": 50,
+  "fadeSeconds": 1,
+  "ads": [
+    {
+      "id": "living",
+      "image": "pkg:/images/ad-living.png",
+      "alt": "Book direct and save up to about 10% less. sunrivertownhome.com"
+    },
+    {
+      "id": "exterior",
+      "image": "pkg:/images/ad-exterior.png",
+      "alt": "Book direct and save up to about 10% less. sunrivertownhome.com"
+    },
+    {
+      "id": "kitchen",
+      "image": "pkg:/images/ad-kitchen.png",
+      "alt": "Book direct and save up to about 10% less. sunrivertownhome.com"
+    }
+  ]
+}
