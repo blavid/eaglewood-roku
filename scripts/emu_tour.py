@@ -115,7 +115,7 @@ def screens() -> list[dict]:
     add("ad-3", ["adnext", "adnext"], "Home with the third corner ad (rotation frame 3)")
     add("wifi-stale-etag", rail("wifi") + ["Select"], "Stale etags seeded, cache files missing: 304 refetches without the etag, TestNet shown", stage="staleetag", need="qr wifi", same_as="wifi-with-qr")
     add("rail-book-focus", rail("book"), "Rail Book Direct focused")
-    add("book-direct", rail("book") + ["Select"], "Book Direct page")
+    add("book-direct", rail("book") + ["Select"], "Book Direct page, corner ad hidden", card="hidden")
     add("rail-checkout-focus", rail("checkout"), "Rail Checkout focused")
     add("checkout", rail("checkout") + ["Select"], "Checkout Instructions page")
     add("home-after-idle", rail("book") + ["Select"], "Home after the idle timer fired on Book Direct", wait=IDLE_SECONDS + 3, same_as="book-direct")
@@ -351,8 +351,71 @@ def focus_problems(keys: list[str], visits: list[str]) -> str:
     return ""
 
 
-# Build 34 corner ad, from NavV2 AdRect (FHD): x 96-536, y 822-984.
-CARD_BOX = (96, 822, 536, 984)
+# Build 35 corner ad, from NavV2 AdRect (FHD): x 96-534, y 758-972.
+CARD_BOX = (96, 758, 534, 972)
+AD = {"x0": 96, "y0": 758, "x1": 534, "y1": 972}
+
+
+def ink_box(img, box, pred):
+    im = img.crop(box).convert("RGB")
+    w, h = im.size
+    px = im.load()
+    xs, ys = [], []
+    for y in range(h):
+        for x in range(w):
+            if pred(px[x, y]):
+                xs.append(x)
+                ys.append(y)
+    if not xs:
+        return None
+    return (box[0] + min(xs), box[1] + min(ys), box[0] + max(xs), box[1] + max(ys))
+
+
+def near(rgb, want, tol):
+    return all(abs(a - b) <= tol for a, b in zip(rgb, want))
+
+
+def geometry_problem(slug: str, data: bytes) -> str:
+    """Build 35 pixel-position assertions for the pixel review P1/P2 fixes."""
+    from io import BytesIO
+    from PIL import Image
+    img = Image.open(BytesIO(data)).convert("RGB")
+    if slug in ("fy-grid", "fy-move-right3", "fy-row-biking"):
+        # P1: the N of M counter ends on title-safe x 1726.
+        box = ink_box(img, (1400, 150, 1919, 240), lambda p: near(p, (0xF4, 0xEF, 0xE3), 40))
+        if box is None:
+            return "counter not found"
+        if not (1700 <= box[2] <= 1726):
+            return f"counter ink ends at x {box[2]}, want 1700-1726"
+    if slug in ("home-prompt-focus", "ad-2", "ad-3"):
+        # P2: ad at x 96-534, y 758-972; QR >= 150px; domain gold inside title-safe.
+        qr = ink_box(img, (300, AD["y0"], AD["x1"], AD["y1"]), lambda p: min(p) > 245)
+        if qr is None or qr[2] - qr[0] + 1 < 150 or qr[3] - qr[1] + 1 < 150:
+            return f"ad QR under 150px ({qr})"
+        if qr[0] < AD["x0"] or qr[2] > AD["x1"] or qr[1] < AD["y0"] or qr[3] > AD["y1"]:
+            return f"ad QR outside the ad rect ({qr})"
+        dom = ink_box(img, (AD["x0"], 900, AD["x1"], 1080), lambda p: near(p, (0xF2, 0xA9, 0x3B), 30))
+        if dom is None or dom[3] > 972 or dom[2] > AD["x1"]:
+            return f"ad domain missing or below title-safe ({dom})"
+        if dom[3] - dom[1] + 1 < 15:
+            return f"ad domain ink {dom[3] - dom[1] + 1}px tall, under 24px type"
+        head = ink_box(img, (AD["x0"], AD["y0"], 300, 850), lambda p: min(p) > 245)
+        if head is None or head[1] < AD["y0"] or head[3] - head[1] + 1 < 50:
+            return f"ad headline not two 30px lines ({head})"
+        below = ink_box(img, (AD["x0"], 973, AD["x1"], 1000), lambda p: min(p) > 245 or near(p, (0xF2, 0xA9, 0x3B), 30))
+        if below is not None:
+            return f"ad ink below title-safe y 972 ({below})"
+    if slug == "fy-move-right3":
+        # P2: focused card title 30px bold white, meta 24px #C9D1E0, gap >= 8px.
+        title = ink_box(img, (1180, 520, 1720, 570), lambda p: min(p) > 240)
+        meta = ink_box(img, (1180, 566, 1720, 620), lambda p: near(p, (0xC9, 0xD1, 0xE0), 22))
+        if title is None or meta is None:
+            return f"card details missing (title {title}, meta {meta})"
+        if title[3] - title[1] + 1 < 22:
+            return f"card title ink {title[3] - title[1] + 1}px tall, under 30px type"
+        if meta[1] - title[3] < 8:
+            return f"card meta {meta[1] - title[3]}px under the title, want >= 8"
+    return ""
 
 
 def card_problem(data: bytes, want: str) -> str:
@@ -452,6 +515,10 @@ def main() -> None:
                     status = "captured"
                 if item["card"] and status != "fail":
                     problem = card_problem(data, item["card"])
+                    if problem:
+                        status, note = "fail", problem
+                if status != "fail":
+                    problem = geometry_problem(item["slug"], data)
                     if problem:
                         status, note = "fail", problem
                 if item["ecp"] and status != "fail":
