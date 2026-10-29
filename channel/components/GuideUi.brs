@@ -13,19 +13,19 @@ function ContentWidth() as integer
 end function
 
 function RailX() as integer
-    return 192
+    return 96
 end function
 
 function RailY() as integer
-    return 120
+    return 64
 end function
 
 function RailW() as integer
-    return 388
+    return 440
 end function
 
 function RailH() as integer
-    return 792
+    return 700
 end function
 
 function VisibleIssueRows() as integer
@@ -186,23 +186,23 @@ function ActivityEmptyText(section as string) as string
 end function
 
 function RailLabelWidth() as integer
-    return CheckoutLabelWidth() - 44
+    return CheckoutLabelWidth() - 36
 end function
 
 function CheckoutLabelWidth() as integer
-    return RailW() - 56
+    return RailW() - 24 - 84 - 8
 end function
 
 function RailRowHeight() as integer
-    return 88
+    return 80
 end function
 
 function RailStride() as integer
-    return 96
+    return 84
 end function
 
 function ParentRowY(index as integer) as integer
-    return 104 + (index * RailStride())
+    return 100 + (index * RailStride())
 end function
 
 function ChildRowY(index as integer) as integer
@@ -850,6 +850,7 @@ sub ShowSection(section as string)
     ReassignStoredQrs()
     LogQrScreen()
     LogBadgePlacement()
+    Nav2Paint()
 end sub
 
 sub PaintAll()
@@ -864,6 +865,7 @@ sub PaintAll()
     PaintSoon()
     PaintPhase2()
     RefreshHomeLine()
+    Nav2Paint()
 end sub
 
 sub PaintChrome()
@@ -897,10 +899,10 @@ function MakeRailRow(parent as object, rowY as integer) as object
     group = CreateObject("roSGNode", "Group")
     group.translation = [12, rowY]
     bg = AddRect(group, "0x00000000", 0, 0, RailW() - 24, RailRowHeight())
-    label = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 16, 0, RailLabelWidth(), RailRowHeight())
+    label = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 84, 0, RailLabelWidth(), RailRowHeight())
     label.maxLines = 2
     label.wrap = true
-    mark = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 16 + RailLabelWidth() + 4, 0, 36, RailRowHeight())
+    mark = AddLabel(group, "", "font:SmallBoldSystemFont", InkColor(), 84 + RailLabelWidth() + 4, 0, 36, RailRowHeight())
     mark.horizAlign = "center"
     parent.appendChild(group)
     return { group: group, bg: bg, label: label, mark: mark }

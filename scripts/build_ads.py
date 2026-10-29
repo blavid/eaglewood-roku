@@ -59,9 +59,21 @@ def render(ad: dict) -> Image.Image:
     dx = min(qx + qs / 2 - dw / 2, W - 16 - dw)
     dr.text((dx, qy + qs + 30), dom, font=f3, fill=ad["accent"])
     assert tx + max(dr.textlength(s, font=f) for s, f in [("Book direct", f1), ("& save", f1), ("up to about", f2), ("10% less", f2)]) <= qx - 8
-    return im
+    # Rounded corners baked in (24px at 2x = 12px on screen); no border.
+    mask = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(mask).rounded_rectangle([0, 0, W - 1, H - 1], 24, fill=255)
+    out = im.convert("RGBA"); out.putalpha(mask)
+    return out
+
+def shadow() -> Image.Image:
+    # Soft dark drop shadow for the 388x162 slot, drawn 24px larger each side.
+    pad = 24
+    sh = Image.new("RGBA", (388 + pad * 2, 162 + pad * 2), (0, 0, 0, 0))
+    ImageDraw.Draw(sh).rounded_rectangle([pad, pad + 6, pad + 388, pad + 162 + 6], 12, fill=(0, 0, 0, 150))
+    return sh.filter(ImageFilter.GaussianBlur(10))
 
 def main() -> None:
+    shadow().save(ROOT / "channel" / "images" / "ad-shadow.png", optimize=True)
     entries = []
     for ad in ADS:
         out = ROOT / "channel" / "images" / f"ad-{ad['id']}.png"

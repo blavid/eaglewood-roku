@@ -17,6 +17,7 @@
     <script type="text/brightscript" uri="pkg:/components/Phase2Ui.brs" />
     <script type="text/brightscript" uri="pkg:/components/BuildStamp.brs" />
     <script type="text/brightscript" uri="pkg:/components/QrDiag.brs" />
+    <script type="text/brightscript" uri="pkg:/components/NavV2.brs" />
     <script type="text/brightscript" uri="pkg:/components/MainScene.brs" />
 
     <children>

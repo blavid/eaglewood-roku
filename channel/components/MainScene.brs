@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 33 "; BuildCommit()
+    print "Eaglewood: build 34 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
@@ -413,6 +413,9 @@ function RouteKey(key as string) as boolean
         end if
         return true
     end if
+    ' Build 34: Settings / For You navigation runs first.
+    nav2 = Nav2Key(key)
+    if nav2 <> invalid then return nav2
     if key = "back" then return HandleBack()
     if key = "up" then return HandleVertical(-1)
     if key = "down" then return HandleVertical(1)
@@ -657,6 +660,7 @@ end function
 
 function FinishNav(state as object) as boolean
     if state = invalid then return true
+    m.nav2 = ""
     m.menuDepth = state.depth
     m.zone = state.zone
     m.section = state.section
@@ -719,6 +723,19 @@ function CurrentTileSection() as string
 end function
 
 sub OpenSection(section as string)
+    ' Build 34: home tiles land in the new layouts.
+    if section = "todo"
+        Nav2EnterFy("")
+        return
+    end if
+    if SubmenuSection(section)
+        Nav2EnterFy(section)
+        return
+    end if
+    if section = "fixes"
+        Nav2EnterFx()
+        return
+    end if
     if section = "fixes" then m.stepScroll = 0
     FinishNav(OpenTarget(section))
 end sub
@@ -742,6 +759,8 @@ sub onIdle()
     print "Eaglewood: idle return home"
     try
         ResetMenuMotion()
+        m.nav2 = ""
+        Nav2StopTween()
         home = HomePromptState()
         m.section = home.section
         m.zone = home.zone
@@ -1103,7 +1122,7 @@ sub onEmuKeys()
     keys = m.top.emuKeys
     if keys = invalid or keys = "" then return
     m.emuReplay = true
-    names = {left: "left", right: "right", up: "up", down: "down", select: "OK", ok: "OK", back: "back"}
+    names = {left: "left", right: "right", up: "up", down: "down", select: "OK", ok: "OK", back: "back", adnext: "adnext"}
     m.emuQueue = []
     for each part in keys.split("-")
         name = names.lookup(LCase(part))
@@ -1122,6 +1141,10 @@ sub onEmuKeyTick()
     if m.emuQueue <> invalid and m.emuQueue.Count() > 0
         name = m.emuQueue.Shift()
         print "Eaglewood: emu key " + name
+        if name = "adnext"
+            AdvanceAd()
+            return
+        end if
         RouteKey(name)
         return
     end if

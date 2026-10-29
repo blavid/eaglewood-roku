@@ -1613,6 +1613,8 @@ function BadgeSceneRect(node as object) as object
 end function
 
 function BadgeShown(section as string) as boolean
+    ' Build 34: the corner Book Direct ad (NavV2.brs) replaces the QR badge.
+    return false
     if section = "book" then return false
     ' One QR per screen on Wi-Fi, so a guest cannot scan the booking code by mistake.
     if section = "wifi" then return false
