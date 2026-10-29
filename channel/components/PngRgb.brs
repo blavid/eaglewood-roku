@@ -193,6 +193,44 @@ function StorePngBytes(buf as object, cachePath as string, tmpPath as string) as
     return ""
 end function
 
+' RGB files stay as the bytes roUrlTransfer wrote. ReadFile then WriteFile is the
+' copy that already works for wifi.png. A grayscale file is still rewritten.
+function PlacePngFile(srcPath as string, destPath as string) as object
+    raw = CreateObject("roByteArray")
+    failed = PngResult()
+    failed.reason = "bad-png"
+    if raw = invalid or raw.ReadFile(srcPath) <> true or raw.Count() < 24 then return failed
+    parsed = ExpandPngBytes(AsBuf(raw))
+    if parsed.ok <> true then return parsed
+    stored = ""
+    if parsed.converted = true
+        stored = StorePngBytes(parsed.bytes, destPath, TmpFallbackPath(destPath))
+    else
+        stored = WriteRawPng(raw, destPath)
+        if stored = "" then stored = WriteRawPng(raw, TmpFallbackPath(destPath))
+    end if
+    if stored = ""
+        parsed.ok = false
+        parsed.reason = "cache-write"
+        parsed.path = ""
+        return parsed
+    end if
+    parsed.path = stored
+    return parsed
+end function
+
+function WriteRawPng(raw as object, path as string) as string
+    if raw = invalid or path = invalid or path = "" then return ""
+    if EnsureParentDir(path) <> true then return ""
+    fs = CreateObject("roFileSystem")
+    if fs <> invalid and ProtectedCacheFile(path) <> true then fs.Delete(path)
+    wrote = raw.WriteFile(path)
+    print "Eaglewood: file write path="; path; " result="; WriteResultText(wrote); " bytes="; raw.Count()
+    if wrote <> true then return ""
+    if FileSize(path) = 0 then return ""
+    return path
+end function
+
 function WriteBufToFile(path as string, buf as object) as boolean
     if buf = invalid or path = invalid or path = "" or buf.n < 8 then return false
     EnsureParentDir(path)
@@ -202,7 +240,7 @@ function WriteBufToFile(path as string, buf as object) as boolean
         return false
     end if
     fs = CreateObject("roFileSystem")
-    if fs <> invalid then fs.Delete(path)
+    if fs <> invalid and ProtectedCacheFile(path) <> true then fs.Delete(path)
     wrote = out.WriteFile(path)
     print "Eaglewood: file write path="; path; " result="; WriteResultText(wrote); " bytes="; out.Count()
     if wrote <> true then return false
@@ -289,6 +327,395 @@ function FileSize(path as string) as integer
     return stat.size
 end function
 
+function CacheBaseName(path as string) as string
+    if path = invalid or path = "" then return ""
+    name = path
+    slash = 0
+    index = Len(name)
+    while index > 0
+        if Mid(name, index, 1) = "/"
+            slash = index
+            exit while
+        end if
+        index = index - 1
+    end while
+    if slash > 0 then name = Mid(name, slash + 1)
+    return LCase(name)
+end function
+
+' qr-<slot>-<8 hex>.png. Old names such as qr-badge.png do not match.
+function HashedQrPngName(name as string) as boolean
+    if name = invalid then return false
+    lower = LCase(name)
+    if Right(lower, 4) <> ".png" then return false
+    if Left(lower, 3) <> "qr-" then return false
+    stem = Left(lower, Len(lower) - 4)
+    dash = 0
+    index = Len(stem)
+    while index > 0
+        if Mid(stem, index, 1) = "-"
+            dash = index
+            exit while
+        end if
+        index = index - 1
+    end while
+    if dash < 5 then return false
+    tag = Mid(stem, dash + 1)
+    if HexTagOk(tag) <> true then return false
+    slot = Mid(stem, 4, dash - 4)
+    if slot = invalid or slot = "" then return false
+    if Instr(1, slot, "-") > 0 or Instr(1, slot, ".") > 0 then return false
+    return true
+end function
+
+function HexTagOk(tag as string) as boolean
+    if tag = invalid or Len(tag) <> 8 then return false
+    digits = "0123456789abcdef"
+    index = 1
+    while index <= 8
+        ch = Mid(tag, index, 1)
+        if Instr(1, digits, ch) < 1 then return false
+        index = index + 1
+    end while
+    return true
+end function
+
+' Hashed content PNGs and wifi.png are never a wipe target.
+function ProtectedCacheFile(path as string) as boolean
+    base = CacheBaseName(path)
+    if base = "wifi.png" then return true
+    if base = "qr-badge.url" then return true
+    if base = "qr-badge.path" then return true
+    if base = "qr-book.url" then return true
+    if base = "qr-book.path" then return true
+    if base = "qr-detail.url" then return true
+    if base = "qr-detail.path" then return true
+    if HashedQrPngName(base) then return true
+    return false
+end function
+
+' Cold start: a missing path or a 0-byte file must be downloaded again.
+' The same URI with loadStatus still "none" will not fire, so the scene assigns it again.
+function BadgeColdStartPlan(notePath as string, bytes as integer, posterUri as string, loadStatus as string) as object
+    path = ""
+    if notePath <> invalid then path = notePath
+    count = 0
+    if bytes <> invalid then count = bytes
+    status = "none"
+    if loadStatus <> invalid and loadStatus <> "" then status = loadStatus
+    shown = ""
+    if posterUri <> invalid then shown = posterUri
+    action = "regenerate"
+    if path <> ""
+        if count > 0
+            if shown = path
+                if status = "ready" or status = "loading"
+                    action = "keep"
+                else
+                    action = "assign"
+                end if
+            else
+                action = "assign"
+            end if
+        end if
+    end if
+    return { path: path, bytes: count, status: status, action: action }
+end function
+
+sub LogBadgeColdStart(path as string, bytes as integer, status as string)
+    shown = ""
+    if path <> invalid then shown = path
+    label = "none"
+    if status <> invalid and status <> "" then label = status
+    count = 0
+    if bytes <> invalid then count = bytes
+    print "badge cold-start path="; shown; " bytes="; count; " status="; label
+end sub
+
+function RunBadgeColdStarts() as integer
+    missed = 0
+    cachePath = ""
+    cacheBytes = 0
+    first = BadgeColdStartPlan(cachePath, cacheBytes, "", "none")
+    LogBadgeColdStart(first.path, first.bytes, first.status)
+    if first.action <> "regenerate" then missed = missed + 1
+    cachePath = "cachefs:/eaglewood/qr-badge-aaaaaaaa.png"
+    cacheBytes = 4000
+    if cachePath = "" or cacheBytes <= 0 then missed = missed + 1
+    present = BadgeColdStartPlan(cachePath, cacheBytes, "", "none")
+    LogBadgeColdStart(present.path, present.bytes, present.status)
+    if present.action <> "assign" or present.path = "" then missed = missed + 1
+    missing = BadgeColdStartPlan(cachePath, -1, "", "none")
+    LogBadgeColdStart(missing.path, missing.bytes, missing.status)
+    if missing.action <> "regenerate" then missed = missed + 1
+    empty = BadgeColdStartPlan(cachePath, 0, cachePath, "none")
+    LogBadgeColdStart(empty.path, empty.bytes, empty.status)
+    if empty.action <> "regenerate" then missed = missed + 1
+    kept = BadgeColdStartPlan(cachePath, cacheBytes, cachePath, "ready")
+    if kept.action <> "keep" or kept.path = "" then missed = missed + 1
+    stale = BadgeColdStartPlan(cachePath, cacheBytes, cachePath, "none")
+    LogBadgeColdStart(stale.path, stale.bytes, stale.status)
+    if stale.action <> "assign" or stale.path = "" then missed = missed + 1
+    if ProtectedCacheFile("cachefs:/eaglewood/qr-badge.path") <> true then missed = missed + 1
+    if ProtectedCacheFile("cachefs:/eaglewood/qr-badge-aaaaaaaa.png") <> true then missed = missed + 1
+    if missed <> 0 then print "FAIL badge cold start"
+    return missed
+end function
+
+function QrCacheHit(path as string, bytes as integer) as boolean
+    if path = invalid or path = "" then return false
+    if bytes = invalid then return false
+    if bytes <= 0 then return false
+    return true
+end function
+
+function QrContentFileName(slot as string, tag as string) as string
+    clean = DigestTagFromHex(tag)
+    if clean = "" or slot = invalid or slot = "" then return ""
+    return "qr-" + slot + "-" + clean + ".png"
+end function
+
+function QrTempFileName(slot as string, tag as string) as string
+    clean = DigestTagFromHex(tag)
+    if clean = "" or slot = invalid or slot = "" then return ""
+    return "qr-" + slot + "-" + clean + ".tmp"
+end function
+
+' First 8 hex chars of an MD5. Empty input stays empty so a missed digest
+' cannot become qr-book-.tmp or qr-book-00000000.png.
+function DigestTagFromHex(hex as string) as string
+    if hex = invalid then return ""
+    clean = LCase(hex)
+    if Len(clean) < 8 then return ""
+    return Left(clean, 8)
+end function
+
+' MD5 of the PNG bytes. roEVPDigest is used when the device provides it.
+' This path stays inside byte values so a missing digest still names the file.
+function Md5Tag(raw as object) as string
+    return DigestTagFromHex(Md5Hex(raw))
+end function
+
+function Md5Hex(raw as object) as string
+    if raw = invalid then return ""
+    count = raw.Count()
+    if count = invalid or count < 0 then return ""
+    bytes = []
+    if count > 0
+        last = count - 1
+        for index = 0 to last
+            bytes.Push(raw[index])
+        end for
+    end if
+    bytes.Push(128)
+    while (bytes.Count() mod 64) <> 56
+        bytes.Push(0)
+    end while
+    bits = count * 8
+    for index = 0 to 7
+        bytes.Push(bits mod 256)
+        bits = bits \ 256
+    end for
+    words = Md5K()
+    shifts = Md5S()
+    stateA = [1, 35, 69, 103]
+    stateB = [137, 171, 205, 239]
+    stateC = [254, 220, 186, 152]
+    stateD = [118, 84, 50, 16]
+    blocks = bytes.Count() \ 64
+    lastBlock = blocks - 1
+    for block = 0 to lastBlock
+        base = block * 64
+        message = []
+        for word = 0 to 15
+            at = base + (word * 4)
+            message.Push([bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]])
+        end for
+        wordA = stateA
+        wordB = stateB
+        wordC = stateC
+        wordD = stateD
+        for round = 0 to 63
+            if round < 16
+                mixed = Md5F(wordB, wordC, wordD)
+                pick = round
+            else if round < 32
+                mixed = Md5G(wordB, wordC, wordD)
+                pick = (5 * round + 1) mod 16
+            else if round < 48
+                mixed = Md5H(wordB, wordC, wordD)
+                pick = (3 * round + 5) mod 16
+            else
+                mixed = Md5I(wordB, wordC, wordD)
+                pick = (7 * round) mod 16
+            end if
+            mixed = WAdd(mixed, wordA)
+            mixed = WAdd(mixed, words[round])
+            mixed = WAdd(mixed, message[pick])
+            wordA = wordD
+            wordD = wordC
+            wordC = wordB
+            wordB = WAdd(wordB, WRotL(mixed, shifts[round]))
+        end for
+        stateA = WAdd(stateA, wordA)
+        stateB = WAdd(stateB, wordB)
+        stateC = WAdd(stateC, wordC)
+        stateD = WAdd(stateD, wordD)
+    end for
+    return WHex(stateA) + WHex(stateB) + WHex(stateC) + WHex(stateD)
+end function
+
+function Md5F(b as object, c as object, d as object) as object
+    return WOr(WAnd(b, c), WAnd(WNot(b), d))
+end function
+
+function Md5G(b as object, c as object, d as object) as object
+    return WOr(WAnd(b, d), WAnd(c, WNot(d)))
+end function
+
+function Md5H(b as object, c as object, d as object) as object
+    return WXor(WXor(b, c), d)
+end function
+
+function Md5I(b as object, c as object, d as object) as object
+    return WXor(c, WOr(b, WNot(d)))
+end function
+
+function WAdd(left as object, right as object) as object
+    out = [0, 0, 0, 0]
+    carry = 0
+    for index = 0 to 3
+        sum = left[index] + right[index] + carry
+        out[index] = sum mod 256
+        carry = sum \ 256
+    end for
+    return out
+end function
+
+function WAnd(left as object, right as object) as object
+    return [left[0] and right[0], left[1] and right[1], left[2] and right[2], left[3] and right[3]]
+end function
+
+function WOr(left as object, right as object) as object
+    return [left[0] or right[0], left[1] or right[1], left[2] or right[2], left[3] or right[3]]
+end function
+
+function WXor(left as object, right as object) as object
+    return [WXorByte(left[0], right[0]), WXorByte(left[1], right[1]), WXorByte(left[2], right[2]), WXorByte(left[3], right[3])]
+end function
+
+function WXorByte(left as integer, right as integer) as integer
+    return (left or right) - (left and right)
+end function
+
+function WNot(word as object) as object
+    return [255 - word[0], 255 - word[1], 255 - word[2], 255 - word[3]]
+end function
+
+function WRotL(word as object, bits as integer) as object
+    out = [word[0], word[1], word[2], word[3]]
+    left = bits
+    while left > 0
+        left = left - 1
+        carry = out[3] \ 128
+        out[3] = ((out[3] * 2) mod 256) + (out[2] \ 128)
+        out[2] = ((out[2] * 2) mod 256) + (out[1] \ 128)
+        out[1] = ((out[1] * 2) mod 256) + (out[0] \ 128)
+        out[0] = ((out[0] * 2) mod 256) + carry
+    end while
+    return out
+end function
+
+function WHex(word as object) as string
+    return HexByte(word[0]) + HexByte(word[1]) + HexByte(word[2]) + HexByte(word[3])
+end function
+
+function Md5S() as object
+    return [7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21]
+end function
+
+function Md5K() as object
+    return [[120, 164, 106, 215], [86, 183, 199, 232], [219, 112, 32, 36], [238, 206, 189, 193], [175, 15, 124, 245], [42, 198, 135, 71], [19, 70, 48, 168], [1, 149, 70, 253], [216, 152, 128, 105], [175, 247, 68, 139], [177, 91, 255, 255], [190, 215, 92, 137], [34, 17, 144, 107], [147, 113, 152, 253], [142, 67, 121, 166], [33, 8, 180, 73], [98, 37, 30, 246], [64, 179, 64, 192], [81, 90, 94, 38], [170, 199, 182, 233], [93, 16, 47, 214], [83, 20, 68, 2], [129, 230, 161, 216], [200, 251, 211, 231], [230, 205, 225, 33], [214, 7, 55, 195], [135, 13, 213, 244], [237, 20, 90, 69], [5, 233, 227, 169], [248, 163, 239, 252], [217, 2, 111, 103], [138, 76, 42, 141], [66, 57, 250, 255], [129, 246, 113, 135], [34, 97, 157, 109], [12, 56, 229, 253], [68, 234, 190, 164], [169, 207, 222, 75], [96, 75, 187, 246], [112, 188, 191, 190], [198, 126, 155, 40], [250, 39, 161, 234], [133, 48, 239, 212], [5, 29, 136, 4], [57, 208, 212, 217], [229, 153, 219, 230], [248, 124, 162, 31], [101, 86, 172, 196], [68, 34, 41, 244], [151, 255, 42, 67], [167, 35, 148, 171], [57, 160, 147, 252], [195, 89, 91, 101], [146, 204, 12, 143], [125, 244, 239, 255], [209, 93, 132, 133], [79, 126, 168, 111], [224, 230, 44, 254], [20, 67, 1, 163], [161, 17, 8, 78], [130, 126, 83, 247], [53, 242, 58, 189], [187, 210, 215, 42], [145, 211, 134, 235]]
+end function
+
+function PngDigestTag(raw as object) as string
+    if raw = invalid then return ""
+    digest = CreateObject("roEVPDigest")
+    if digest = invalid then return ""
+    ready = digest.Setup("md5")
+    if ready = false or ready = 0 or ready = invalid then return ""
+    digest.Process(raw)
+    sum = digest.Final()
+    if sum = invalid then return ""
+    return DigestTagFromHex(sum.ToHexString())
+end function
+
+function QrReadLength(path as string) as integer
+    if path = invalid or path = "" then return -1
+    raw = CreateObject("roByteArray")
+    if raw = invalid then return -1
+    if raw.ReadFile(path) <> true then return -1
+    count = raw.Count()
+    if count = invalid then return -1
+    return count
+end function
+
+function PathIsBusy(path as string, busy as string) as boolean
+    if path = invalid or path = "" or busy = invalid or busy = "" then return false
+    return Instr(1, "|" + busy + "|", "|" + path + "|") > 0
+end function
+
+' Write tmp, then Rename. roFileSystem has no MoveFile. An existing content
+' file is reused. A file named in busy is never deleted or replaced.
+function CommitQrBytes(slot as string, raw as object, busy as string) as string
+    if raw = invalid or slot = invalid or slot = "" then return ""
+    count = raw.Count()
+    if count = invalid or count < 8 then return ""
+    tag = PngDigestTag(raw)
+    fileName = QrContentFileName(slot, tag)
+    tempName = QrTempFileName(slot, tag)
+    if fileName = "" or tempName = "" then return ""
+    stored = PlaceNewPng(raw, "cachefs:/eaglewood/" + fileName, "cachefs:/eaglewood/" + tempName, busy, slot)
+    if stored <> "" then return stored
+    return PlaceNewPng(raw, "tmp:/eaglewood/" + fileName, "tmp:/eaglewood/" + tempName, busy, slot)
+end function
+
+function PlaceNewPng(raw as object, finalPath as string, tmpPath as string, busy as string, slot as string) as string
+    count = raw.Count()
+    if EnsureParentDir(finalPath) <> true then return ""
+    existing = QrReadLength(finalPath)
+    if existing = count
+        print "Eaglewood: qr "; slot; " file bytes="; count; " read="; existing
+        return finalPath
+    end if
+    if existing = 0
+        fs = CreateObject("roFileSystem")
+        if fs <> invalid then fs.Delete(finalPath)
+    end if
+    if existing > 0
+        if PathIsBusy(finalPath, busy) then return ""
+        if ProtectedCacheFile(finalPath)
+            wrote = raw.WriteFile(finalPath)
+            if wrote = true and QrReadLength(finalPath) = count then return finalPath
+            return ""
+        end if
+        fs = CreateObject("roFileSystem")
+        if fs <> invalid then fs.Delete(finalPath)
+    end if
+    if EnsureParentDir(tmpPath) <> true then return ""
+    wrote = raw.WriteFile(tmpPath)
+    readBack = QrReadLength(tmpPath)
+    print "Eaglewood: qr "; slot; " file bytes="; count; " read="; readBack
+    if wrote <> true or readBack <> count then return ""
+    if PathIsBusy(finalPath, busy) then return ""
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return ""
+    renamed = fs.Rename(tmpPath, finalPath)
+    if renamed = false or renamed = 0 or renamed = invalid then return ""
+    if QrReadLength(finalPath) <> count then return ""
+    return finalPath
+end function
+
 function WriteResultText(value as object) as string
     if value = invalid then return "invalid"
     if value = true then return "true"
@@ -296,18 +723,15 @@ function WriteResultText(value as object) as string
     return value.ToStr()
 end function
 
-' Drop grayscale QR files left from before ?v=rgb2. Runs once per version.
-' wifi.png, wifi.json, and the guide JSON stay put.
-sub ClearStaleQrCache()
+' Drop old QR files before any fetch starts. wifi.png stays. A path a Poster
+' is using is left in place.
+sub ClearStaleQrCache(busy as string)
     version = "rgb2"
+    if busy = invalid then busy = ""
+    DeleteStaleQrFiles("cachefs:/eaglewood", busy)
+    DeleteStaleQrFiles("tmp:/eaglewood", busy)
+    DeleteStaleQrFiles("tmp:/", busy)
     section = CreateObject("roRegistrySection", "EaglewoodGuide")
-    if section <> invalid
-        saved = section.Read("qrCacheVersion")
-        if saved = version then return
-    end if
-    DeleteStaleQrFiles("cachefs:/eaglewood")
-    DeleteStaleQrFiles("tmp:/eaglewood")
-    DeleteStaleQrFiles("tmp:/")
     if section <> invalid
         section.Write("qrCacheVersion", version)
         section.Flush()
@@ -315,13 +739,13 @@ sub ClearStaleQrCache()
     print "Eaglewood: qr cache cleared version="; version
 end sub
 
-sub DeleteStaleQrFiles(dir as string)
+sub DeleteStaleQrFiles(dir as string, busy as string)
     fs = CreateObject("roFileSystem")
     if fs = invalid or dir = invalid or dir = "" then return
-    known = ["qr-badge.png", "qr-book.png", "qr-detail.png", "qr-next.png", "qr-badge.url", "qr-book.url", "qr-detail.url", "qr-fallback.png"]
+    known = ["qr-badge.png", "qr-book.png", "qr-detail.png", "qr-next.png", "qr-badge.url", "qr-book.url", "qr-detail.url", "qr-badge.path", "qr-book.path", "qr-detail.path", "qr-fallback.png"]
     last = known.Count() - 1
     for index = 0 to last
-        DeleteOneQrFile(fs, JoinFs(dir, known[index]))
+        DeleteOneQrFile(fs, JoinFs(dir, known[index]), busy)
     end for
     listing = fs.GetDirectoryListing(dir)
     if listing = invalid then return
@@ -330,7 +754,7 @@ sub DeleteStaleQrFiles(dir as string)
     last = count - 1
     for index = 0 to last
         name = listing[index]
-        if StaleQrCacheName(name) then DeleteOneQrFile(fs, JoinFs(dir, name))
+        if StaleQrCacheName(name) then DeleteOneQrFile(fs, JoinFs(dir, name), busy)
     end for
 end sub
 
@@ -346,19 +770,59 @@ function StaleQrCacheName(name as object) as boolean
     if kind <> "String" and kind <> "roString" then return false
     if Instr(1, name, "/") > 0 or Instr(1, name, ":") > 0 then return false
     lower = LCase(name)
-    if Instr(1, lower, "wifi") > 0 then return false
+    if Left(lower, 4) = "wifi" then return false
+    if Left(lower, 8) = "qr-fetch" then return false
+    if HashedQrPngName(lower) then return false
     if Instr(1, lower, "qr") < 1 then return false
     if Right(lower, 4) = ".png" then return true
     if Right(lower, 4) = ".url" then return true
+    if Right(lower, 4) = ".tmp" then return true
+    if Right(lower, 5) = ".path" then return true
     return false
 end function
 
-sub DeleteOneQrFile(fs as object, path as string)
+sub DeleteOneQrFile(fs as object, path as string, busy as string)
     if fs = invalid or path = invalid or path = "" then return
+    if ProtectedCacheFile(path) then return
     if fs.Stat(path) = invalid then return
+    if PathIsBusy(path, busy) then return
     removed = fs.Delete(path)
     print "Eaglewood: qr cache delete path="; path; " result="; WriteResultText(removed)
 end sub
+
+function LiveQrPathList() as string
+    text = ""
+    text = AppendLivePath(text, FieldPath(m.badgeFile))
+    text = AppendLivePath(text, FieldPath(m.bookFile))
+    text = AppendLivePath(text, FieldPath(m.detailFile))
+    text = AppendLivePath(text, FieldPath(m.wifiFile))
+    text = AppendLivePath(text, NodeUri(m.badgePoster))
+    text = AppendLivePath(text, NodeUri(m.bookQr))
+    text = AppendLivePath(text, NodeUri(m.detailQr))
+    text = AppendLivePath(text, NodeUri(m.wifiPoster))
+    return text
+end function
+
+function AppendLivePath(text as string, path as string) as string
+    if path = invalid or path = "" then return text
+    if PathIsBusy(path, text) then return text
+    if text = "" then return path
+    return text + "|" + path
+end function
+
+function FieldPath(value as object) as string
+    if value = invalid then return ""
+    kind = type(value)
+    if kind <> "String" and kind <> "roString" then return ""
+    return value
+end function
+
+function NodeUri(node as object) as string
+    if node = invalid then return ""
+    uri = node.uri
+    if uri = invalid then return ""
+    return uri
+end function
 
 
 function AsBuf(src as object) as object

@@ -17,6 +17,18 @@ function GuideString(parsed as object, key as string, limit as integer) as strin
     return GuideLimitedText(value, limit)
 end function
 
+' ParseJson keeps the key it was given. An AA literal stores qrUrl as qrurl,
+' so a detail read has to accept the original name and the lowercased one.
+function AaField(item as object, key as string) as object
+    if item = invalid or key = invalid or key = "" then return invalid
+    if type(item) <> "roAssociativeArray" then return invalid
+    value = item.Lookup(key)
+    if value <> invalid then return value
+    lower = LCase(key)
+    if lower = key then return invalid
+    return item.Lookup(lower)
+end function
+
 function GuideLimitedText(value as object, limit as integer) as string
     if value = invalid then return ""
     kind = type(value)

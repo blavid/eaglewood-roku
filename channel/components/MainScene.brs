@@ -1,9 +1,11 @@
 sub init()
-    ClearStaleQrCache()
+    print "Eaglewood: build 36 "; BuildCommit()
+    m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")
     m.idleTimer = m.top.findNode("idleTimer")
     m.refreshTimer = m.top.findNode("refreshTimer")
+    m.heartbeatTimer = m.top.findNode("heartbeatTimer")
     m.guestTask = invalid
     m.guideTask = invalid
     m.wifiTask = invalid
@@ -12,12 +14,22 @@ sub init()
     m.guideGeneration = 0
     m.wifiGeneration = 0
     m.qrGeneration = 0
-    m.qrJobKey = ""
+    m.qrCleanupDone = false
+    m.qrAssigning = false
+    m.qrJobs = {}
+    m.qrTasks = {}
+    m.qrPaths = {}
+    m.qrRetries = {}
+    m.qrBytes = {}
     m.qrFormats = {}
     m.qrPending = {}
+    m.wifiFile = ""
     m.shell = invalid
-    m.zone = "prompt"
-    m.section = "home"
+    home = HomePromptState()
+    m.zone = home.zone
+    m.section = home.section
+    m.menuDepth = home.depth
+    m.railIndex = home.index
     m.cardIndex = 0
     m.activities = []
     m.activitiesToken = 0
@@ -29,7 +41,6 @@ sub init()
     m.wifiNotice = ""
     m.wifiSource = "builtin"
     m.tileIndex = 0
-    m.railIndex = 0
     m.issueIndex = 0
     m.stepScroll = 0
     m.ruleScroll = 0
@@ -72,6 +83,10 @@ sub init()
     end try
     if m.idleTimer <> invalid then m.idleTimer.observeField("fire", "onIdle")
     if m.refreshTimer <> invalid then m.refreshTimer.observeField("fire", "onRefresh")
+    if m.heartbeatTimer <> invalid
+        m.heartbeatTimer.observeField("fire", "onHeartbeat")
+        m.heartbeatTimer.control = "start"
+    end if
     BumpIdle()
     HoldFocus()
     startGuestFetch()
@@ -87,9 +102,11 @@ sub onRelaunch()
     m.guestCheckout = ""
     m.guestCheckoutPresent = "no"
     ShowGreeting(FallbackGreeting())
-    m.zone = "prompt"
-    m.section = "home"
-    m.railIndex = 0
+    home = HomePromptState()
+    m.zone = home.zone
+    m.section = home.section
+    m.menuDepth = home.depth
+    m.railIndex = home.index
     m.tileIndex = 0
     m.cardIndex = 0
     m.issueIndex = 0
@@ -293,7 +310,7 @@ sub ApplyPlainGreeting(text as string)
     m.greeting.maxLines = 2
     m.greeting.horizAlign = "left"
     m.greeting.vertAlign = "center"
-    m.greeting.height = 130
+    m.greeting.height = 64
     m.greeting.translation = [ContentLeft(), ContentTop()]
     m.greeting.text = text
 end sub
@@ -320,7 +337,7 @@ function GreetingFace(text as string) as string
     if last < 0 then return names[0]
     for index = 0 to last
         pixels = Len(text) * FallbackCharWidth(sizes[index])
-        if pixels <= (limit * 2)
+        if pixels <= limit
             chosen = index
             exit for
         end if
@@ -341,6 +358,21 @@ function LayoutErrorText(err as object) as string
     return "layout failed"
 end function
 
+function FocusedNodeId() as string
+    if m.top = invalid then return "none"
+    if m.top.hasFocus() = true
+        if m.top.id <> invalid and m.top.id <> "" then return m.top.id
+        return "scene"
+    end if
+    return "none"
+end function
+
+sub onHeartbeat()
+    if m.heartbeatTimer = invalid then return
+    if m.heartbeatTimer.fire <> true then return
+    print "Eaglewood: heartbeat"
+end sub
+
 sub printUiResolution()
     deviceInfo = CreateObject("roDeviceInfo")
     if deviceInfo = invalid then return
@@ -350,6 +382,9 @@ sub printUiResolution()
 end sub
 
 function onKeyEvent(key as string, press as boolean) as boolean
+    flag = "false"
+    if press = true then flag = "true"
+    print "Eaglewood: key " + key + " press=" + flag + " focus=" + FocusedNodeId()
     if press <> true then return false
     handled = true
     try
@@ -368,6 +403,9 @@ end function
 function RouteKey(key as string) as boolean
     BumpIdle()
     HoldFocus()
+    ' Build 32: a key during a slide snaps the slide to its end instead of
+    ' being dropped, so a slide that never reports "stopped" cannot lock keys.
+    if m.menuBusy = true then FinishMenuSlide()
     if m.shell = invalid
         if key = "back"
             print "Eaglewood: back exit"
@@ -375,6 +413,9 @@ function RouteKey(key as string) as boolean
         end if
         return true
     end if
+    ' Build 34: Settings / For You navigation runs first.
+    nav2 = Nav2Key(key)
+    if nav2 <> invalid then return nav2
     if key = "back" then return HandleBack()
     if key = "up" then return HandleVertical(-1)
     if key = "down" then return HandleVertical(1)
@@ -390,7 +431,8 @@ function HandleVertical(direction as integer) as boolean
     if m.zone = "tiles" then return MoveTiles(direction)
     if m.zone = "grid" then return MoveCards(0, direction)
     if m.zone = "list" then return MoveIssue(direction)
-    if m.zone = "detail" then return MoveStepScroll(direction)
+    if m.zone = "detail" then return MoveBodyScroll(direction)
+    if m.zone = "item" then return MoveBodyScroll(direction)
     if m.zone = "panel" and m.section = "rules" then return MoveRuleScroll(direction)
     if m.zone = "panel" and m.section = "checkout" then return MoveCheckoutScroll(direction)
     return true
@@ -408,11 +450,10 @@ function MovePrompt(direction as integer) as boolean
 end function
 
 function MoveRail(direction as integer) as boolean
-    sections = RailSections()
-    nextIndex = m.railIndex + direction
-    if nextIndex < 0 or nextIndex >= sections.Count() then return true
-    m.railIndex = nextIndex
-    PreviewSection(sections[nextIndex])
+    key = "down"
+    if direction < 0 then key = "up"
+    state = NextNav(MenuDepth(), "rail", m.section, m.railIndex, key)
+    if NavChanged(state) then return FinishNav(state)
     return true
 end function
 
@@ -434,23 +475,20 @@ function MoveTiles(direction as integer) as boolean
 end function
 
 function MoveCards(dx as integer, dy as integer) as boolean
-    count = CardCount()
-    if count < 1 then return true
-    if m.cardIndex < 0 or m.cardIndex >= count then m.cardIndex = 0
-    col = m.cardIndex mod 3
+    key = ""
     if dx < 0
-        if col = 0 then return FocusRail()
-        m.cardIndex = m.cardIndex - 1
+        key = "left"
     else if dx > 0
-        if col >= 2 then return true
-        nextIndex = m.cardIndex + 1
-        if nextIndex >= count then return true
-        m.cardIndex = nextIndex
-    else if dy <> 0
-        nextIndex = m.cardIndex + (dy * 3)
-        if nextIndex < 0 or nextIndex >= count then return true
-        m.cardIndex = nextIndex
+        key = "right"
+    else if dy < 0
+        key = "up"
+    else if dy > 0
+        key = "down"
     end if
+    moved = GridNav(CardCount(), m.cardIndex, key)
+    if moved.zone = "rail" then return FocusRail()
+    if moved.index = m.cardIndex then return true
+    m.cardIndex = moved.index
     ShowCardFocus()
     HoldFocus()
     return true
@@ -502,7 +540,14 @@ function MoveCheckoutScroll(direction as integer) as boolean
 end function
 
 function HandleLeft() as boolean
-    if m.zone = "item" then return CloseActivityDetail()
+    tracked = false
+    if m.zone = "item" then tracked = true
+    if m.zone = "rail" then tracked = true
+    if tracked = true
+        state = NextNav(MenuDepth(), m.zone, m.section, m.railIndex, "left")
+        if NavChanged(state) then return FinishNav(state)
+        return true
+    end if
     if m.zone = "prompt" then return FocusRail()
     if m.zone = "grid" then return MoveCards(-1, 0)
     if m.zone = "detail"
@@ -523,17 +568,12 @@ function HandleLeft() as boolean
         return FocusRail()
     end if
     if m.zone = "list" or m.zone = "panel" then return FocusRail()
-    if m.zone = "rail"
-        if m.section = "home" then return true
-        return GoHomeOnRail()
-    end if
     return true
 end function
 
 function HandleRight() as boolean
     if m.zone = "rail"
-        OpenSection(CurrentRailSection())
-        return true
+        return FinishNav(NextNav(MenuDepth(), m.zone, m.section, m.railIndex, "right"))
     end if
     if m.zone = "grid" then return MoveCards(1, 0)
     if m.zone = "tiles"
@@ -549,8 +589,7 @@ end function
 
 function HandleOk() as boolean
     if m.zone = "rail"
-        OpenSection(CurrentRailSection())
-        return true
+        return FinishNav(NextNav(MenuDepth(), m.zone, m.section, m.railIndex, "OK"))
     end if
     if m.zone = "prompt"
         OpenSection("book")
@@ -567,31 +606,32 @@ end function
 
 function OpenActivityDetail() as boolean
     if CardCount() < 1 then return true
+    LogDetailOpen()
     m.zone = "item"
     ReleaseCardImages()
+    PaintDetail()
     ShowSection(m.section)
     print "Eaglewood: screen="; m.section; " zone=item"
-    PaintDetail()
-    UpdateBadgeVisible()
-    HoldFocus()
-    return true
-end function
-
-function CloseActivityDetail() as boolean
-    m.zone = "grid"
-    ShowSection(m.section)
-    print "Eaglewood: screen="; m.section; " zone=grid"
-    PaintActivity()
     HoldFocus()
     return true
 end function
 
 function HandleBack() as boolean
-    if m.zone = "item" then return CloseActivityDetail()
-    if m.zone <> "rail"
-        return FocusRail()
+    tracked = false
+    if m.zone = "item" then tracked = true
+    if m.zone = "grid" then tracked = true
+    if m.zone = "rail" then tracked = true
+    if tracked = true
+        state = NextNav(MenuDepth(), m.zone, m.section, m.railIndex, "back")
+        if state <> invalid
+            if state.leave = true
+                print "Eaglewood: back exit"
+                return false
+            end if
+        end if
+        if NavChanged(state) then return FinishNav(state)
     end if
-    if m.section <> "home" then return GoHomeOnRail()
+    if m.zone <> "rail" then return FocusRail()
     print "Eaglewood: back exit"
     return false
 end function
@@ -604,23 +644,77 @@ function FocusRail() as boolean
     return true
 end function
 
-function GoHomeOnRail() as boolean
-    m.zone = "rail"
-    m.section = "home"
-    m.railIndex = 0
-    m.tileIndex = 0
-    ShowSection("home")
-    print "Eaglewood: screen=home zone=rail"
+function MenuDepth() as string
+    if m.menuDepth = invalid or m.menuDepth = "" then return "top"
+    return m.menuDepth
+end function
+
+function NavChanged(state as object) as boolean
+    if state = invalid then return false
+    if state.depth <> MenuDepth() then return true
+    if state.zone <> m.zone then return true
+    if state.section <> m.section then return true
+    if state.index <> m.railIndex then return true
+    return false
+end function
+
+function FinishNav(state as object) as boolean
+    if state = invalid then return true
+    m.nav2 = ""
+    m.menuDepth = state.depth
+    m.zone = state.zone
+    m.section = state.section
+    m.railIndex = state.index
+    if state.depth = "fixes" then m.issueIndex = state.index
+    if state.section = "home" then m.tileIndex = 0
+    ShowSection(m.section)
+    print "Eaglewood: screen="; m.section; " zone="; m.zone
     PaintAll()
+    SyncMenuMotion()
+    SyncChildList()
     HoldFocus()
     return true
 end function
 
-function CurrentRailSection() as string
-    sections = RailSections()
-    if m.railIndex < 0 or m.railIndex >= sections.Count() then return "home"
-    return sections[m.railIndex]
-end function
+sub SyncChildList()
+    if m.childMenu = invalid then return
+    list = m.childMenu.list
+    if list = invalid then return
+    if MenuDepth() <> "todo" and MenuDepth() <> "fixes"
+        m.childWindowKey = ""
+        return
+    end if
+    content = list.content
+    if content = invalid then return
+    last = content.getChildCount() - 1
+    if last < 0 then return
+    for index = 0 to last
+        row = content.getChild(index)
+        if row <> invalid and row.hasField("lit") then row.lit = (index = m.railIndex)
+    end for
+    if m.railIndex >= 0 and m.railIndex <= last then list.jumpToItem = m.railIndex
+    SyncMoreBelow(list, last + 1)
+end sub
+
+' Build 33 (Pixel b32 P3): track the visible window the way floatingFocus
+' scrolls it (the least move that keeps the focused row on screen) and show
+' the down-chevron only while rows remain below that window.
+sub SyncMoreBelow(list as object, count as integer)
+    rows = list.numRows
+    if rows = invalid or rows < 1 then rows = 4
+    if m.childWindow = invalid or m.childWindowKey <> MenuDepth() then m.childWindow = 0
+    m.childWindowKey = MenuDepth()
+    if m.railIndex < m.childWindow then m.childWindow = m.railIndex
+    if m.railIndex > m.childWindow + rows - 1 then m.childWindow = m.railIndex - rows + 1
+    if m.childWindow < 0 then m.childWindow = 0
+    more = (m.childWindow + rows < count)
+    pitch = 180
+    size = list.itemSize
+    if size <> invalid and size.Count() > 1 then pitch = size[1] + 4
+    m.childMenu.moreY = 64 + (rows * pitch) - 2
+    m.childMenu.moreBelow = more
+    print "Eaglewood: submenu window="; m.childWindow; " rows="; rows; " count="; count; " more="; more
+end sub
 
 function CurrentTileSection() as string
     sections = TileSections()
@@ -629,35 +723,28 @@ function CurrentTileSection() as string
 end function
 
 sub OpenSection(section as string)
-    m.section = section
-    m.railIndex = RailIndexOf(section)
-    if section = "home"
-        m.zone = "prompt"
-        m.tileIndex = 0
-    else if section = "fixes"
-        m.zone = "list"
-        m.stepScroll = 0
-    else if ActivitySection(section)
-        m.zone = "grid"
-    else
-        m.zone = "panel"
+    ' Build 34: home tiles land in the new layouts.
+    if section = "todo"
+        Nav2EnterFy("")
+        return
     end if
-    ShowSection(section)
-    print "Eaglewood: screen="; section; " zone="; m.zone
-    PaintAll()
-    HoldFocus()
+    if SubmenuSection(section)
+        Nav2EnterFy(section)
+        return
+    end if
+    if section = "fixes"
+        Nav2EnterFx()
+        return
+    end if
+    if section = "fixes" then m.stepScroll = 0
+    FinishNav(OpenTarget(section))
 end sub
 
-sub PreviewSection(section as string)
-    m.section = section
-    ShowSection(section)
-    print "Eaglewood: screen="; section; " zone="; m.zone
-    PaintAll()
-    HoldFocus()
-end sub
-
+' Build 30 (Captain #8): Right opens the steps only when they overflow, the
+' same rule DetailScroll uses to show the "Right Scroll steps" keycap.
 function OpenStepScroll() as boolean
-    if StepCount() <= VisibleSteps() then return true
+    if m.detailScroll = invalid then return true
+    if m.detailScroll.maxOffset < 1 then return true
     m.zone = "detail"
     if m.stepScroll < 0 then m.stepScroll = 0
     print "Eaglewood: screen="; m.section; " zone=detail"
@@ -671,9 +758,14 @@ sub onIdle()
     if m.idleTimer.fire <> true then return
     print "Eaglewood: idle return home"
     try
-        m.section = "home"
-        m.zone = "prompt"
-        m.railIndex = 0
+        ResetMenuMotion()
+        m.nav2 = ""
+        Nav2StopTween()
+        home = HomePromptState()
+        m.section = home.section
+        m.zone = home.zone
+        m.menuDepth = home.depth
+        m.railIndex = home.index
         m.tileIndex = 0
         m.cardIndex = 0
         m.issueIndex = 0
@@ -689,6 +781,137 @@ sub onIdle()
         HoldFocus()
     end try
     BumpIdle()
+end sub
+
+function PeekX() as integer
+    return 48 - RailW()
+end function
+
+sub ResetMenuMotion()
+    m.menuBusy = false
+    m.slideOpen = false
+    if m.menuAnim <> invalid
+        m.menuAnim.control = "stop"
+        if m.top <> invalid then m.top.removeChild(m.menuAnim)
+        m.menuAnim = invalid
+    end if
+    if m.railTop <> invalid then m.railTop.translation = [0, 0]
+    if m.railChild <> invalid
+        m.railChild.translation = [RailW(), 0]
+        m.railChild.visible = false
+    end if
+    if m.fixesPane <> invalid then m.fixesPane.translation = [0, 0]
+end sub
+
+sub SyncMenuMotion()
+    ' Build 32: Quick Fixes slides in the same submenu as Things to Do.
+    opening = false
+    if MenuDepth() = "todo" or MenuDepth() = "fixes" then opening = true
+    if m.slideOpen = invalid then m.slideOpen = false
+    if opening <> m.slideOpen
+        m.slideOpen = opening
+        RunRailSlide(opening)
+    end if
+end sub
+
+sub RunRailSlide(opening as boolean)
+    if m.railTop = invalid or m.railChild = invalid then return
+    wide = RailW()
+    m.railTop.translation = [0, 0]
+    if opening = true
+        ' The parent used to peek in from the left and its labels were cut off.
+        m.railTop.visible = false
+        m.railChild.visible = true
+        m.railChild.translation = [wide, 0]
+        StartVectorSlide("railChild.translation", [wide, 0], [0, 0])
+    else
+        m.railChild.visible = true
+        StartVectorSlide("railChild.translation", [0, 0], [wide, 0])
+    end if
+end sub
+
+function SimulatorRun() as boolean
+    info = CreateObject("roDeviceInfo")
+    if info = invalid then return false
+    return info.hasFeature("simulation_engine")
+end function
+
+sub StartVectorSlide(firstField as string, firstFrom as object, firstTo as object)
+    if SimulatorRun() or m.emuReplay = true
+        ApplySlideEnd(firstField, firstTo, "", [0, 0])
+        return
+    end if
+    anim = CreateObject("roSGNode", "Animation")
+    if anim = invalid
+        ApplySlideEnd(firstField, firstTo, "", [0, 0])
+        return
+    end if
+    anim.duration = 0.22
+    anim.easeFunction = "outQuad"
+    anim.repeat = false
+    first = CreateObject("roSGNode", "Vector2DFieldInterpolator")
+    if first = invalid
+        ApplySlideEnd(firstField, firstTo, "", [0, 0])
+        return
+    end if
+    first.key = [0.0, 1.0]
+    first.keyValue = [firstFrom, firstTo]
+    first.fieldToInterp = firstField
+    anim.appendChild(first)
+    if m.menuAnim <> invalid
+        m.menuAnim.control = "stop"
+        if m.top <> invalid then m.top.removeChild(m.menuAnim)
+    end if
+    m.menuBusy = true
+    m.menuAnim = anim
+    m.top.appendChild(anim)
+    anim.observeField("state", "onMenuSlideState")
+    anim.control = "start"
+end sub
+
+sub ApplySlideEnd(firstField as string, firstTo as object, secondField as string, secondTo as object)
+    if firstField = "railChild.translation" and m.railChild <> invalid then m.railChild.translation = firstTo
+    if secondField = "railChild.translation" and m.railChild <> invalid then m.railChild.translation = secondTo
+    m.menuBusy = false
+    if m.slideOpen = true
+        if m.railTop <> invalid then m.railTop.visible = false
+    else
+        if m.railTop <> invalid
+            m.railTop.visible = true
+            m.railTop.translation = [0, 0]
+        end if
+        if m.railChild <> invalid then m.railChild.visible = false
+    end if
+end sub
+
+sub FinishMenuSlide()
+    anim = m.menuAnim
+    m.menuAnim = invalid
+    if anim <> invalid
+        anim.unobserveField("state")
+        anim.control = "stop"
+        if m.top <> invalid then m.top.removeChild(anim)
+    end if
+    target = [RailW(), 0]
+    if m.slideOpen = true then target = [0, 0]
+    ApplySlideEnd("railChild.translation", target, "", [0, 0])
+end sub
+
+sub onMenuSlideState()
+    if m.menuAnim = invalid then return
+    if m.menuAnim.state <> "stopped" then return
+    m.menuBusy = false
+    if m.slideOpen = true
+        if m.railTop <> invalid then m.railTop.visible = false
+    else
+        if m.railTop <> invalid
+            m.railTop.visible = true
+            m.railTop.translation = [0, 0]
+        end if
+        if m.railChild <> invalid then m.railChild.visible = false
+    end if
+    if m.top <> invalid then m.top.removeChild(m.menuAnim)
+    m.menuAnim = invalid
 end sub
 
 sub BumpIdle()
@@ -713,6 +936,7 @@ sub startWifiFetch()
     end if
     task.functionName = "fetchWifi"
     task.generation = m.wifiGeneration
+    task.busyPaths = LiveQrPathList()
     task.observeField("result", "onWifiFetch")
     m.wifiTask = task
     task.control = "RUN"
@@ -783,96 +1007,84 @@ sub onRefresh()
     startWifiFetch()
 end sub
 
-sub StartQrFallback(slot as string)
+sub StartQrFetch(slot as string)
     url = ""
     if slot = "badge" and m.badgeRemote <> invalid then url = m.badgeRemote
     if slot = "book" and m.bookQrUri <> invalid then url = m.bookQrUri
     if slot = "detail" and m.detailQrUri <> invalid then url = m.detailQrUri
     if url = "" then return
-    if m.qrPending = invalid then m.qrPending = {}
-    m.qrPending[slot] = url
-    badge = PendingQr("badge")
-    book = PendingQr("book")
-    detail = PendingQr("detail")
-    key = badge + "|" + book + "|" + detail
-    if key = m.qrJobKey and m.qrTask <> invalid then return
-    m.qrJobKey = key
-    if m.qrTask <> invalid
-        m.qrTask.unobserveField("result")
-        m.qrTask.control = "STOP"
-        m.qrTask = invalid
+    if m.qrJobs = invalid then m.qrJobs = {}
+    if m.qrTasks = invalid then m.qrTasks = {}
+    running = m.qrTasks.Lookup(slot)
+    if m.qrJobs[slot] = url and running <> invalid
+        DeliverQrPath(slot)
+        return
+    end if
+    m.qrJobs[slot] = url
+    if running <> invalid
+        running.unobserveField("finalUri")
+        running.control = "STOP"
+        m.top.removeChild(running)
     end if
     m.qrGeneration = m.qrGeneration + 1
     task = CreateObject("roSGNode", "QrTask")
     if task = invalid
         print "Eaglewood: qr skip reason=task-create-failed"
-        m.qrJobKey = ""
+        m.qrJobs[slot] = ""
         return
     end if
+    task.id = "qrTask" + slot
     task.generation = m.qrGeneration
-    task.badgeUrl = badge
-    task.bookUrl = book
-    task.detailUrl = detail
-    task.observeField("result", "onQrReady")
-    m.qrTask = task
+    task.badgeUrl = ""
+    task.bookUrl = ""
+    task.detailUrl = ""
+    if slot = "badge" then task.badgeUrl = url
+    if slot = "book" then task.bookUrl = url
+    if slot = "detail" then task.detailUrl = url
+    task.busyPaths = LiveQrPathList()
+    task.doCleanup = false
+    if m.qrCleanupDone <> true
+        task.doCleanup = true
+        m.qrCleanupDone = true
+    end if
+    m.qrTasks[slot] = task
+    m.top.appendChild(task)
+    if slot = "badge" then task.observeField("finalUri", "onBadgeQrUri")
+    if slot = "book" then task.observeField("finalUri", "onBookQrUri")
+    if slot = "detail" then task.observeField("finalUri", "onDetailQrUri")
     task.control = "RUN"
 end sub
 
-function PendingQr(slot as string) as string
-    if m.qrPending = invalid then return ""
-    value = m.qrPending.Lookup(slot)
-    if value = invalid then return ""
-    return value
-end function
-
-sub onQrReady()
-    task = m.qrTask
-    if task = invalid then return
-    result = task.result
-    if result = invalid then return
-    if result.generationText <> invalid and result.generationText <> "" and result.generationText <> m.qrGeneration.ToStr() then return
-    ApplyQrResult(result)
+sub onBadgeQrUri()
+    DeliverQrPath("badge")
 end sub
 
-sub ApplyQrResult(result as object)
-    slot = AsText(result.slot)
-    remote = AsText(result.remote)
-    uri = AsText(result.uri)
-    ok = AsText(result.ok)
-    if uri = "" or uri = remote then ok = "no"
-    if slot = "badge"
-        if remote <> m.badgeRemote then return
-        if ok = "yes" and m.badgePoster <> invalid
-            m.badgeFailed = false
-            m.badgePoster.visible = true
-            m.badgePoster.uri = uri
-        else
-            m.badgeFailed = true
-            m.badgeReady = false
-            UpdateBadgeVisible()
-        end if
-        RememberQrFormat(slot, result)
-    else if slot = "book"
-        if remote <> m.bookQrUri then return
-        if ok = "yes" and m.bookQr <> invalid
-            m.bookQr.visible = true
-            m.bookQr.uri = uri
-        else
-            ShowBookQr(false)
-        end if
-        RememberQrFormat(slot, result)
-    else if slot = "detail"
-        if remote <> m.detailQrUri then return
-        if ok = "yes" and m.detailQr <> invalid
-            m.detailQrFailed = false
-            m.detailQr.visible = true
-            m.detailQr.uri = uri
-        else
-            m.detailQrFailed = true
-            ShowDetailQr(false)
-        end if
-        RememberQrFormat(slot, result)
+sub onBookQrUri()
+    DeliverQrPath("book")
+end sub
+
+sub onDetailQrUri()
+    DeliverQrPath("detail")
+end sub
+
+' The callback is the one attached to this slot's task before RUN.
+sub DeliverQrPath(slot as string)
+    if m.qrTasks = invalid then return
+    task = m.qrTasks.Lookup(slot)
+    if task = invalid then return
+    uri = task.finalUri
+    if uri = invalid or uri = "" then return
+    if Left(uri, 8) <> "cachefs:" and Left(uri, 4) <> "tmp:" then return
+    if task.result <> invalid
+        NoteQrBytes(slot, ResultNumber(task.result, "bytes"))
+        RememberQrFormat(slot, task.result)
+        RememberQrPng64(slot, task.result.png64)
     end if
+    if slot = "badge" then m.badgeFailed = false
+    if slot = "detail" then m.detailQrFailed = false
+    ShowQrFrame(slot, true)
+    AssignQrPoster(slot, uri)
+    if slot = "detail" then RevealDetailQr()
 end sub
 
 sub RememberQrFormat(slot as string, result as object)
@@ -885,6 +1097,9 @@ function NumberText(value as object) as string
     return value.ToStr()
 end function
 
+' Build 32 (Blake's TV lockup): the scene owns remote focus in every zone.
+' b31 handed focus to the submenu MarkupList; the list ate Up/Down itself
+' and kept focus after the submenu slid away, so Down did nothing.
 sub HoldFocus()
     focused = true
     try
@@ -896,4 +1111,47 @@ sub HoldFocus()
     if focused = true then return
     m.top.setFocus(true)
     print "Eaglewood: focus restored"
+end sub
+
+' Replays a dash-separated key list (for example Left-Down-OK) once the scene
+' is up. Only reachable through the harness-only emuKeys launch parameter.
+' Debug-only (pkg:/emu/enabled, stripped by package.sh): replays a key list from
+' the emuKeys deep link, one key every 0.6 s, so async loads land between keys
+' the way they do for a person holding the remote.
+sub onEmuKeys()
+    keys = m.top.emuKeys
+    if keys = invalid or keys = "" then return
+    m.emuReplay = true
+    names = {left: "left", right: "right", up: "up", down: "down", select: "OK", ok: "OK", back: "back", adnext: "adnext"}
+    m.emuQueue = []
+    for each part in keys.split("-")
+        name = names.lookup(LCase(part))
+        if name <> invalid then m.emuQueue.Push(name)
+    end for
+    timer = CreateObject("roSGNode", "Timer")
+    timer.duration = 0.6
+    timer.repeat = true
+    timer.observeField("fire", "onEmuKeyTick")
+    m.top.appendChild(timer)
+    m.emuTimer = timer
+    timer.control = "start"
+end sub
+
+sub onEmuKeyTick()
+    if m.emuQueue <> invalid and m.emuQueue.Count() > 0
+        name = m.emuQueue.Shift()
+        print "Eaglewood: emu key " + name
+        if name = "adnext"
+            AdvanceAd()
+            return
+        end if
+        RouteKey(name)
+        return
+    end if
+    if m.emuTimer <> invalid
+        m.emuTimer.control = "stop"
+        m.top.removeChild(m.emuTimer)
+        m.emuTimer = invalid
+    end if
+    print "Eaglewood: emu keys done section=" + m.section + " zone=" + m.zone
 end sub

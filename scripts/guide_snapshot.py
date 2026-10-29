@@ -361,7 +361,7 @@ def check_committed() -> None:
             if has_qr:
                 fail(f"activity {row.get('id')!r} has qrUrl without url")
             missing_url += 1
-    if missing_url != 16 or with_qr != 50 or len(rows) != 66:
+    if missing_url != 12 or with_qr != 54 or len(rows) != 66:
         fail(f"activity counts total={len(rows)} qr={with_qr} no-url={missing_url}")
     if tuple(ordered_names(activities, "dining", "fall")) != FALL_DINING:
         fail("fall dining order does not match seasonRank")

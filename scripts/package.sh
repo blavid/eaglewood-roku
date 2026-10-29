@@ -49,6 +49,26 @@ trap cleanup EXIT
 mkdir -p "$STAGE"
 cp -a "$CHANNEL/." "$STAGE/"
 rm -f "$STAGE/components/secrets.brs"
+# The screenshot harness marker must never ship.
+rm -rf "$STAGE/emu"
+short_commit="$(git -C "$ROOT" rev-parse --short=7 HEAD 2>/dev/null || true)"
+python3 - "$STAGE/components/BuildStamp.brs" "$short_commit" <<'PY'
+import pathlib
+import re
+import sys
+
+path, short = sys.argv[1], sys.argv[2]
+file = pathlib.Path(path)
+text = file.read_text(encoding="utf-8")
+placeholder = 'return "unknown"'
+if placeholder not in text:
+    sys.stderr.write("BuildStamp.brs is missing the commit placeholder.\n")
+    sys.exit(1)
+if not re.fullmatch(r"[0-9a-f]{7}", short or ""):
+    sys.stderr.write("Package could not read a 7-character commit.\n")
+    sys.exit(1)
+file.write_text(text.replace(placeholder, f'return "{short}"', 1), encoding="utf-8")
+PY
 
 if [[ "$NO_GUEST" -eq 1 ]]; then
     python3 "$ROOT/scripts/write_guest_secrets.py" --dest "$STAGE/components/secrets.brs" --no-guest

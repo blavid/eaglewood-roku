@@ -40,11 +40,11 @@ sub Main()
     failed = failed + ExpectGreeting("Alex", "Rivera", "", false, now, "Welcome, Alex Rivera")
     failed = failed + ExpectGreeting("Alex", "", "", false, now, "Welcome, Alex")
     failed = failed + ExpectGreeting("Alex", "R2", "", false, now, "Welcome, Alex")
-    failed = failed + ExpectGreeting("R2", "Rivera", "", false, now, "Welcome to Eaglewood")
+    failed = failed + ExpectGreeting("R2", "Rivera", "", false, now, "Welcome to Eaglewood 19")
     failed = failed + ExpectGreeting("José", "García", "2026-10-28T11:00:00-07:00", true, now, "Welcome, José García")
     failed = failed + ExpectGreeting("Mary Jane", "van Horn", "", false, now, "Welcome, Mary Jane van Horn")
     failed = failed + ExpectGreeting("Alex", "Lee", "nope", true, now, "Welcome, Alex Lee")
-    failed = failed + ExpectGreeting("Alex", "Lee", "2001-01-01T00:00:00Z", true, now, "Welcome to Eaglewood")
+    failed = failed + ExpectGreeting("Alex", "Lee", "2001-01-01T00:00:00Z", true, now, "Welcome to Eaglewood 19")
     failed = failed + ExpectGreeting("Alex", "Lee", "2038-01-01T00:00:00Z", true, now, "Welcome, Alex Lee")
     failed = failed + ExpectGreeting("Alex", "Lee", "2026-02-29T00:00:00Z", true, now, "Welcome, Alex Lee")
 
@@ -198,7 +198,7 @@ sub Main()
         print "FAIL live body decision at the device clock"
         failed = failed + 1
     end if
-    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793170800) <> "Welcome to Eaglewood"
+    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793170800) <> "Welcome to Eaglewood 19"
         print "FAIL hide at Pacific midnight"
         failed = failed + 1
     end if
@@ -206,7 +206,7 @@ sub Main()
         print "FAIL midnight decision"
         failed = failed + 1
     end if
-    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793174400) <> "Welcome to Eaglewood"
+    if GreetingFromGuestAt("Test", "Guest", "2026-10-27", true, 1793174400) <> "Welcome to Eaglewood 19"
         print "FAIL hide after Pacific midnight"
         failed = failed + 1
     end if
@@ -270,7 +270,7 @@ sub Main()
         print "FAIL wrap on hyphen"
         failed = failed + 1
     end if
-    one = WrapGreeting("Welcome to Eaglewood", 1760, invalid, FallbackCharWidth(64))
+    one = WrapGreeting("Welcome to Eaglewood 19", 1760, invalid, FallbackCharWidth(64))
     if one.Count() <> 1
         print "FAIL fallback should be one line"
         failed = failed + 1

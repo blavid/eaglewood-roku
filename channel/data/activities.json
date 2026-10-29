@@ -939,7 +939,7 @@
           "seasonRank": {
             "winter": 140,
             "spring": 490,
-            "summer": 300,
+            "summer": 3,
             "fall": 560
           }
         },
@@ -1074,11 +1074,13 @@
             "summer"
           ],
           "seasonLabel": "June through August",
-          "tip": "Rent tubes at the Sunriver Marina or in Bend. Bring sunscreen and a dry bag.",
+          "tip": "Rent tubes at the Sunriver Marina (three-mile float from Harper Bridge, June–August) or in Bend. Bring sunscreen and a dry bag.",
+          "url": "https://www.sunriverresort.com/play/marina",
+          "qrUrl": "https://sunrivertownhome.com/data/qr/deschutes-float.png",
           "seasonRank": {
             "winter": 630,
             "spring": 650,
-            "summer": 10,
+            "summer": 1,
             "fall": 650
           }
         },
@@ -1146,10 +1148,12 @@
           ],
           "seasonLabel": "June through September",
           "tip": "Morning water is glassy — best for SUP.",
+          "url": "https://www.sunriverresort.com/play/marina",
+          "qrUrl": "https://sunrivertownhome.com/data/qr/standup-paddle-deschtues.png",
           "seasonRank": {
             "winter": 660,
             "spring": 660,
-            "summer": 40,
+            "summer": 2,
             "fall": 240
           }
         }
@@ -1348,10 +1352,12 @@
           ],
           "seasonLabel": "Year-round",
           "tip": "Ride to the Village for breakfast, then loop back via the river trail.",
+          "url": "https://www.sunriverowners.org/community/about-sunriver/sunriver-community-map",
+          "qrUrl": "https://sunrivertownhome.com/data/qr/sunriver-paths.png",
           "seasonRank": {
             "winter": 290,
             "spring": 220,
-            "summer": 350,
+            "summer": 4,
             "fall": 340
           }
         },
@@ -1494,11 +1500,13 @@
             "year-round"
           ],
           "seasonLabel": "Clear nights, year-round",
-          "tip": "New moon weeks are best. Turn off deck lights for 10 minutes.",
+          "tip": "New moon weeks are best. Turn off deck lights for 10 minutes, or catch a summer night viewing at the Oregon Observatory at the Sunriver Nature Center.",
+          "url": "https://www.snco.org/hours-admission",
+          "qrUrl": "https://sunrivertownhome.com/data/qr/stargazing.png",
           "seasonRank": {
             "winter": 160,
             "spring": 270,
-            "summer": 400,
+            "summer": 6,
             "fall": 290
           }
         }
@@ -1530,7 +1538,7 @@
           "seasonRank": {
             "winter": 610,
             "spring": 80,
-            "summer": 160,
+            "summer": 7,
             "fall": 70
           }
         },
@@ -1601,7 +1609,7 @@
           "seasonRank": {
             "winter": 340,
             "spring": 240,
-            "summer": 370,
+            "summer": 5,
             "fall": 310
           }
         },

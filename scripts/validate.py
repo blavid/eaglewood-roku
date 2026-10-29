@@ -37,7 +37,8 @@ RENDER_THREAD_FILES = (
     CARD_BRS,
 )
 # roDateTime and roDeviceInfo are usable there. roSGNode is how the scene is built.
-RENDER_THREAD_CREATE = {"roSGNode", "roDeviceInfo", "roDateTime"}
+# roByteArray (build 33): the QR reload writes its own PNG copy from the task's bytes.
+RENDER_THREAD_CREATE = {"roSGNode", "roDeviceInfo", "roDateTime", "roByteArray"}
 # Creating these logs "MAIN|TASK-only component failed on RENDER thread".
 RENDER_THREAD_FORBIDDEN = (
     "roFontRegistry",
@@ -75,7 +76,7 @@ REQUIRED = {
     "title": "Eaglewood",
     "major_version": "1",
     "minor_version": "0",
-    "build_version": "11",
+    "build_version": "29",
     "mm_icon_focus_fhd": "pkg:/images/icon_fhd.jpg",
     "mm_icon_focus_hd": "pkg:/images/icon_hd.jpg",
     "splash_screen_fhd": "pkg:/images/splash_fhd.jpg",
@@ -99,19 +100,19 @@ IMAGE_SPECS = {
 }
 
 GREETING_CASES = [
-    ("", "", "Welcome to Eaglewood"),
-    ("   ", "", "Welcome to Eaglewood"),
+    ("", "", "Welcome to Eaglewood 19"),
+    ("   ", "", "Welcome to Eaglewood 19"),
     ("Alex", "", "Welcome, Alex"),
     ("Alex", "Rivera", "Welcome, Alex Rivera"),
     ("Alex", "R2", "Welcome, Alex"),
-    ("R2", "Rivera", "Welcome to Eaglewood"),
+    ("R2", "Rivera", "Welcome to Eaglewood 19"),
     ("Mary-Jane", "O'Brien", "Welcome, Mary-Jane O'Brien"),
     ("José", "García", "Welcome, José García"),
     ("Ann  Marie", "van  Horn", "Welcome, Ann Marie van Horn"),
     ("St. James", "Park", "Welcome, St. James Park"),
-    ("Alex123", "Lee", "Welcome to Eaglewood"),
+    ("Alex123", "Lee", "Welcome to Eaglewood 19"),
     ("A" * 40, "Lee", "Welcome, " + ("A" * 32) + " Lee"),
-    (None, "Lee", "Welcome to Eaglewood"),
+    (None, "Lee", "Welcome to Eaglewood 19"),
 ]
 
 
@@ -207,7 +208,7 @@ def check_greeting_rules() -> None:
         actual = build_greeting(first, last)
         if actual != expected:
             fail(f"greeting {(first, last)!r} -> {actual!r}, expected {expected!r}")
-    if build_greeting("Alex", "Lee", current=False) != "Welcome to Eaglewood":
+    if build_greeting("Alex", "Lee", current=False) != "Welcome to Eaglewood 19":
         fail("a stay that is not current must use the fallback greeting")
     if sanitize_name_part("O\u2019Brien") != "O'Brien":
         fail("curly apostrophe was not normalized")
@@ -449,6 +450,12 @@ def check_zip() -> None:
         fail(f"zip is {size} bytes, over 4 MB")
     with zipfile.ZipFile(ZIP_PATH) as archive:
         names = archive.namelist()
+        if "components/BuildStamp.brs" not in names:
+            fail("zip is missing components/BuildStamp.brs")
+        else:
+            stamp = archive.read("components/BuildStamp.brs").decode("utf-8")
+            if 'return "unknown"' in stamp or not re.search(r'return "[0-9a-f]{7}"', stamp):
+                fail("package did not inject the short commit")
     if "manifest" not in names:
         fail("zip is missing manifest at the archive root")
     if "components/secrets.brs" not in names:
@@ -505,11 +512,145 @@ def check_phase2() -> None:
         fail("public QR URLs must add v=rgb2")
     if "sub ClearStaleQrCache(" not in png or "qrCacheVersion" not in png:
         fail("startup must clear stale QR cache once per version")
-    if "ClearStaleQrCache()" not in scene:
-        fail("startup must clear the stale QR cache")
+    if "ClearStaleQrCache(" in scene:
+        fail("QR cache cleanup must not run on the render thread")
+    qr_task = (ROOT / "channel" / "components" / "QrTask.brs").read_text(encoding="utf-8")
+    if "ClearStaleQrCache(busy)" not in qr_task:
+        fail("QR cache cleanup must run on the QR task")
+    if "digest.Process(raw)" not in png or 'digest.Setup("md5")' not in png or "digest.Final()" not in png:
+        fail("QR files must be named from md5 via roEVPDigest Process")
+    if "fs.Rename(" not in png or "fs.MoveFile(" in png:
+        fail("QR files must be renamed into place")
+    if "fs.Exists(" not in qr_task:
+        fail("a missing QR note must be skipped before ReadAsciiFile")
     if "wifi png format bitdepth=" not in wifi:
         fail("wifi png format must be logged")
-    if 'print "Eaglewood: poster ' not in phase2 or 'print "Eaglewood: qr ' not in phase2:
+    if "sub MountQrPosterBody(" not in phase2:
+        fail("public QR posters must use the Wi-Fi local-file mount")
+    diag = (ROOT / "channel" / "components" / "QrDiag.brs").read_text(encoding="utf-8")
+    if "sub MountQrPoster(" not in diag or "sub GuardMountQrPoster(" not in diag:
+        fail("QR mount must be wrapped in try/catch")
+    if 'print "Eaglewood: qr "; slot; " error="' not in diag:
+        fail("a caught QR error must be logged")
+    stamp = (ROOT / "channel" / "components" / "BuildStamp.brs").read_text(encoding="utf-8")
+    if 'return "unknown"' not in stamp or "build 36 · " not in stamp:
+        fail("the build label must keep a package-time commit placeholder")
+    if 'print "Eaglewood: build 36 "' not in scene:
+        fail("startup must log build 36 and the commit")
+    if "decor-heart" in phase2:
+        fail("the Book Direct heart poster is still in the scene")
+    qr_xml = (ROOT / "channel" / "components" / "QrTask.xml").read_text(encoding="utf-8")
+    if 'id="finalUri"' not in qr_xml or "alwaysNotify" not in qr_xml:
+        fail("each QR task needs a finalUri field")
+    fetch = scene[scene.find("sub StartQrFetch("):scene.find("sub onBadgeQrUri(")]
+    observed = fetch.find('observeField("finalUri"')
+    started = fetch.find('control = "RUN"')
+    if observed < 0 or started < 0 or observed > started:
+        fail("finalUri must be observed on the task before it runs")
+    if "m.qrPaths" not in scene or "deliver uri=" not in phase2:
+        fail("a finished QR path must be stored and assigned to the poster")
+    if "function ActivitiesFromFetch(" not in season or "function ActivityById(" not in season:
+        fail("detail must resolve qrUrl by activity id")
+    if "function ActivitiesCacheDropsQr(" not in season or "function ActivitiesCacheGeneration(" not in season:
+        fail("a stale activities cache must be recognizable")
+    guide_task = (ROOT / "channel" / "components" / "GuideTask.brs").read_text(encoding="utf-8")
+    if "activities cache discarded" not in guide_task or 'HttpGet(url, "")' not in guide_task:
+        fail("a 304 or a cache missing qrUrl must be deleted and fetched again")
+    if "activitiesCacheKey" not in guide_task or "DeleteActivitiesCache()" not in guide_task:
+        fail("the activities cache generation must discard the stale file and etag")
+    if 'print "Eaglewood: detail open id="' not in phase2:
+        fail("opening detail must log detail open id and qrUrl")
+    if "ActivitiesFromText(" not in (ROOT / "channel" / "components" / "GuideTask.brs").read_text(encoding="utf-8"):
+        fail("304 and 200 activities must share one parse path")
+    if "RetainBodyOnError(true)" not in qr_task or "InitClientCertificates()" not in qr_task:
+        fail("public QR downloads must use the Wi-Fi certificate setup")
+    if "raw.WriteFile(path)" not in qr_task or "fs.Exists(path)" not in qr_task:
+        fail("public QR bytes must be written to the final file and checked with Exists")
+    if "incoming.tmp" in qr_task or ".Rename(" in qr_task:
+        fail("public QR saves must not use a temp file or rename")
+    if 'item["qrUrl"] = qr' not in season or 'item["qrUri"] = qr' not in season or "function ChooseActivities(" not in season:
+        fail("activity qrUrl must be passed through to the detail item")
+    if "function AaField(" not in GUIDE_MODEL_BRS.read_text(encoding="utf-8"):
+        fail("activity fields must be read by the exact key and the lowercase key")
+    if "function QrContentFileName(" not in png or "function CommitQrBytes(" not in png:
+        fail("QR files must be content-named")
+    if 'print "Eaglewood: heartbeat"' not in scene or 'id="heartbeatTimer"' not in xml:
+        fail("the render thread needs a 5 second heartbeat")
+    if 'print "Eaglewood: key "' not in scene:
+        fail("every key event must be logged")
+    if "function BookQrFits(" not in phase2 or "findNode(id)" not in phase2:
+        fail("Book Direct must measure its QR slot and assign the live poster")
+    if 'print "Eaglewood: qr detail open url="' not in phase2:
+        fail("activity detail must fetch its QR when the screen opens")
+    if "sub EnsureQrSlot(" not in phase2 or "sub ShowQrFrame(" not in phase2:
+        fail("badge, book, and detail must share one QR slot helper")
+    if 'EnsureQrSlot("badge"' not in phase2 or 'EnsureQrSlot("book"' not in phase2 or 'EnsureQrSlot("detail"' not in phase2:
+        fail("badge, book, and detail must open a QR through EnsureQrSlot")
+    deliver = scene[scene.find("sub DeliverQrPath("):scene.find("sub RememberQrFormat(")]
+    if "ShowQrFrame(slot, true)" not in deliver or "AssignQrPoster(slot, uri)" not in deliver:
+        fail("a finished QR path must show the frame and then assign the poster")
+    if "ShowBookQr" in deliver or "ShowDetailQr" in deliver or "UpdateBadgeVisible" in deliver:
+        fail("QR deliver must use the same helper for every slot")
+    debug = phase2[phase2.find("function QrDebugMarks()"):phase2.find("function QrMarkColor(")]
+    if "return false" not in debug:
+        fail("magenta QR marks must stay behind a debug flag that is off")
+    if 'return "0xFFFFFFF2"' not in phase2 or "0xFF00FFFF" not in phase2:
+        fail("QR placeholders are cream unless the debug flag is on")
+    badge = phase2[phase2.find("sub BuildBadge("):phase2.find("function BuildBookPane(")]
+    if "AddRect(parent," in badge or badge.find("m.badgeMark") > badge.find("group.appendChild(m.badgePoster)"):
+        fail("the badge placeholder must sit under the poster, on the badge group")
+    book_pane = phase2[phase2.find("function BuildBookPane("):phase2.find("function BuildWifiPane(")]
+    if "m.bookQrMark" not in book_pane or book_pane.find("m.bookQrMark") > book_pane.find("pane.appendChild(m.bookQr)"):
+        fail("the book poster must be appended after its placeholder")
+    detail = phase2[phase2.find("function BuildDetailPane("):phase2.find("sub PaintPhase2(")]
+    if "m.detailQrMark" not in detail or detail.find("m.detailQrMark") > detail.find("pane.appendChild(m.detailQr)"):
+        fail("the detail poster must be appended after its placeholder")
+    if "function DetailQrCardRect(" not in phase2 or "DetailQrCardRect()" not in detail:
+        fail("the detail QR card must use one screen rect")
+    if "group.translation = [frame.x, frame.y]" not in badge or "BadgeCardColor()" not in badge:
+        fail("the badge group must sit at BadgeFrame() on the cream card")
+    if "m.badgePoster.translation = [frame.qrX, frame.qrY]" not in badge or "m.badgePoster.width = frame.qr" not in badge:
+        fail("the badge QR must take its size and place from BadgeFrame()")
+    # Build 33: the cream card always draws; only the QR waits for its bitmap.
+    if "m.badgePoster.visible = (show and ready)" not in phase2 or "m.badgeCard.visible = show" not in phase2:
+        fail("the badge card must always draw and its QR must wait for the bitmap")
+    if "sub ArmBadgeDeadline(" not in phase2 or "BadgeFallbackText()" not in phase2:
+        fail("the badge must fall back to no-link text after its deadline")
+    if "BadgeCaptionColor()" not in badge or "0x8A5A00FF" not in phase2:
+        fail("the badge caption must use the dark gold that clears the cream tile")
+    if "QrCaptionFont()" not in badge or "QrCaptionColor()" not in badge:
+        fail("the badge caption must use the gold caption style")
+    if "Book direct" in badge:
+        fail("the Book direct label stays off the corner badge")
+    guide = GUIDE_UI_BRS.read_text(encoding="utf-8")
+    if "m.buildLabel" in guide or "BuildStampLine()" in guide:
+        fail("the build number stays in the startup log, not on Home")
+    show = guide[guide.find("sub ShowSection("):guide.find("sub PaintAll(")]
+    shell = guide[guide.find("sub BuildShell("):guide.find("sub BuildTiles(")]
+    if "RaiseBadge()" not in shell:
+        fail("BuildShell must raise the corner badge once, before the first screen")
+    if "RaiseBadge()" in show:
+        fail("ShowSection must not reparent the corner badge")
+    if "LogBadgePlacement()" not in show:
+        fail("every screen change must log the corner badge placement")
+    if 'shell.id = "shell"' not in shell:
+        fail("the shell needs an id so the badge parent is logged")
+    detail_open = scene[scene.find("function OpenActivityDetail("):scene.find("function HandleBack(")]
+    if "RaiseBadge()" in detail_open:
+        fail("opening detail must not reparent the corner badge")
+    if "function BadgeNavigateReparents(" not in phase2 or "return false" not in phase2[phase2.find("function BadgeNavigateReparents("):phase2.find("function DetailQrUrl(")]:
+        fail("navigation must leave the corner badge on its build 20 node")
+    if "This place" in detail:
+        fail("the activity detail QR must not keep the This place label")
+    if "DetailQrPosterRect()" not in detail:
+        fail("the activity detail QR must use the shared poster rect")
+    if "function NextNav(" not in guide or "Checkout Instructions" not in guide:
+        fail("the rail needs the Things to Do submenu and Checkout Instructions")
+    if "font:SmallBoldSystemFont" not in shell:
+        fail("nav items need the smaller font so Checkout Instructions fits")
+    if "function QrRectText(" not in phase2 or "caption badge rect=" not in phase2:
+        fail("caption and Checkout rects must be logged")
+    if 'print "Eaglewood: qr ' not in phase2:
         fail("poster loadStatus must be logged for late debug consoles")
     for path in channel_text_files():
         if "cornerRadius" in path.read_text(encoding="utf-8", errors="replace"):

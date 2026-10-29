@@ -2,6 +2,7 @@
 <component name="WifiTask" extends="Task">
     <interface>
         <field id="generation" type="integer" value="0" />
+        <field id="busyPaths" type="string" value="" />
         <!-- ssid and password stay on this node for the screen. They are not printed. -->
         <field id="result" type="assocarray" alwaysNotify="true" />
     </interface>
@@ -10,6 +11,7 @@
     <script type="text/brightscript" uri="pkg:/components/GuestConfig.brs" />
     <script type="text/brightscript" uri="pkg:/components/GuestRules.brs" />
     <script type="text/brightscript" uri="pkg:/components/GuideModel.brs" />
+    <script type="text/brightscript" uri="pkg:/components/Menu.brs" />
     <script type="text/brightscript" uri="pkg:/components/Season.brs" />
     <script type="text/brightscript" uri="pkg:/components/PngRgb.brs" />
     <script type="text/brightscript" uri="pkg:/components/WifiTask.brs" />

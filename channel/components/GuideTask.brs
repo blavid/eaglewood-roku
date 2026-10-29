@@ -6,18 +6,22 @@ end sub
 ' Response bodies are not printed: troubleshooting text can include access details.
 sub fetchGuideBundle()
     generation = ReadGuideGeneration()
+    DiscardActivitiesCacheGeneration()
     guide = LoadGuideLocal()
     checkout = LoadCheckoutLocal()
     activities = LoadActivitiesLocal()
+    menu = LoadMenuLocal()
     FillTimes(guide, checkout)
     LogGuideChoice(guide)
     LogCheckoutChoice(checkout)
     LogActivitiesChoice(activities)
-    PublishBundle(guide, checkout, activities, generation)
+    LogMenuChoice(menu)
+    PublishBundle(guide, checkout, activities, menu, generation)
 
     remoteGuide = FetchRemote("guide")
     remoteCheckout = FetchRemote("checkout")
     remoteActivities = FetchRemote("activities")
+    remoteMenu = FetchRemote("menu")
     changed = false
     if remoteGuide <> invalid
         guide = remoteGuide
@@ -34,9 +38,14 @@ sub fetchGuideBundle()
         changed = true
         LogActivitiesChoice(activities)
     end if
+    if remoteMenu <> invalid
+        menu = remoteMenu
+        changed = true
+        LogMenuChoice(menu)
+    end if
     if changed
         FillTimes(guide, checkout)
-        PublishBundle(guide, checkout, activities, generation)
+        PublishBundle(guide, checkout, activities, menu, generation)
     end if
 end sub
 
@@ -51,6 +60,23 @@ end function
 function ActivitiesDataUrl() as string
     return "https://sunrivertownhome.com/data/activities.json"
 end function
+
+function LoadMenuLocal() as object
+    cachedText = ReadText("cachefs:/eaglewood/menu.json")
+    cached = AcceptMenuText(cachedText, "cachefs")
+    if cached <> invalid then return cached
+    if cachedText <> "" then print "Eaglewood: menu fallback reason=bad-cache"
+    packaged = AcceptMenuText(ReadText("pkg:/data/menu.json"), "pkg")
+    if packaged <> invalid then return packaged
+    print "Eaglewood: menu fallback reason=bundle"
+    return BuiltinMenu()
+end function
+
+sub LogMenuChoice(menu as object)
+    source = "none"
+    if menu <> invalid and menu.source <> invalid then source = menu.source
+    print "Eaglewood: menu source="; source
+end sub
 
 function LoadGuideLocal() as object
     parsed = ParseObjectText(ReadText("cachefs:/eaglewood/guide.json"))
@@ -101,7 +127,11 @@ function FetchRemote(kind as string) as object
     url = GuideDataUrl()
     cachePath = "cachefs:/eaglewood/guide.json"
     prefix = "guide"
-    if kind = "checkout"
+    if kind = "menu"
+        url = MenuDataUrl()
+        cachePath = "cachefs:/eaglewood/menu.json"
+        prefix = "menu"
+    else if kind = "checkout"
         url = CheckoutDataUrl()
         cachePath = "cachefs:/eaglewood/checkout.json"
         prefix = "checkout"
@@ -114,14 +144,32 @@ function FetchRemote(kind as string) as object
     print "Eaglewood: "; kind; " request sent"
     response = HttpGet(url, etag)
     print "Eaglewood: "; kind; " response code="; response.code
+    if kind = "activities" then response = ActivitiesResponse(url, cachePath, response)
+    ' Build 34 (Blake b33 TV log, GuideTask.brs:327): 304 with no cache file.
+    ' Forget the etag and fetch the full body once instead of failing.
+    if response.reason = "not-modified" and ParseObjectText(ReadText(cachePath)) = invalid
+        print "Eaglewood: "; kind; " cache-miss refetch"
+        ForgetEtag(prefix)
+        etag = ""
+        response = HttpGet(url, "")
+        print "Eaglewood: "; kind; " response code="; response.code
+    end if
+    if kind = "menu" and response.code = 404
+        ' No menu.json on the site yet: the packaged menu is the menu. Not a failure.
+        print "Eaglewood: menu remote absent code=404 using="; "local"
+        ForgetEtag(prefix)
+        return invalid
+    end if
     if response.reason = "not-modified"
-        parsed = ParseObjectText(ReadText(cachePath))
+        cachedText = ReadText(cachePath)
+        parsed = ParseObjectText(cachedText)
         if parsed = invalid
             print "Eaglewood: "; kind; " failure reason=cache-miss"
             return invalid
         end if
         print "Eaglewood: "; kind; " etag match"
         RememberFetch(prefix, etag, GuideInt(parsed.Lookup("version")))
+        if kind = "activities" then return ActivitiesFromText(cachedText, "not-modified", "304")
         return FinishRemote(kind, parsed, "not-modified", "304")
     end if
     if response.reason <> "ok"
@@ -133,19 +181,50 @@ function FetchRemote(kind as string) as object
         print "Eaglewood: "; kind; " failure reason=bad-json"
         return invalid
     end if
-    WriteText(cachePath, response.body)
+    if kind = "menu"
+        if MenuRejectReason(parsed) <> "ok"
+            print "Eaglewood: menu fallback reason="; MenuRejectReason(parsed)
+            return invalid
+        end if
+    end if
+    wrote = WriteText(cachePath, response.body)
     stored = response.etag
     if stored = "" then stored = etag
+    ' Build 34 root cause: the etag was kept even when the cache write failed,
+    ' so the next launch got a 304 for a file that was never written.
+    if wrote <> true
+        print "Eaglewood: "; kind; " cache-write failed, etag not kept"
+        stored = ""
+        ForgetEtag(prefix)
+    end if
     if response.etag <> ""
         print "Eaglewood: "; kind; " etag stored"
     else
         print "Eaglewood: "; kind; " etag missing"
     end if
     RememberFetch(prefix, stored, GuideInt(parsed.Lookup("version")))
+    if kind = "activities" then return ActivitiesFromText(response.body, "network", "200")
     return FinishRemote(kind, parsed, "network", "200")
 end function
 
+' The 304 cache file is the same raw JSON body a 200 wrote. Both go through
+' ActivitiesFromFetch. A cache with no qrUrl falls back to the pkg snapshot.
+function ActivitiesFromText(text as string, source as string, code as string) as object
+    bundled = FinishActivities(ParseObjectText(ReadText("pkg:/data/activities.json")), "pkg", "0")
+    chosen = ActivitiesFromFetch(ParseObjectText(text), source, code, bundled)
+    if source = "not-modified" and chosen <> invalid and chosen.activitiesSource = "pkg"
+        print "Eaglewood: activities cache missing qrUrl"
+    end if
+    return chosen
+end function
+
 function FinishRemote(kind as string, parsed as object, source as string, code as string) as object
+    if kind = "menu"
+        menu = NormalizeMenu(parsed)
+        if menu = invalid then return invalid
+        menu.source = source
+        return menu
+    end if
     if kind = "checkout"
         checkout = NormalizeCheckout(parsed)
         if checkout = invalid then return invalid
@@ -163,12 +242,19 @@ function FinishRemote(kind as string, parsed as object, source as string, code a
 end function
 
 function LoadActivitiesLocal() as object
-    parsed = ParseObjectText(ReadText("cachefs:/eaglewood/activities.json"))
-    found = FinishActivities(parsed, "cachefs", "0")
-    if found <> invalid then return found
-    parsed = ParseObjectText(ReadText("pkg:/data/activities.json"))
-    found = FinishActivities(parsed, "pkg", "0")
-    if found <> invalid then return found
+    bundled = FinishActivities(ParseObjectText(ReadText("pkg:/data/activities.json")), "pkg", "0")
+    cachedText = ReadText("cachefs:/eaglewood/activities.json")
+    cachedParsed = ParseObjectText(cachedText)
+    if cachedParsed <> invalid and ActivitiesCacheDropsQr(cachedParsed)
+        print "Eaglewood: activities cache missing qrUrl"
+        DeleteActivitiesCache()
+        cachedParsed = invalid
+    end if
+    chosen = ActivitiesFromFetch(cachedParsed, "cachefs", "0", bundled)
+    if cachedParsed <> invalid and chosen <> invalid and chosen.activitiesSource = "pkg"
+        print "Eaglewood: activities cache missing qrUrl"
+    end if
+    if chosen <> invalid then return chosen
     return EmptyActivities()
 end function
 
@@ -191,7 +277,7 @@ end function
 
 sub LogActivitiesChoice(activities as object)
     if activities = invalid then return
-    print "Eaglewood: activities version="; VersionText(activities.activitiesVersion); " source="; activities.activitiesSource; " code="; activities.activitiesCode
+    print "Eaglewood: activities version="; VersionText(activities.activitiesVersion); " source="; activities.activitiesSource; " code="; activities.activitiesCode; " qr="; ActivitiesQrCount(activities.items)
 end sub
 
 function HttpGet(url as string, etag as string) as object
@@ -260,9 +346,7 @@ function HeaderValue(headers as object, name as string) as string
 end function
 
 function ReadText(path as string) as string
-    text = ReadAsciiFile(path)
-    if text = invalid then return ""
-    return text
+    return ReadIfPresent(path)
 end function
 
 function WriteText(path as string, body as string) as boolean
@@ -273,6 +357,49 @@ function WriteText(path as string, body as string) as boolean
     if wrote = true then return true
     return false
 end function
+
+function ActivitiesResponse(url as string, cachePath as string, response as object) as object
+    if response <> invalid and response.reason = "ok" then return response
+    cached = ParseObjectText(ReadText(cachePath))
+    reason = ""
+    if response <> invalid and response.reason <> invalid then reason = response.reason
+    if ActivitiesCacheShouldDiscard(reason, cached) <> true then return response
+    print "Eaglewood: activities cache discarded"
+    DeleteActivitiesCache()
+    return HttpGet(url, "")
+end function
+
+sub DiscardActivitiesCacheGeneration()
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    current = ""
+    if section <> invalid then current = GuideLimitedText(section.Read("activitiesCacheKey"), 40)
+    if current = ActivitiesCacheGeneration() then return
+    print "Eaglewood: activities cache generation "; ActivitiesCacheGeneration()
+    DeleteActivitiesCache()
+    if section = invalid then return
+    section.Write("activitiesCacheKey", ActivitiesCacheGeneration())
+    section.Flush()
+end sub
+
+sub DeleteActivitiesCache()
+    fs = CreateObject("roFileSystem")
+    path = "cachefs:/eaglewood/activities.json"
+    if fs <> invalid
+        if fs.Exists(path) = true then fs.Delete(path)
+    end if
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section = invalid then return
+    section.Delete("activitiesEtag")
+    section.Write("activitiesEtag", "")
+    section.Flush()
+end sub
+
+sub ForgetEtag(prefix as string)
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section = invalid then return
+    section.Delete(prefix + "Etag")
+    section.Flush()
+end sub
 
 function RememberedEtag(prefix as string) as string
     section = CreateObject("roRegistrySection", "EaglewoodGuide")
@@ -306,7 +433,7 @@ sub LogCheckoutChoice(checkout as object)
     print "Eaglewood: checkout decision="; checkout.checkoutSource; " version="; VersionText(checkout.checkoutVersion); " code="; checkout.checkoutCode
 end sub
 
-sub PublishBundle(guide as object, checkout as object, activities as object, generation as integer)
+sub PublishBundle(guide as object, checkout as object, activities as object, menu as object, generation as integer)
     if guide = invalid then guide = FallbackGuide()
     if checkout = invalid then checkout = FallbackCheckout()
     if activities = invalid then activities = EmptyActivities()
@@ -344,7 +471,9 @@ sub PublishBundle(guide as object, checkout as object, activities as object, gen
         summary: checkout.summary,
         rulesJson: EncodeJson(guide.rules),
         issuesJson: EncodeJson(guide.issues),
-        stepsJson: EncodeJson(checkout.checkoutSteps)
+        stepsJson: EncodeJson(checkout.checkoutSteps),
+        menuSource: MenuSourceText(menu),
+        menuJson: MenuBodyText(menu)
     }
 end sub
 
@@ -360,4 +489,16 @@ function ReadGuideGeneration() as integer
     end while
     if generation = invalid then return 0
     return generation
+end function
+
+' Build 32: Roku logs "ReadAsciiFile: file open for read failed" for every
+' missing file, so check first. A missing cache is normal on a cold start.
+function ReadIfPresent(path as string) as string
+    if path = invalid or path = "" then return ""
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return ""
+    if fs.Exists(path) <> true then return ""
+    text = ReadAsciiFile(path)
+    if text = invalid then return ""
+    return text
 end function

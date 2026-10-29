@@ -9,7 +9,7 @@ A missing or invalid last name is omitted.
 
 from __future__ import annotations
 
-FALLBACK = "Welcome to Eaglewood"
+FALLBACK = "Welcome to Eaglewood 19"
 NAME_LIMIT = 32
 FONT_SIZES = (64, 52, 42, 34)
 LABEL_WIDTH = 1760

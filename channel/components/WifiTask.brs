@@ -22,6 +22,15 @@ sub fetchWifi()
     print "Eaglewood: wifi request sent"
     remote = WifiHttp(jsonUrl, RememberedWifiEtag("wifiJson"), WifiJsonPath(), true)
     print "Eaglewood: wifi response code="; remote.code
+    ' Build 34 (Blake b33 TV log): a 304 means "your copy is current", but the
+    ' copy can be gone (cachefs is evicted). Drop the etag and fetch the body.
+    if remote.reason = "not-modified" and not WifiCacheOk(ReadWifiCache())
+        print "Eaglewood: wifi cache-miss refetch"
+        ForgetWifiEtag("wifiJson")
+        ForgetWifiEtag("wifiPng")
+        remote = WifiHttp(jsonUrl, "", WifiJsonPath(), true)
+        print "Eaglewood: wifi response code="; remote.code
+    end if
     mode = WifiScreenMode(remote.code, WifiCacheOk(cached))
     if mode = "show" and remote.reason = "ok"
         cached = { ssid: remote.ssid, password: remote.password, png: "no", pngBytes: 0, source: "network", notice: "", jsonCode: remote.code }
@@ -37,13 +46,21 @@ sub fetchWifi()
     if WifiCacheOk(cached) and mode <> "coming-soon"
         print "Eaglewood: wifi png request sent"
         png = WifiHttp(pngUrl, RememberedWifiEtag("wifiPng"), WifiPngPath(), false)
-        print "Eaglewood: wifi png response code="; png.code
+        if png.reason = "not-modified" and PngFileBytes(WifiPngPath()) < 1
+            print "Eaglewood: wifi png cache-miss refetch"
+            ForgetWifiEtag("wifiPng")
+            png = WifiHttp(pngUrl, "", WifiPngPath(), false)
+        end if
+        print "Eaglewood: wifi png response code="; png.code; " reason="; png.reason
         cached.pngCode = png.code
         if png.reason = "ok" or png.reason = "not-modified"
-            size = PngFileBytes(WifiPngPath())
+            shown = WifiPngPath()
+            if png.reason = "ok" and png.stored <> invalid and png.stored <> "" then shown = png.stored
+            size = PngFileBytes(shown)
             if size > 0
                 cached.png = "yes"
                 cached.pngBytes = size
+                if png.reason = "ok" then cached.pngPath = shown
                 if png.etag <> "" and png.reason = "ok" then print "Eaglewood: wifi etag stored"
                 if png.reason = "not-modified" then print "Eaglewood: wifi etag match"
                 RememberWifiFetch("wifiPng", png.etag)
@@ -53,6 +70,7 @@ sub fetchWifi()
             if size > 0
                 cached.png = "yes"
                 cached.pngBytes = size
+                cached.pngPath = WifiPngPath()
             end if
         end if
         cached.notice = ""
@@ -99,7 +117,9 @@ end function
 
 sub NoteWifiPng(info as object)
     if info = invalid then return
-    prepared = ExpandPngFile(WifiPngPath(), WifiPngPath())
+    path = WifiPngPath()
+    if info.pngPath <> invalid and info.pngPath <> "" then path = info.pngPath
+    prepared = ExpandPngFile(path, path)
     info.pngBit = prepared.bit
     info.pngColor = prepared.color
     info.pngInterlace = prepared.interlace
@@ -140,7 +160,7 @@ end function
 
 function ReadWifiCache() as object
     EnsureWifiDir()
-    text = ReadAsciiFile(WifiJsonPath())
+    text = ReadIfPresent(WifiJsonPath())
     parsed = ParseWifiDocument(text)
     if parsed = invalid then return invalid
     png = "no"
@@ -163,8 +183,8 @@ function ParseWifiDocument(body as object) as object
     if body = "" or Len(body) > 2048 then return invalid
     parsed = ParseJson(body)
     if parsed = invalid or type(parsed) <> "roAssociativeArray" then return invalid
-    ssid = GuideLimitedText(parsed.Lookup("ssid"), 64)
-    password = GuideLimitedText(parsed.Lookup("password"), 64)
+    ssid = GuideLimitedText(AaField(parsed, "ssid"), 64)
+    password = GuideLimitedText(AaField(parsed, "password"), 64)
     if ssid = "" or password = "" then return invalid
     return { ssid: ssid, password: password }
 end function
@@ -225,9 +245,13 @@ function WifiHttp(url as string, etag as string, dest as string, wantJson as boo
             result.reason = "bad-json"
             return result
         end if
+        ' The guide task may not have made cachefs:/eaglewood yet on a cold start.
+        EnsureWifiDir()
+        ' Build 34: a failed cache write still shows the SSID, but keeps no
+        ' etag, so the next launch cannot get a 304 for a file that is not there.
         if WriteAsciiFile(dest, body) <> true
-            result.reason = "cache-write"
-            return result
+            print "Eaglewood: wifi cache-write failed, etag not kept"
+            result.etag = ""
         end if
         result.ssid = parsed.ssid
         result.password = parsed.password
@@ -240,24 +264,58 @@ function WifiHttp(url as string, etag as string, dest as string, wantJson as boo
         result.reason = "bad-png"
         return result
     end if
-    if not PromoteWifiPng()
+    stored = PromoteWifiPng()
+    if stored = ""
         result.reason = "cache-write"
         return result
     end if
-    result.bytes = size
+    result.stored = stored
+    result.bytes = PngFileBytes(stored)
     result.reason = "ok"
     return result
 end function
 
-function PromoteWifiPng() as boolean
+' A 200 saves a new file. wifi.png is not rewritten while a Poster points at it.
+function PromoteWifiPng() as string
+    try
+        return CommitWifiPng()
+    catch err
+        print "Eaglewood: wifi png error="; WifiErrorText(err)
+        return ""
+    end try
+end function
+
+function WifiErrorText(err as object) as string
+    if err = invalid then return "failed"
+    kind = type(err)
+    if kind = "String" or kind = "roString" then return err
+    if kind = "roAssociativeArray"
+        message = err.Lookup("message")
+        if message <> invalid and message <> "" then return message
+    end if
+    return "failed"
+end function
+
+function CommitWifiPng() as string
     data = CreateObject("roByteArray")
-    if data = invalid then return false
-    if data.ReadFile(WifiPngTempPath()) <> true then return false
-    if data.Count() < 8 then return false
-    wrote = data.WriteFile(WifiPngPath())
+    if data = invalid then return ""
+    if data.ReadFile(WifiPngTempPath()) <> true then return ""
+    count = data.Count()
+    if count = invalid or count < 8 then return ""
+    m.lastPng64 = data.ToBase64String()
+    busy = ""
+    if m.top.busyPaths <> invalid then busy = m.top.busyPaths
+    existing = QrReadLength(WifiPngPath())
+    if existing = count
+        DeleteWifiFile(WifiPngTempPath())
+        return WifiPngPath()
+    end if
+    stored = CommitQrBytes("wifi", data, busy)
+    if stored = invalid or stored = ""
+        if data.WriteFile(WifiPngPath()) = true then stored = WifiPngPath()
+    end if
     DeleteWifiFile(WifiPngTempPath())
-    if wrote = true then return true
-    return false
+    return stored
 end function
 
 function PngFileBytes(path as string) as integer
@@ -282,6 +340,7 @@ sub EnsureWifiDir()
 end sub
 
 sub DeleteWifiFile(path as string)
+    if ProtectedCacheFile(path) then return
     fs = CreateObject("roFileSystem")
     if fs <> invalid then fs.Delete(path)
 end sub
@@ -302,6 +361,13 @@ function RememberedWifiEtag(prefix as string) as string
     if section = invalid then return ""
     return GuideLimitedText(section.Read(prefix + "Etag"), 180)
 end function
+
+sub ForgetWifiEtag(prefix as string)
+    section = CreateObject("roRegistrySection", "EaglewoodGuide")
+    if section = invalid then return
+    section.Delete(prefix + "Etag")
+    section.Flush()
+end sub
 
 sub RememberWifiFetch(prefix as string, etag as string)
     if etag = invalid or etag = "" then return
@@ -386,6 +452,8 @@ sub PublishWifi(info as object, generation as integer)
     if pngIndexed = invalid or pngIndexed = "" then pngIndexed = "no"
     remoteSafe = info.remoteSafe
     if remoteSafe = invalid or remoteSafe = "" then remoteSafe = SafeUri(WifiPngUrl())
+    pngPath = ""
+    if info.pngPath <> invalid then pngPath = info.pngPath
     m.top.result = {
         generation: generation,
         generationText: generation.ToStr(),
@@ -394,6 +462,7 @@ sub PublishWifi(info as object, generation as integer)
         password: password,
         png: png,
         pngBytes: pngBytes,
+        png64: TaskPng64(pngPath),
         ssidLen: Len(ssid),
         notice: notice,
         jsonCode: jsonCode,
@@ -402,7 +471,8 @@ sub PublishWifi(info as object, generation as integer)
         pngColor: pngColor,
         pngInterlace: pngInterlace,
         pngIndexed: pngIndexed,
-        remoteSafe: remoteSafe
+        remoteSafe: remoteSafe,
+        pngPath: pngPath
     }
 end sub
 
@@ -418,4 +488,28 @@ function ReadWifiGeneration() as integer
     end while
     if generation = invalid then return 0
     return generation
+end function
+
+' Build 32: Roku logs "ReadAsciiFile: file open for read failed" for every
+' missing file, so check first. A missing cache is normal on a cold start.
+function ReadIfPresent(path as string) as string
+    if path = invalid or path = "" then return ""
+    fs = CreateObject("roFileSystem")
+    if fs = invalid then return ""
+    if fs.Exists(path) <> true then return ""
+    text = ReadAsciiFile(path)
+    if text = invalid then return ""
+    return text
+end function
+
+' Build 33: the task thread's view of the file, as base64, so the render
+' thread can write its own copy (see FreshQrCopy).
+function TaskPng64(path as string) as string
+    if path = invalid or path = "" then return ""
+    if m.lastPng64 <> invalid and m.lastPng64 <> "" then return m.lastPng64
+    data = CreateObject("roByteArray")
+    if data = invalid then return ""
+    if data.ReadFile(path) <> true then return ""
+    if data.Count() < 8 then return ""
+    return data.ToBase64String()
 end function

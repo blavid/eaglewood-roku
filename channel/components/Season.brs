@@ -106,9 +106,9 @@ end function
 
 function RankFor(activity as object, season as string) as integer
     if not IsAssoc(activity) then return 0
-    ranks = activity.Lookup("seasonRank")
+    ranks = AaField(activity, "seasonRank")
     if not IsAssoc(ranks) then return 0
-    return PositiveRank(ranks.Lookup(season))
+    return PositiveRank(AaField(ranks, season))
 end function
 
 function PositiveRank(value as object) as integer
@@ -134,33 +134,58 @@ end function
 
 function SourceIndexOf(item as object) as integer
     if not IsAssoc(item) then return 0
-    value = item.Lookup("sourceIndex")
+    value = AaField(item, "sourceIndex")
     if value = invalid then return 0
     return GuideInt(value)
 end function
 
 function SortActivities(items as object, season as string) as object
+    ' Build 35: rank and source index are read once per item, not once per
+    ' comparison (the For You build sorted ~66 items x 5 rows on rail focus
+    ' and stalled key handling). Same order as CompareSeasonRank.
     ordered = []
     if not IsList(items) then return ordered
     last = items.Count() - 1
     if last < 0 then return ordered
+    keys = []
     for index = 0 to last
         ordered.Push(items[index])
+        keys.Push({ rank: RankFor(items[index], season), at: SourceIndexOf(items[index]) })
     end for
     if last < 1 then return ordered
     for index = 1 to last
         current = ordered[index]
+        key = keys[index]
         slot = index
         while slot > 0
-            previous = ordered[slot - 1]
-            compared = CompareSeasonRank(season, previous, current, SourceIndexOf(previous), SourceIndexOf(current))
-            if compared <= 0 then exit while
-            ordered[slot] = previous
+            if SortKeyCompare(keys[slot - 1], key) <= 0 then exit while
+            ordered[slot] = ordered[slot - 1]
+            keys[slot] = keys[slot - 1]
             slot = slot - 1
         end while
         ordered[slot] = current
+        keys[slot] = key
     end for
     return ordered
+end function
+
+function SortKeyCompare(a as object, b as object) as integer
+    missingA = (a.rank < 1)
+    missingB = (b.rank < 1)
+    if missingA or missingB
+        if missingA and missingB then return a.at - b.at
+        if missingA then return 1
+        return -1
+    end if
+    if a.rank <> b.rank then return a.rank - b.rank
+    return a.at - b.at
+end function
+
+'' The seasonRank key a screen sorts by: its own season for Summer/Winter,
+' otherwise the calendar season.
+function ScreenSortSeason(screen as string, calendar as string) as string
+    if screen = "summer" or screen = "winter" then return screen
+    return calendar
 end function
 
 function ActivitiesForScreen(items as object, screen as string) as object
@@ -177,18 +202,231 @@ end function
 
 function ItemOnScreen(item as object, screen as string) as boolean
     if not IsAssoc(item) then return false
-    section = GuideLimitedText(item.Lookup("sectionId"), 80)
+    if screen = "todo" then return false
+    if screen = "summer" or screen = "winter"
+        if RankFor(item, screen) > 0 then return true
+    end if
+    rule = MenuChild(screen)
+    if rule <> invalid then return ItemMatchesRule(item, rule)
+    section = GuideLimitedText(AaField(item, "sectionId"), 80)
     if screen = "dining" then return section = "dining"
     if screen = "hiking" then return section = "hiking"
-    if screen = "todo"
-        if section = "dining" or section = "hiking" then return false
-        return true
+    if screen = "biking" then return ItemMatchesBiking(item, section)
+    if screen = "fishing" then return ItemMatchesFishing(item, section)
+    if screen = "winter" then return ItemInSeason(item, "winter")
+    if screen = "summer" then return ItemInSeason(item, "summer")
+    return false
+end function
+
+function ItemSearchText(item as object, section as string) as string
+    id = GuideLimitedText(AaField(item, "id"), 80)
+    name = GuideLimitedText(AaField(item, "name"), 120)
+    title = GuideLimitedText(AaField(item, "sectionTitle"), 80)
+    return LCase(id + " " + name + " " + section + " " + title)
+end function
+
+function TextHas(text as string, needle as string) as boolean
+    if text = invalid then return false
+    if needle = invalid or needle = "" then return false
+    if Instr(1, text, needle) > 0 then return true
+    return false
+end function
+
+function ItemMatchesBiking(item as object, section as string) as boolean
+    if section = "mountain-biking" then return true
+    blob = ItemSearchText(item, section)
+    if TextHas(blob, "biking") then return true
+    if TextHas(blob, "bike") then return true
+    return false
+end function
+
+function ItemMatchesFishing(item as object, section as string) as boolean
+    blob = ItemSearchText(item, section)
+    if TextHas(blob, "fish") then return true
+    return false
+end function
+
+function ItemInSeason(item as object, season as string) as boolean
+    raw = AaField(item, "season")
+    if not IsList(raw) then return false
+    last = raw.Count() - 1
+    if last < 0 then return false
+    wanted = LCase(season)
+    for index = 0 to last
+        value = LCase(GuideLimitedText(raw[index], 40))
+        if value = wanted then return true
+        if value = "year-round" then return true
+    end for
+    return false
+end function
+
+function SeasonNames(raw as object) as object
+    names = []
+    if not IsList(raw) then return names
+    last = raw.Count() - 1
+    if last < 0 then return names
+    for index = 0 to last
+        text = GuideLimitedText(raw[index], 40)
+        if text <> "" then names.Push(text)
+    end for
+    return names
+end function
+
+function ActivitiesQrCount(items as object) as integer
+    total = 0
+    if not IsList(items) then return 0
+    last = items.Count() - 1
+    if last < 0 then return 0
+    for index = 0 to last
+        item = items[index]
+        if IsAssoc(item)
+            qr = GuideLimitedText(AaField(item, "qrUrl"), 420)
+            if qr = "" then qr = GuideLimitedText(AaField(item, "qrUri"), 420)
+            if qr <> "" then total = total + 1
+        end if
+    end for
+    return total
+end function
+
+' A cached activities file from before qrUrl existed still normalizes.
+' Prefer it only when it actually carries QR links. Otherwise use the bundle.
+function ChooseActivities(cached as object, bundled as object) as object
+    if cached <> invalid and ActivitiesQrCount(cached.items) > 0 then return cached
+    if bundled <> invalid and ActivitiesQrCount(bundled.items) > 0 then return bundled
+    if cached <> invalid then return cached
+    return bundled
+end function
+
+' 200 and 304 both normalize the raw activities document, then keep qrUrl.
+' A cached copy that parses but has no qrUrl yields the packaged snapshot.
+' Cards that share an id stay distinct: callers read them with ActivityAt.
+function ActivitiesFromFetch(parsed as object, source as string, code as string, bundled as object) as object
+    found = invalid
+    if IsAssoc(parsed)
+        norm = NormalizeActivities(parsed)
+        if IsAssoc(norm)
+            norm.activitiesSource = source
+            norm.activitiesCode = code
+            found = norm
+        end if
     end if
+    return ChooseActivities(found, bundled)
+end function
+
+function ActivityAt(items as object, index as integer) as object
+    if not IsList(items) then return invalid
+    if index < 0 or index >= items.Count() then return invalid
+    return items[index]
+end function
+
+' Bumped so a launch discards activities.json written before qrUrl was kept.
+function ActivitiesCacheGeneration() as string
+    return "qr3"
+end function
+
+' A 304, or a cache whose activities dropped qrUrl, is thrown away.
+' The wipe itself is only activities.json and its etag.
+function ActivitiesCacheShouldDiscard(reason as string, cached as object) as boolean
+    if reason = "not-modified" then return true
+    if cached <> invalid and ActivitiesCacheDropsQr(cached) = true then return true
+    return false
+end function
+
+' True when a cached activities document is missing qrUrl on any activity.
+function ActivitiesCacheDropsQr(parsed as object) as boolean
+    if not IsAssoc(parsed) then return true
+    sections = parsed.Lookup("activitySections")
+    if not IsList(sections) then return true
+    last = sections.Count() - 1
+    if last < 0 then return true
+    saw = false
+    for sectionAt = 0 to last
+        section = sections[sectionAt]
+        if IsAssoc(section)
+            rows = section.Lookup("activities")
+            if IsList(rows)
+                rowLast = rows.Count() - 1
+                if rowLast >= 0
+                    for rowAt = 0 to rowLast
+                        row = rows[rowAt]
+                        if IsAssoc(row)
+                            saw = true
+                            if GuideLimitedText(row.Lookup("qrUrl"), 420) = "" then return true
+                        end if
+                    end for
+                end if
+            end if
+        end if
+    end for
+    if saw = false then return true
+    return false
+end function
+
+' Two cards may share an id. Prefer the one that still has qrUrl.
+function ActivityById(items as object, id as string) as object
+    if id = invalid or id = "" then return invalid
+    if IsAssoc(items)
+        sections = items.Lookup("activitySections")
+        if IsList(sections) then return ActivityInSections(sections, id)
+    end if
+    if not IsList(items) then return invalid
+    return ActivityInList(items, id)
+end function
+
+function ActivityInList(items as object, id as string) as object
+    found = invalid
+    last = items.Count() - 1
+    if last < 0 then return invalid
+    for index = 0 to last
+        item = items[index]
+        if ActivityIdIs(item, id)
+            if found = invalid then found = item
+            if ActivityHasQr(item) then return item
+        end if
+    end for
+    return found
+end function
+
+function ActivityInSections(sections as object, id as string) as object
+    found = invalid
+    last = sections.Count() - 1
+    if last < 0 then return invalid
+    for sectionAt = 0 to last
+        section = sections[sectionAt]
+        if IsAssoc(section)
+            rows = section.Lookup("activities")
+            if IsList(rows)
+                rowLast = rows.Count() - 1
+                if rowLast >= 0
+                    for rowAt = 0 to rowLast
+                        row = rows[rowAt]
+                        if ActivityIdIs(row, id)
+                            if found = invalid then found = row
+                            if ActivityHasQr(row) then return row
+                        end if
+                    end for
+                end if
+            end if
+        end if
+    end for
+    return found
+end function
+
+function ActivityIdIs(item as object, id as string) as boolean
+    if not IsAssoc(item) then return false
+    return GuideLimitedText(AaField(item, "id"), 80) = id
+end function
+
+function ActivityHasQr(item as object) as boolean
+    if not IsAssoc(item) then return false
+    if GuideLimitedText(AaField(item, "qrUrl"), 420) <> "" then return true
+    if GuideLimitedText(AaField(item, "qrUri"), 420) <> "" then return true
     return false
 end function
 
 function ActivitySection(section as string) as boolean
-    if section = "dining" or section = "hiking" or section = "todo" then return true
+    if section = "todo" then return true
+    if MenuChild(section) <> invalid then return true
     return false
 end function
 
@@ -273,9 +511,9 @@ end function
 function ActivityQr(item as object) as string
     if not IsAssoc(item) then return ""
     ' Plain url only. affiliateUrl is reserved and must not become a QR.
-    link = GuideLimitedText(item.Lookup("url"), 400)
+    link = GuideLimitedText(AaField(item, "url"), 400)
     if link = "" then return ""
-    given = ResolveContentUrl(item.Lookup("qrUrl"))
+    given = ResolveContentUrl(AaField(item, "qrUrl"))
     if PosterKindOk(given) then return WithQrVersion(given)
     return ""
 end function
@@ -309,13 +547,14 @@ function NormalizeActivities(parsed as object) as object
             section = sections[sectionAt]
             if IsAssoc(section)
                 sectionId = GuideLimitedText(section.Lookup("id"), 80)
+                sectionTitle = GuideLimitedText(section.Lookup("title"), 80)
                 rows = section.Lookup("activities")
                 if IsList(rows)
                     rowLast = rows.Count() - 1
                     if rowLast >= 0
                         for rowAt = 0 to rowLast
                             if items.Count() >= 240 then exit for
-                            item = SlimActivity(rows[rowAt], sectionId, sourceIndex)
+                            item = SlimActivity(rows[rowAt], sectionId, sectionTitle, sourceIndex)
                             sourceIndex = sourceIndex + 1
                             if item <> invalid then items.Push(item)
                         end for
@@ -330,37 +569,47 @@ function NormalizeActivities(parsed as object) as object
     }
 end function
 
-function SlimActivity(raw as object, sectionId as string, sourceIndex as integer) as object
+function SeasonRankRecord(ranks as object) as object
+    record = {}
+    record["winter"] = PositiveRank(AaField(ranks, "winter"))
+    record["spring"] = PositiveRank(AaField(ranks, "spring"))
+    record["summer"] = PositiveRank(AaField(ranks, "summer"))
+    record["fall"] = PositiveRank(AaField(ranks, "fall"))
+    return record
+end function
+
+function SlimActivity(raw as object, sectionId as string, sectionTitle as string, sourceIndex as integer) as object
     if not IsAssoc(raw) then return invalid
-    name = GuideLimitedText(raw.Lookup("name"), 120)
+    name = GuideLimitedText(AaField(raw, "name"), 120)
     if name = "" then name = "Untitled"
     poster = ActivityPoster(raw)
-    ranks = raw.Lookup("seasonRank")
+    ranks = AaField(raw, "seasonRank")
     if not IsAssoc(ranks) then ranks = {}
-    return {
-        id: GuideLimitedText(raw.Lookup("id"), 80),
-        name: name,
-        description: GuideLimitedText(raw.Lookup("description"), 420),
-        distance: GuideLimitedText(raw.Lookup("distance"), 80),
-        trailDistance: GuideLimitedText(raw.Lookup("trailDistance"), 120),
-        difficulty: GuideLimitedText(raw.Lookup("difficulty"), 40),
-        gettingThere: GuideLimitedText(raw.Lookup("gettingThere"), 220),
-        seasonLabel: GuideLimitedText(raw.Lookup("seasonLabel"), 80),
-        tip: GuideLimitedText(raw.Lookup("tip"), 180),
-        url: GuideLimitedText(raw.Lookup("url"), 400),
-        qrUri: ActivityQr(raw),
-        poster: poster.poster,
-        posterFallback: poster.posterFallback,
-        credit: CreditLine(raw.Lookup("imageCredit")),
-        sectionId: sectionId,
-        sourceIndex: sourceIndex,
-        seasonRank: {
-            winter: PositiveRank(ranks.Lookup("winter")),
-            spring: PositiveRank(ranks.Lookup("spring")),
-            summer: PositiveRank(ranks.Lookup("summer")),
-            fall: PositiveRank(ranks.Lookup("fall"))
-        }
-    }
+    qr = ActivityQr(raw)
+    ' An AA literal lowercases qrUrl and seasonRank. FormatJson then writes
+    ' those short names, and the scene's case-sensitive ParseJson misses them.
+    item = {}
+    item["id"] = GuideLimitedText(AaField(raw, "id"), 80)
+    item["name"] = name
+    item["description"] = GuideLimitedText(AaField(raw, "description"), 420)
+    item["distance"] = GuideLimitedText(AaField(raw, "distance"), 80)
+    item["trailDistance"] = GuideLimitedText(AaField(raw, "trailDistance"), 120)
+    item["difficulty"] = GuideLimitedText(AaField(raw, "difficulty"), 40)
+    item["gettingThere"] = GuideLimitedText(AaField(raw, "gettingThere"), 220)
+    item["seasonLabel"] = GuideLimitedText(AaField(raw, "seasonLabel"), 80)
+    item["tip"] = GuideLimitedText(AaField(raw, "tip"), 180)
+    item["url"] = GuideLimitedText(AaField(raw, "url"), 400)
+    item["qrUrl"] = qr
+    item["qrUri"] = qr
+    item["poster"] = poster.poster
+    item["posterFallback"] = poster.posterFallback
+    item["credit"] = CreditLine(AaField(raw, "imageCredit"))
+    item["sectionId"] = sectionId
+    item["sectionTitle"] = sectionTitle
+    item["season"] = SeasonNames(AaField(raw, "season"))
+    item["sourceIndex"] = sourceIndex
+    item["seasonRank"] = SeasonRankRecord(ranks)
+    return item
 end function
 
 function DefaultSavingsText() as string
@@ -532,4 +781,9 @@ function RouterStep(issues as object) as string
         end if
     end for
     return ""
+end function
+
+' Build 31: the subhead names the season the screen is sorted by.
+function SeasonSubheadFor(screen as string, calendar as string) as string
+    return "Sorted for " + ScreenSortSeason(screen, calendar)
 end function

@@ -48,7 +48,86 @@ sub Main()
         print "FAIL a non-QR cache file was selected"
         failed = failed + 1
     end if
+    if StaleQrCacheName("wifi-next.png") <> false or StaleQrCacheName("qr-badge-abcdef12.png") <> false
+        print "FAIL content-named QR cleanup picked the wrong file"
+        failed = failed + 1
+    end if
+    if StaleQrCacheName("qr-book-5d41402a.png") <> false or StaleQrCacheName("qr-detail-8423281c.png") <> false
+        print "FAIL a hashed QR file was selected for cleanup"
+        failed = failed + 1
+    end if
+    if ProtectedCacheFile("cachefs:/eaglewood/qr-badge-8423281c.png") <> true
+        print "FAIL a hashed badge QR can be deleted"
+        failed = failed + 1
+    end if
+    if ProtectedCacheFile("tmp:/eaglewood/wifi.png") <> true
+        print "FAIL wifi.png can be deleted"
+        failed = failed + 1
+    end if
+    if ProtectedCacheFile("cachefs:/eaglewood/qr-badge.png") <> false or ProtectedCacheFile("cachefs:/eaglewood/qr-fetch-badge.png") <> false
+        print "FAIL an old QR name was treated as hashed content"
+        failed = failed + 1
+    end if
+    if ProtectedCacheFile("cachefs:/eaglewood/activities.json") <> false or ProtectedCacheFile("cachefs:/eaglewood/wifi-next.png") <> false
+        print "FAIL the activities wipe was blocked"
+        failed = failed + 1
+    end if
+    if QrCacheHit("cachefs:/eaglewood/qr-badge-8423281c.png", 6270) <> true or QrCacheHit("cachefs:/eaglewood/qr-badge-8423281c.png", 0) <> false or QrCacheHit("cachefs:/eaglewood/qr-badge-8423281c.png", -1) <> false or QrCacheHit("", 6270) <> false
+        print "FAIL the QR cache shortcut accepted an empty file"
+        failed = failed + 1
+    end if
+    if QrContentFileName("badge", "abcdef123456") <> "qr-badge-abcdef12.png"
+        print "FAIL a QR file was not named from its digest"
+        failed = failed + 1
+    end if
+    hello = DigestTagFromHex("5d41402abc4b2a76eea3a8c7e1c5c1c6")
+    if hello <> "5d41402a"
+        print "FAIL the md5 suffix was not the first 8 hex chars"
+        failed = failed + 1
+    end if
+    if QrContentFileName("book", hello) <> "qr-book-5d41402a.png"
+        print "FAIL the book QR was not named from the md5"
+        failed = failed + 1
+    end if
+    if QrTempFileName("book", hello) <> "qr-book-5d41402a.tmp"
+        print "FAIL the temp QR was not named from the md5"
+        failed = failed + 1
+    end if
+    if QrContentFileName("book", "") <> "" or QrTempFileName("book", "") <> ""
+        print "FAIL an empty digest still built a QR path"
+        failed = failed + 1
+    end if
+    helloBytes = [104, 101, 108, 108, 111]
+    if LCase(Md5Hex(helloBytes)) <> "5d41402abc4b2a76b9719d911017c592" or Md5Tag(helloBytes) <> "5d41402a"
+        print "FAIL md5 of hello"
+        failed = failed + 1
+    end if
+    if Md5Tag(invalid) <> ""
+        print "FAIL a missing buffer still hashed"
+        failed = failed + 1
+    end if
+    if StaleQrCacheName("qr-fetch-book.png") <> false or StaleQrCacheName("qr-fetch-book.png.tmp") <> false
+        print "FAIL an in-flight QR download was treated as stale"
+        failed = failed + 1
+    end if
+    if StaleQrCacheName("qr-badge-2-incoming.tmp.tmp") <> true
+        print "FAIL a double tmp QR name was kept"
+        failed = failed + 1
+    end if
+    if PngDigestTag(invalid) <> ""
+        print "FAIL a missing digest became a file suffix"
+        failed = failed + 1
+    end if
+    if PathIsBusy("cachefs:/eaglewood/qr-badge-abcdef12.png", "cachefs:/eaglewood/wifi.png|cachefs:/eaglewood/qr-badge-abcdef12.png") <> true
+        print "FAIL an in-use QR file was treated as free"
+        failed = failed + 1
+    end if
+    if PathIsBusy("cachefs:/eaglewood/qr-book-abcdef12.png", "cachefs:/eaglewood/qr-badge-abcdef12.png") <> false
+        print "FAIL a free QR file was treated as in use"
+        failed = failed + 1
+    end if
 
+    failed = failed + RunBadgeColdStarts()
     if failed = 0 then print "brs png checks passed"
 end sub
 
