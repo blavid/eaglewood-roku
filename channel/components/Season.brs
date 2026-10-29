@@ -140,27 +140,45 @@ function SourceIndexOf(item as object) as integer
 end function
 
 function SortActivities(items as object, season as string) as object
+    ' Build 35: rank and source index are read once per item, not once per
+    ' comparison (the For You build sorted ~66 items x 5 rows on rail focus
+    ' and stalled key handling). Same order as CompareSeasonRank.
     ordered = []
     if not IsList(items) then return ordered
     last = items.Count() - 1
     if last < 0 then return ordered
+    keys = []
     for index = 0 to last
         ordered.Push(items[index])
+        keys.Push({ rank: RankFor(items[index], season), at: SourceIndexOf(items[index]) })
     end for
     if last < 1 then return ordered
     for index = 1 to last
         current = ordered[index]
+        key = keys[index]
         slot = index
         while slot > 0
-            previous = ordered[slot - 1]
-            compared = CompareSeasonRank(season, previous, current, SourceIndexOf(previous), SourceIndexOf(current))
-            if compared <= 0 then exit while
-            ordered[slot] = previous
+            if SortKeyCompare(keys[slot - 1], key) <= 0 then exit while
+            ordered[slot] = ordered[slot - 1]
+            keys[slot] = keys[slot - 1]
             slot = slot - 1
         end while
         ordered[slot] = current
+        keys[slot] = key
     end for
     return ordered
+end function
+
+function SortKeyCompare(a as object, b as object) as integer
+    missingA = (a.rank < 1)
+    missingB = (b.rank < 1)
+    if missingA or missingB
+        if missingA and missingB then return a.at - b.at
+        if missingA then return 1
+        return -1
+    end if
+    if a.rank <> b.rank then return a.rank - b.rank
+    return a.at - b.at
 end function
 
 '' The seasonRank key a screen sorts by: its own season for Summer/Winter,

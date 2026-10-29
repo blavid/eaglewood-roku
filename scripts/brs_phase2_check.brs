@@ -266,8 +266,9 @@ sub Main()
         print "FAIL the Home QR card is not 240 plus a 40px caption inside the grid column"
         failed = failed + 1
     end if
-    if grid.x + (3 * grid.w) + (2 * grid.gap) + grid.gap > home.x or grid.gap <> 24 or grid.h <> 168
-        print "FAIL the Home tile grid does not clear the QR card with 24px gutters"
+    ' Build 35: the QR card is gone; 354px tiles end on the strip edge x 1699.
+    if grid.w <> 354 or grid.x + (3 * grid.w) + (2 * grid.gap) < 1697 or grid.gap <> 24 or grid.h <> 168
+        print "FAIL the Home tile grid is not 3 x 354px ending at x ~1699 with 24px gutters"
         failed = failed + 1
     end if
     if HomeGridBottom() + 32 > 972
