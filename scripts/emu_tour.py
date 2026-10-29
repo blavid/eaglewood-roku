@@ -49,15 +49,15 @@ def rail(section: str) -> list[str]:
     return ["Left"] + ["Down"] * RAIL[section]
 
 
-def todo(child: str) -> list[str]:
-    return rail("todo") + ["Select"] + ["Down"] * TODO.index(child)
+def fy() -> list[str]:
+    return rail("todo") + ["Right"]
 
 
 def screens() -> list[dict]:
     s: list[dict] = []
 
     def add(slug: str, keys: list[str], shows: str, stage: str = "key", wait: float = 0.0, need: str = "", same_as: str = "", ecp: list[str] | None = None, visits: list[str] | None = None, card: str = "") -> None:
-        if not card and (slug.startswith("home-") and slug != "home-after-idle" or slug == "blake-path-focus"):
+        if not card and (slug.startswith(("home-", "rail-", "ad-")) and slug != "home-after-idle" or slug == "blake-path-focus"):
             card = "qr"
         s.append({"slug": slug, "keys": keys, "shows": shows, "stage": stage, "wait": wait, "need": need, "same_as": same_as, "ecp": ecp or [], "visits": visits or [], "card": card})
 
@@ -72,62 +72,48 @@ def screens() -> list[dict]:
     add("rail-wifi-focus", rail("wifi"), "Rail Wi-Fi row focused, Wi-Fi preview")
     add("wifi-with-qr", rail("wifi") + ["Select"], "Wi-Fi with the local TestNet placeholder QR", need="qr wifi")
     add("wifi-error", rail("wifi") + ["Select"], "Wi-Fi with no guest key: status panel, Password Unavailable", stage="nokey")
-    add("rail-todo-focus", rail("todo"), "Rail Things to Do focused, category preview row")
-    for child in TODO:
-        add(f"todo-{child}-focus", todo(child), f"Things to Do submenu, {child.title()} focused")
-    # Fishing has no cards yet, so Right keeps focus in the submenu and its
-    # grid is the same picture as todo-fishing-focus.
-    for child in [c for c in TODO if c != "fishing"]:
-        add(f"{child}-grid", todo(child) + ["Right"], f"{child.title()} activity grid")
-    add("dining-grid-card2", todo("dining") + ["Right", "Right"], "Dining grid, second card focused")
-    add("dining-grid-row2", todo("dining") + ["Right", "Down"], "Dining grid, second row focused")
-    add("dining-grid-deep", todo("dining") + ["Right"] + ["Down"] * 4, "Dining grid scrolled to a later row")
-    for child in ["dining", "hiking", "winter", "summer", "biking"]:
-        add(f"{child}-detail", todo(child) + ["Right", "Select"], f"First {child.title()} activity detail", need="qr detail" if child == "summer" else "")
-    # Build 30: Summer sorts by seasonRank.summer; Web's seven picks each get
-    # a detail capture with its QR.
-    add("summer-grid-row2", todo("summer") + ["Right", "Down"], "Summer grid, second row focused")
-    add("summer-grid-row3", todo("summer") + ["Right", "Down", "Down"], "Summer grid, third row focused")
-    for k in range(1, 7):
-        add(f"summer-detail-{k + 1:02d}", todo("summer") + ["Right"] + ["Right"] * (k % 3) + ["Down"] * (k // 3) + ["Select"], f"Summer pick {k + 1} detail with its QR", need="qr detail")
-    add("dining-detail-second", todo("dining") + ["Right", "Right", "Select"], "Second Dining activity detail")
-    # Build 29: the detail body shows 5 lines and scrolls; Winter overflows.
-    # Build 30: at 28px the Winter body fits, so the scroll proof uses Summer's float.
-    add("summer-detail-scrolled", todo("summer") + ["Right", "Select"] + ["Down"] * 3, "First Summer detail (float), body scrolled")
-    # Build 31: QR host unreachable (stage "qrblocked" drops /blocked-qr/ connections).
-    add("summer-detail-qr-blocked", todo("summer") + ["Right", "Select"], "Float detail with the QR fetch blocked: no-link layout, no white plate", stage="qrblocked", wait=7)
-    add("summer-detail-nolink", todo("summer") + ["Right"] + ["Down"] * 3 + ["Select"], "Elk Lake (no link): QR column collapsed, photo and body 1128px")
+    # Build 34: Things to Do is the Roku "For You" grid: one card row per
+    # non-empty category (Fishing has none, so it has no row).
+    add("rail-todo-focus", rail("todo"), "Rail Things to Do focused: For You rows preview beside the expanded rail")
+    add("fy-grid", fy(), "For You grid: rail collapsed to icons, Dining row first card focused, 1 of N")
+    add("fy-move-right", fy() + ["Right"], "For You grid, second Dining card focused, 2 of N", card="hidden")
+    add("fy-move-right3", fy() + ["Right"] * 3, "For You grid, fourth Dining card, row scrolled", card="hidden")
+    for k, child in enumerate(TODO[1:], 1):
+        add(f"fy-row-{child}", fy() + ["Down"] * k, f"For You grid, {child.title()} row focused at the top slot", card="hidden")
+    add("fy-left-to-rail", fy() + ["Left"], "Left from the first card returns to the expanded rail on Things to Do", same_as="rail-todo-focus")
+    add("fy-detail", fy() + ["Select"], "Card detail (first Dining) with its QR", need="qr detail")
+    add("fy-detail-second", fy() + ["Right", "Select"], "Second Dining card detail")
+    add("fy-detail-summer", fy() + ["Down"] * TODO.index("summer") + ["Select"], "First Summer card detail with its QR", need="qr detail")
+    add("fy-detail-scrolled", fy() + ["Down"] * TODO.index("summer") + ["Select"] + ["Down"] * 3, "First Summer detail, body scrolled")
+    add("fy-detail-qr-blocked", fy() + ["Down"] * TODO.index("summer") + ["Select"], "Summer detail with the QR fetch blocked: no-link layout", stage="qrblocked", wait=7)
+    add("fy-detail-back", fy() + ["Right", "Select", "Back"], "Back from the card detail returns to the grid on card 2", same_as="fy-move-right")
+    add("fy-back-to-rail", fy() + ["Down", "Back"], "Back from the grid returns to the expanded rail", same_as="rail-todo-focus")
     add("rail-rules-focus", rail("rules"), "Rail House Rules focused")
     add("house-rules", rail("rules") + ["Select"], "House Rules page")
-    # All six rules fit on one page, so there is no scrolled House Rules screen.
-    add("rail-fixes-focus", rail("fixes"), "Rail Quick Fixes focused")
-    for index in range(12):
-        add(f"fixes-detail-{index + 1:02d}", rail("fixes") + ["Select"] + ["Down"] * index, f"Quick Fixes issue {index + 1} with its steps")
-    # Build 29: the steps panel grows to y 960 and every issue fits (the
-    # longest, issue 12, is 13 lines in a 14-line viewport), so a scrolled frame
-    # is the same picture. Scrolling is covered by winter-detail-scrolled.
-    # Build 30: an emulator-only fixture fix (stage "longfix") is long enough
-    # to overflow, so these prove Right then Down scroll inside a fix.
-    add("fixes-long-top", rail("fixes") + ["Select"], "Fixture long fix, list zone: Right Scroll steps keycap and scrollbar", stage="longfix")
-    add("fixes-long-detail", rail("fixes") + ["Select", "Right"], "Fixture long fix after Right: detail zone hint Up/Down Scroll", stage="longfix")
-    add("fixes-long-scrolled", rail("fixes") + ["Select", "Right", "Down", "Down", "Down"], "Fixture long fix after Right then Down x3: steps scrolled", stage="longfix")
-    add("fixes-long-left", rail("fixes") + ["Select", "Right", "Down", "Left"], "Fixture long fix, Left from the steps returns to the fix list", stage="longfix")
-    # Build 32: Quick Fixes is the same sliding submenu as Things to Do.
-    add("fixes-steps-01", rail("fixes") + ["Select", "Select"], "Quick Fixes issue 1 steps opened with OK (zone item)")
-    add("fixes-steps-03", rail("fixes") + ["Select", "Down", "Down", "Right"], "Quick Fixes issue 3 steps opened with Right")
-    add("fixes-steps-back", rail("fixes") + ["Select", "Down", "Right", "Back"], "Back from the steps returns to the fix submenu on issue 2", same_as="fixes-detail-02")
-    add("fixes-slide-out", rail("fixes") + ["Select", "Down", "Back"], "Back from the fix submenu slides it out to the rail on Quick Fixes", same_as="rail-fixes-focus")
-    add("todo-slide-out", todo("dining") + ["Back"], "Back from the Things to Do submenu slides it out to the rail", same_as="rail-todo-focus")
+    # Build 34: Quick Fixes is the Roku Settings pattern.
+    add("rail-fixes-focus", rail("fixes"), "Rail Quick Fixes focused: fix list column shown beside the rail")
+    add("fx-list", rail("fixes") + ["Right"], "Fix list focused: rail row reads < Quick Fixes, issue 1 steps preview")
+    for index in range(1, 12):
+        add(f"fx-list-{index + 1:02d}", rail("fixes") + ["Right"] + ["Down"] * index, f"Fix list, issue {index + 1} focused with its steps preview")
+    add("fx-steps", rail("fixes") + ["Right", "Right"], "Issue 1 steps: rail slid off, list is the < breadcrumb column")
+    add("fx-steps-03", rail("fixes") + ["Right", "Down", "Down", "Right"], "Issue 3 steps, breadcrumb column", card="hidden")
+    add("fx-steps-long", rail("fixes") + ["Right", "Right"], "Fixture long fix steps, top", stage="longfix", card="hidden")
+    add("fx-steps-scrolled", rail("fixes") + ["Right", "Right", "Down", "Down", "Down"], "Fixture long fix steps scrolled", stage="longfix", card="hidden")
+    add("fx-steps-back", rail("fixes") + ["Right", "Down", "Right", "Left"], "Left from the steps slides back to the fix list on issue 2", same_as="fx-list-02")
+    add("fx-list-back", rail("fixes") + ["Right", "Down", "Back"], "Back from the fix list returns to the rail on Quick Fixes")
     # Build 32: Blake's TV path, sent as real ECP key presses so they go
     # through roSGScreen focus and onKeyEvent. Each press must log focus=scene.
     blake = ["Left", "Down", "Down", "Select", "Down", "Down", "Up", "Up", "Right", "Right", "Down", "Up", "Left", "Left", "Down", "Up", "Back",
              "Down", "Select", "Back", "Down", "Select", "Down", "Down", "Right", "Down", "Back", "Up", "Back",
              "Down", "Select", "Back", "Down", "Select", "Back", "Up", "Up", "Up", "Up", "Up", "Up", "Select", "Back", "Up", "Up"]
     add("blake-path-focus", [], "Blake's TV path (Things to Do, Dining, moves, back out, every section) as ECP keys; ends on Home rail", ecp=blake, same_as="home-rail-focus",
-        visits=["todo", "dining", "rules", "fixes", "book", "checkout", "home"])
+        visits=["todo", "rules", "fixes", "book", "checkout", "home"])
     # Build 33: Home badge QR host unreachable; the card keeps its frame and
     # caption and shows the no-link text after the 5 s deadline.
-    add("home-badge-blocked", [], "Home with the badge QR fetch blocked: cream card, caption, no-link text", stage="badgeblocked", wait=7, card="fallback")
+    # Build 34: the corner ad replaces the Home QR card and badge.
+    add("ad-2", ["adnext"], "Home with the second corner ad (rotation frame 2)")
+    add("ad-3", ["adnext", "adnext"], "Home with the third corner ad (rotation frame 3)")
+    add("wifi-stale-etag", rail("wifi") + ["Select"], "Stale etags seeded, cache files missing: 304 refetches without the etag, TestNet shown", stage="staleetag", need="qr wifi", same_as="wifi-with-qr")
     add("rail-book-focus", rail("book"), "Rail Book Direct focused")
     add("book-direct", rail("book") + ["Select"], "Book Direct page")
     add("rail-checkout-focus", rail("checkout"), "Rail Checkout focused")
@@ -142,6 +128,12 @@ class Handler(BaseHTTPRequestHandler):
         if path.startswith("/blocked-qr/"):
             # Network blocked: drop the connection with no response.
             self.close_connection = True
+            return
+        if self.headers.get("If-None-Match") == STALE_ETAG:
+            # Stale etag seeded by stage "staleetag": answer 304 although the
+            # channel's cache file is missing (the tv-b33 case).
+            self.send_response(304)
+            self.end_headers()
             return
         target = FIX / path.lstrip("/")
         if not target.is_file():
@@ -205,6 +197,7 @@ def build_fixtures() -> None:
     qr_png("WIFI:T:WPA;S:TestNet;P:placeholder;;", wifi / "wifi.png")
 
 
+STALE_ETAG = '"emu-stale"'
 LONG_FIX_PATH = "/data-longfix/guide.json"
 BADGE_BLOCKED_PATH = "/data-badgeblocked/guide.json"
 BADGE_QR = "/data/qr/book-direct-booking.png"
@@ -216,7 +209,7 @@ def long_fix_guide() -> str:
     steps = []
     for issue in guide.get("troubleshooting") or []:
         steps += issue.get("steps") or []
-    guide["troubleshooting"].insert(0, {"issue": "Emulator fixture: long steps", "steps": steps[:14]})
+    guide["troubleshooting"].insert(0, {"issue": "Emulator fixture: long steps", "steps": (steps * 3)[:24]})
     return json.dumps(guide, ensure_ascii=False).replace("https://sunrivertownhome.com", ORIGIN)
 
 
@@ -246,6 +239,15 @@ def build_stage(name: str, key: str) -> Path:
         served.write_text((FIX / "data" / "activities.json").read_text(encoding="utf-8").replace("/data/qr/", "/blocked-qr/"), encoding="utf-8")
         task = stage / "components" / "GuideTask.brs"
         task.write_text(task.read_text(encoding="utf-8").replace("https://sunrivertownhome.com/data/activities.json", "https://sunrivertownhome.com/data-qrblocked/activities.json", 1), encoding="utf-8")
+    if name == "staleetag":
+        seed = "".join(f'    seed.Write("{p}Etag", Chr(34) + "emu-stale" + Chr(34))\n' for p in ["wifiJson", "wifiPng", "guide", "checkout", "activities", "menu"])
+        block = '    seed = CreateObject("roRegistrySection", "EaglewoodGuide")\n' + seed + '    seed.Flush()\n    print "Eaglewood: emu seeded stale etags"\n'
+        for file, head in [("WifiTask.brs", "sub fetchWifi()\n"), ("GuideTask.brs", "sub fetchGuideBundle()\n")]:
+            task = stage / "components" / file
+            text = task.read_text(encoding="utf-8")
+            if head not in text:
+                raise SystemExit(f"{file}: fetch sub not found")
+            task.write_text(text.replace(head, head + block, 1), encoding="utf-8")
     (stage / "emu").mkdir()
     (stage / "emu" / "enabled").write_text("screenshot harness\n", encoding="utf-8")
     (stage / "components" / "secrets.brs").write_text(
@@ -339,28 +341,24 @@ def focus_problems(keys: list[str], visits: list[str]) -> str:
     return ""
 
 
-# Home QR card, measured on home-rail-focus (FHD): x 1404-1716, y 474-834.
-CARD_BOX = (1404, 474, 1716, 834)
+# Build 34 corner ad, from NavV2 AdRect (FHD): x 96-536, y 822-984.
+CARD_BOX = (96, 822, 536, 984)
 
 
 def card_problem(data: bytes, want: str) -> str:
-    """Fail when the Home QR card is blank: it needs the cream frame and ink inside it.
-
-    want "qr" needs QR modules (lots of near-black); "fallback" needs the
-    no-link text (some navy ink) and no QR."""
+    """want "qr": the corner ad is drawn and its QR has ink (not blank).
+    want "hidden": the ad is gone (rail collapsed), so no QR modules there."""
     from io import BytesIO
     from PIL import Image
     px = list(Image.open(BytesIO(data)).convert("RGB").crop(CARD_BOX).getdata())
-    cream = sum(1 for r, g, b in px if abs(r - 0xF4) < 12 and abs(g - 0xEF) < 12 and abs(b - 0xE3) < 12) / len(px)
-    ink = sum(1 for r, g, b in px if r + g + b < 150) / len(px)
     black = sum(1 for r, g, b in px if r + g + b < 60) / len(px)
-    stats = f"cream {cream:.2f} ink {ink:.3f} black {black:.3f}"
-    if cream < 0.25:
-        return f"QR card blank (no cream frame; {stats})"
-    if want == "qr" and black < 0.05:
-        return f"QR card has no QR ({stats})"
-    if want == "fallback" and (ink < 0.005 or black >= 0.05):
-        return f"QR card fallback missing ({stats})"
+    white = sum(1 for r, g, b in px if r + g + b > 700) / len(px)
+    bright = sum(1 for r, g, b in px if max(r, g, b) > 140) / len(px)
+    stats = f"black {black:.3f} white {white:.3f} bright {bright:.2f}"
+    if want == "qr" and (black < 0.02 or white < 0.02 or bright < 0.15):
+        return f"corner ad blank or missing its QR ({stats})"
+    if want == "hidden" and (black > 0.01 and white > 0.02):
+        return f"corner ad still drawn with the rail collapsed ({stats})"
     return ""
 
 
@@ -405,7 +403,7 @@ def launch_retrying(stage, keys, ecp: bool = False) -> None:
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     build_fixtures()
-    stages = {"key": build_stage("key", FAKE_KEY), "nokey": build_stage("nokey", ""), "longfix": build_stage("longfix", FAKE_KEY), "qrblocked": build_stage("qrblocked", FAKE_KEY), "badgeblocked": build_stage("badgeblocked", FAKE_KEY)}
+    stages = {"key": build_stage("key", FAKE_KEY), "nokey": build_stage("nokey", ""), "longfix": build_stage("longfix", FAKE_KEY), "qrblocked": build_stage("qrblocked", FAKE_KEY), "badgeblocked": build_stage("badgeblocked", FAKE_KEY), "staleetag": build_stage("staleetag", FAKE_KEY)}
     threading.Thread(target=ThreadingHTTPServer(("127.0.0.1", FIX_PORT), Handler).serve_forever, daemon=True).start()
     rows = []
     seen: dict[str, str] = {}
@@ -451,6 +449,13 @@ def main() -> None:
                     note = problem or f"{len(item['ecp'])} ECP presses, every one focus=scene; visited {', '.join(item['visits'])}"
                     if problem:
                         status = "fail"
+                if item["stage"] == "staleetag" and status != "fail":
+                    want = ["emu seeded stale etags", "wifi cache-miss refetch", "guide cache-miss refetch", "checkout cache-miss refetch", "ssid len= 7"]
+                    missing = [w for w in want if w not in log_text()]
+                    if missing:
+                        status, note = "fail", "stale-etag log missing: " + ", ".join(missing)
+                    else:
+                        note = "304 on stale etag with no cache: wifi, guide and checkout refetched; " + note
                 errors = [l for l in log_text().splitlines() if "error" in l.lower() and "Eaglewood" in l]
                 if errors:
                     status, note = "fail", "; ".join(errors[:2])

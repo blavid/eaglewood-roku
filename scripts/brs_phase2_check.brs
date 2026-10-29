@@ -487,9 +487,9 @@ sub Main()
         print "FAIL the detail QR covers its website label or gold caption"
         failed = failed + 1
     end if
-    ' Build 29: one QR per detail, so Things to Do hides the corner badge.
-    if BadgeShown("home") <> true or BadgeShown("dining") <> false or BadgeShown("hiking") <> false or BadgeShown("book") <> false
-        print "FAIL the corner badge visibility does not match build 29"
+    ' Build 34: the corner Book Direct ad replaces the badge on every screen.
+    if BadgeShown("home") <> false or BadgeShown("dining") <> false or BadgeShown("hiking") <> false or BadgeShown("book") <> false
+        print "FAIL the corner badge visibility does not match build 34"
         failed = failed + 1
     end if
     if BadgeNavigateReparents() <> false

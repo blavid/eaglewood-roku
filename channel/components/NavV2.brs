@@ -590,6 +590,7 @@ sub BuildCornerAd(parent as object)
     m.ads = LoadAds()
     m.adIndex = 0
     m.adFront = m.adA
+    m.adFrontB = false
     if m.ads.Count() > 0 then m.adA.uri = m.ads[0].image
     timer = CreateObject("roSGNode", "Timer")
     timer.repeat = true
@@ -641,11 +642,16 @@ end sub
 sub AdvanceAd()
     if m.ads = invalid or m.ads.Count() < 2 then return
     m.adIndex = (m.adIndex + 1) mod m.ads.Count()
+    ' SceneGraph nodes cannot be compared with "=", so track the front by flag.
     back = m.adB
-    if m.adFront = m.adB then back = m.adA
+    front = m.adA
+    if m.adFrontB = true
+        back = m.adA
+        front = m.adB
+    end if
     back.uri = m.ads[m.adIndex].image
-    front = m.adFront
     m.adFront = back
+    m.adFrontB = not (m.adFrontB = true)
     print "Eaglewood: ad show id="; m.ads[m.adIndex].id; " index="; m.adIndex
     if SimulatorRun() or m.emuReplay = true
         back.opacity = 1.0
