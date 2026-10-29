@@ -222,6 +222,7 @@ sub EnsureFyRows()
     stamp = FyStamp()
     if stamp = m.fyStamp and m.fyRows.Count() > 0 then return
     m.fyStamp = stamp
+    clock = CreateObject("roTimespan")
     ' Clear the old row nodes.
     while m.fyBody.getChildCount() > 0
         m.fyBody.removeChildIndex(0)
@@ -236,14 +237,22 @@ sub EnsureFyRows()
             SetFontSize(label, 32)
             label.maxLines = 1
             cards = []
-            for index = 0 to items.Count() - 1
+            ' Build 35 (dropped keys): one pooled slot per visible card, not
+            ' one node set per activity. Building ~120 cards (480 nodes) on
+            ' rail focus stalled the render thread past the next key press.
+            for index = 0 to FyPoolSize() - 1
                 cards.Push(MakeFyCard(group, index))
             end for
             m.fyRows.Push({ id: id, items: items, group: group, label: label, cards: cards, col: 0, first: 0 })
         end if
     end for
     if m.fyRow >= m.fyRows.Count() then m.fyRow = 0
+    print "Eaglewood: fy rows built rows="; m.fyRows.Count(); " ms="; clock.TotalMilliseconds()
 end sub
+
+function FyPoolSize() as integer
+    return 6
+end function
 
 function MakeFyCard(parent as object, index as integer) as object
     group = CreateObject("roSGNode", "Group")
@@ -314,15 +323,15 @@ function PaintFyRow(r as integer, y as integer, grid as boolean, width as intege
     if row.col < row.first then row.first = row.col
     if row.col > row.first + perRow - 2 then row.first = row.col - perRow + 2
     if row.first < 0 then row.first = 0
-    for c = 0 to row.cards.Count() - 1
-        card = row.cards[c]
-        slot = c - row.first
+    ' Build 35: a fixed pool of card slots per row, re-pointed at items.
+    for slot = 0 to row.cards.Count() - 1
+        card = row.cards[slot]
+        c = row.first + slot
         card.group.translation = [slot * pitch, 52]
-        ' Build 35: only whole cards, so the row ends inside action-safe.
-        card.group.visible = (slot >= 0 and slot * pitch + Nav2CardW() <= width)
+        ' Only whole cards, so the row ends inside action-safe.
+        card.group.visible = (c < row.items.Count() and slot * pitch + Nav2CardW() <= width)
         focused = focusedRow and c = row.col
         card.ring.visible = focused
-        card.group.scaleRotateCenter = [Nav2CardW() / 2, Nav2CardH() / 2]
         if focused
             card.group.scale = [1.08, 1.08]
         else

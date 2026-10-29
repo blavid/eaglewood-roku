@@ -327,7 +327,7 @@ def send_ecp(keys: list[str]) -> None:
             time.sleep(1)
     for key in keys:
         urlopen(Request(f"http://127.0.0.1:{PORT}/keypress/{ECP_NAMES[key]}", data=b"", method="POST"), timeout=5).read()
-        time.sleep(float(os.environ.get("EMU_ECP_GAP", "1.6")))
+        time.sleep(float(os.environ.get("EMU_ECP_GAP", "0.9")))
 
 
 def focus_problems(keys: list[str], visits: list[str]) -> str:

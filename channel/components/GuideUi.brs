@@ -402,7 +402,8 @@ function HomeGrid() as object
 end function
 
 function HomeGridRight() as integer
-    return HomeRight()
+    ' Banner ink ends at x 1699 (measured on b34 home-prompt-focus).
+    return 1700
 end function
 
 function HomeGridBottom() as integer
