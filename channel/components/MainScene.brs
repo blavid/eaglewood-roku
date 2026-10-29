@@ -1,5 +1,5 @@
 sub init()
-    print "Eaglewood: build 35 "; BuildCommit()
+    print "Eaglewood: build 36 "; BuildCommit()
     m.top.id = "scene"
     m.greeting = m.top.findNode("greeting")
     m.backing = m.top.findNode("greetingBacking")

@@ -371,6 +371,45 @@ def ink_box(img, box, pred):
     return (box[0] + min(xs), box[1] + min(ys), box[0] + max(xs), box[1] + max(ys))
 
 
+def first_glyph_box(img, box, pred):
+    """Ink box of the first glyph (leftmost run of inked columns) in box."""
+    im = img.crop(box).convert("RGB")
+    w, h = im.size
+    px = im.load()
+    cols = [[y for y in range(h) if pred(px[x, y])] for x in range(w)]
+    start = next((x for x in range(w) if cols[x]), None)
+    if start is None:
+        return None
+    end = start
+    while end + 1 < w and cols[end + 1]:
+        end += 1
+    ys = [y for x in range(start, end + 1) for y in cols[x]]
+    return (box[0] + start, box[1] + min(ys), box[0] + end, box[1] + max(ys))
+
+
+_CAP_CACHE = {}
+
+
+def reference_cap_height(size: int, bold: bool = True) -> int:
+    """Cap height of "H" in the emulator's own SceneGraph font at size px,
+    rendered from brs-node's bundled font (Metropolis; SemiBold for bold)."""
+    key = (size, bold)
+    if key not in _CAP_CACHE:
+        import zipfile
+        from PIL import Image, ImageDraw, ImageFont
+        name = "fonts/Metropolis-SemiBold.ttf" if bold else "fonts/Metropolis-Regular.ttf"
+        assets = os.path.join(os.environ.get("EMU_NODE_PATH", "/tmp/brs-emu/node_modules"), "brs-node", "assets", "common.zip")
+        if not os.path.exists(assets):
+            assets = "/tmp/brs-emu/node_modules/brs-node/assets/common.zip"
+        import io
+        font = ImageFont.truetype(io.BytesIO(zipfile.ZipFile(assets).read(name)), size)
+        im = Image.new("L", (size * 3, size * 3))
+        ImageDraw.Draw(im).text((size, size // 2), "H", font=font, fill=255)
+        b = im.point(lambda v: 255 if v > 128 else 0).getbbox()
+        _CAP_CACHE[key] = b[3] - b[1]
+    return _CAP_CACHE[key]
+
+
 def near(rgb, want, tol):
     return all(abs(a - b) <= tol for a, b in zip(rgb, want))
 
@@ -418,8 +457,16 @@ def geometry_problem(slug: str, data: bytes) -> str:
         meta = ink_box(img, (1180, 566, 1720, 620), lambda p: near(p, (0xC9, 0xD1, 0xE0), 22))
         if title is None or meta is None:
             return f"card details missing (title {title}, meta {meta})"
-        if title[3] - title[1] + 1 < 22:
-            return f"card title ink {title[3] - title[1] + 1}px tall, under 30px type"
+        # Captures are 1:1 and labels render at their set size. Compare the
+        # title's first capital with a 30px cap height rendered from the
+        # emulator's font (21px); 24px type gives 17px, so +-1px separates them.
+        cap30, cap24 = reference_cap_height(30), reference_cap_height(24)
+        if cap30 - cap24 < 3:
+            return f"reference cap heights too close to tell 30px from 24px ({cap30} vs {cap24})"
+        glyph = first_glyph_box(img, (1180, 520, 1720, 570), lambda p: min(p) > 240)
+        cap = glyph[3] - glyph[1] + 1
+        if abs(cap - cap30) > 1:
+            return f"card title cap height {cap}px, want {cap30}px +-1 (30px bold; 24px would be {cap24}px)"
         if meta[1] - title[3] < 8:
             return f"card meta {meta[1] - title[3]}px under the title, want >= 8"
     return ""

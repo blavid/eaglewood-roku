@@ -4,5 +4,5 @@ function BuildCommit() as string
 end function
 
 function BuildStampLine() as string
-    return "build 35 · " + BuildCommit()
+    return "build 36 · " + BuildCommit()
 end function
